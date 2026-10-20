@@ -126,32 +126,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-0">
       {/* STICKY HEADER */}
-      <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-3 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Link href="/cart" className="relative flex-shrink-0 p-1.5 hover:bg-gray-100 rounded-full transition-colors">
-            <ShoppingCart className="w-7 h-7 text-gray-800" strokeWidth={2} />
-            {totalItems > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[20px] h-5 px-1 bg-red-500 text-white text-[10px] font-extrabold rounded-full border-2 border-white animate-pulse">
-                {totalItems > 99 ? '99+' : totalItems}
-              </span>
-            )}
-          </Link>
-
-          <form onSubmit={handleSearch} className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search iBUY"
-                className="w-full bg-gray-100 rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
-              />
-            </div>
-          </form>
-        </div>
-      </header>
-
+     
       <main className="max-w-7xl mx-auto">
         <section className="p-4">
           <div className="flex items-center justify-between mb-4">
