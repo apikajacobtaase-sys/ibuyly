@@ -55,29 +55,10 @@ export async function GET(request: Request) {
       }),
     ]);
 
-    // DEBUG: Inspect the actual product → variant → seller offer relationship.
-if (products.length > 0) {
-  for (const product of products.slice(0, 3)) {
-    console.log("🔍 PRODUCT OFFER DEBUG:", {
-      productId: product.id,
-      title: product.title,
-      variants: product.variants.map((variant) => ({
-        variantId: variant.id,
-        offers: variant.sellerOffers.map((offer) => ({
-          offerId: offer.id,
-          price: offer.price.toString(),
-          stockQuantity: offer.stockQuantity,
-          status: offer.status,
-          sellerId: offer.seller?.id,
-        })),
-      })),
-    });
-  }
-}
-
     const formattedProducts = products.map((product) => {
       let bestOffer: any = null;
       let bestVariantId: string | null = null;
+      let compareAtPrice: number | null = null;
 
       if (product.variants && product.variants.length > 0) {
         for (const variant of product.variants) {
@@ -86,9 +67,19 @@ if (products.length > 0) {
             if (!bestOffer || parseFloat(offer.price.toString()) < parseFloat(bestOffer.price.toString())) {
               bestOffer = offer;
               bestVariantId = variant.id;
+              // ✅ Get the compare-at price from the variant for discount calculation
+              compareAtPrice = variant.compareAtPrice ? parseFloat(variant.compareAtPrice.toString()) : null;
             }
           }
         }
+      }
+
+      const currentPrice = bestOffer ? parseFloat(bestOffer.price.toString()) : 0;
+      let discountPercent = 0;
+
+      // ✅ Calculate Discount Percentage
+      if (compareAtPrice && compareAtPrice > currentPrice) {
+        discountPercent = Math.round(((compareAtPrice - currentPrice) / compareAtPrice) * 100);
       }
 
       return {
@@ -96,10 +87,12 @@ if (products.length > 0) {
         title: product.title || "Untitled Product",
         slug: product.slug || "",
         
-        price: bestOffer ? parseFloat(bestOffer.price.toString()) : 0,
+        price: currentPrice,
+        originalPrice: compareAtPrice, // ✅ Added for frontend display
+        discountPercent: discountPercent, // ✅ Added for frontend badge
+        
         stockQuantity: bestOffer ? bestOffer.stockQuantity : 0,
         
-        // ✅ CRITICAL: Ensure these are mapped correctly
         bestOfferId: bestOffer?.id || null,
         bestVariantId: bestVariantId,
         
@@ -110,18 +103,7 @@ if (products.length > 0) {
         inStock: !!bestOffer,
       };
     });
-     console.log(
-  "📦 FORMATTED SEARCH PRODUCTS:",
-  formattedProducts.slice(0, 5).map((product) => ({
-    id: product.id,
-    title: product.title,
-    bestOfferId: product.bestOfferId,
-    bestVariantId: product.bestVariantId,
-    price: product.price,
-    stockQuantity: product.stockQuantity,
-    inStock: product.inStock,
-  }))
-);
+
     return NextResponse.json({ 
       products: formattedProducts, 
       total,

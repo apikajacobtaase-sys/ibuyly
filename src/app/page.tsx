@@ -16,6 +16,8 @@ interface Product {
   title: string;
   slug: string;
   price: number;
+  originalPrice?: number | null; // ✅ Added for discounts
+  discountPercent?: number;      // ✅ Added for discounts
   imageUrl?: string | null;
   sellerId?: string;
   sellerName?: string;
@@ -81,44 +83,36 @@ export default function HomePage() {
     }
   };
 
- // In src/app/page.tsx
-const loadProducts = async (pageNum: number, reset: boolean) => {
-  try {
-    // ✅ Add timestamp to prevent caching of old data
-    const url = `/api/search?q=&page=${pageNum}&limit=12&t=${Date.now()}`;
-    const res = await fetch(url, { cache: "no-store" });
+  const loadProducts = async (pageNum: number, reset: boolean) => {
+    try {
+      const url = `/api/search?q=&page=${pageNum}&limit=12&t=${Date.now()}`;
+      const res = await fetch(url, { cache: "no-store" });
 
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
 
-    const data = await res.json();
-    
-    // ✅ DEBUG: Check if the API is actually sending the ID
-    if (data.products && data.products.length > 0) {
-      const firstProduct = data.products[0];
-      console.log("📦 API Response Sample:", {
-        title: firstProduct.title,
-        slug: firstProduct.slug,
-        bestOfferId: firstProduct.bestOfferId // This MUST be 'cmvg31uru000bjj0jopdo6pqu'
-      });
+      const data = await res.json();
+      
+      if (data.products && data.products.length > 0) {
+        console.log("📦 API Response Sample:", data.products[0]);
+      }
+      
+      if (reset) {
+        setProducts(data.products || []);
+      } else {
+        setProducts((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const uniqueNew = (data.products || []).filter((p: Product) => !existingIds.has(p.id));
+          return [...prev, ...uniqueNew];
+        });
+      }
+      
+      setHasMore(data.hasMore || false);
+      setPage(pageNum);
+    } catch (error) {
+      console.error("💥 Failed to load products:", error);
+      setHasMore(false);
     }
-    
-    if (reset) {
-      setProducts(data.products || []);
-    } else {
-      setProducts((prev) => {
-        const existingIds = new Set(prev.map((p) => p.id));
-        const uniqueNew = (data.products || []).filter((p: Product) => !existingIds.has(p.id));
-        return [...prev, ...uniqueNew];
-      });
-    }
-    
-    setHasMore(data.hasMore || false);
-    setPage(pageNum);
-  } catch (error) {
-    console.error("💥 Failed to load products:", error);
-    setHasMore(false);
-  }
-};
+  };
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -181,8 +175,6 @@ const loadProducts = async (pageNum: number, reset: boolean) => {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {products.map((product, index) => {
                 const isLast = index === products.length - 1;
-                
-                // ✅ FIX: Match cart items by offerId for accuracy
                 const cartItem = items.find((i) => i.offerId === product.bestOfferId);
                 const cartQuantity = cartItem?.quantity || 0;
 
@@ -218,14 +210,29 @@ const loadProducts = async (pageNum: number, reset: boolean) => {
                             <ShoppingCart className="w-8 h-8 text-gray-400" />
                           </div>
                         )}
+                        
+                        {/* ✅ DISCOUNT BADGE */}
+                        {product.discountPercent && product.discountPercent > 0 && (
+                          <span className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full">
+                            -{product.discountPercent}%
+                          </span>
+                        )}
                       </div>
 
                       <h3 className="text-xs text-gray-900 line-clamp-2 mb-1 flex-1 min-h-[2.5rem]">
                         {product.title}
                       </h3>
 
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-bold text-gray-900">{formatCurrency(product.price)}</span>
+                      {/* ✅ PRICE & DISCOUNT DISPLAY */}
+                      <div className="flex flex-col mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-900">{formatCurrency(product.price)}</span>
+                          {product.originalPrice && product.originalPrice > product.price && (
+                            <span className="text-xs text-gray-400 line-through">
+                              {formatCurrency(product.originalPrice)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </Link>
 
@@ -246,40 +253,51 @@ const loadProducts = async (pageNum: number, reset: boolean) => {
                       />
                     ) : (
                       <button
-                       // Inside the onClick handler in src/app/page.tsx
-onClick={(e) => {
-  e.preventDefault();
-  
-  // ✅ DEBUG: Check the exact values being passed
-  console.log("🛒 Homepage Click Data:", {
-    id: product.id,
-    bestVariantId: product.bestVariantId,
-    bestOfferId: product.bestOfferId,
-    inStock: product.inStock
-  });
+                        onClick={(e) => {
+                          e.preventDefault();
+                          
+                          console.log("🛒 Homepage Click Data:", {
+                            id: product.id,
+                            bestVariantId: product.bestVariantId,
+                            bestOfferId: product.bestOfferId,
+                            inStock: product.inStock
+                          });
 
-  if (!product.bestOfferId || !product.bestVariantId) {
-    alert("Error: This product is missing seller information. Try refreshing.");
-    return;
-  }
+                          if (!product.bestOfferId || !product.bestVariantId) {
+                            alert("Error: This product is missing seller information.");
+                            return;
+                          }
 
-  if (product.inStock) {
-    // ... (Fly to cart animation) ...
-    
-    addItem({
-      productId: product.id,
-      variantId: product.bestVariantId, // ✅ Ensure this matches the interface
-      offerId: product.bestOfferId,     // ✅ Ensure this matches the interface
-      title: product.title,
-      price: product.price,
-      imageUrl: product.imageUrl,
-      stockQuantity: product.stockQuantity,
-      sellerId: product.sellerId || "unknown",
-      sellerName: product.sellerName || "iBUY Marketplace",
-      quantity: 1,
-    });
-  }
-}}
+                          if (product.inStock) {
+                            const imgElement = e.currentTarget.closest('.product-card')?.querySelector('img');
+                            const rect = getElementRect(imgElement as HTMLElement);
+                            triggerFlyToCart({
+                              imageUrl: product.imageUrl || '',
+                              startX: rect.x,
+                              startY: rect.y,
+                              id: Date.now().toString(),
+                            });
+                            
+                            addItem({
+                              productId: product.id,
+                              variantId: product.bestVariantId,
+                              offerId: product.bestOfferId,
+                              title: product.title,
+                              price: product.price,
+                              imageUrl: product.imageUrl,
+                              stockQuantity: product.stockQuantity,
+                              sellerId: product.sellerId || "unknown",
+                              sellerName: product.sellerName || "iBUY Marketplace",
+                              quantity: 1,
+                            });
+                          }
+                        }}
+                        disabled={!product.inStock}
+                        className={`w-full py-2 text-xs font-semibold rounded-lg transition mt-auto flex items-center justify-center gap-2 ${
+                          product.inStock 
+                            ? "bg-green-600 hover:bg-green-700 text-white" 
+                            : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        }`}
                       >
                         <ShoppingCart className="w-4 h-4" />
                         {product.inStock ? "Add to Cart" : "Out of Stock"}
