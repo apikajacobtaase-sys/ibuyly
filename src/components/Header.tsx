@@ -45,48 +45,55 @@ export default function Header() {
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
       
       {/* ✅ ROW 1: Logo & Actions */}
-      {/* Reduced padding (py-2) and gap (gap-2) for mobile */}
-      <div className="px-3 py-2 md:px-6 md:py-3 flex items-center justify-between">
-        
-        {/* Left: Logo + Mobile Menu Trigger */}
-        <div className="flex items-center gap-2 md:gap-3">
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            {/* Smaller icons for mobile (w-5 h-5) */}
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-          
-          {/* Scale down the logo slightly on mobile */}
-          <div className="scale-90 md:scale-100 origin-left">
-            <Logo />
-          </div>
-        </div>
+        {/* ✅ ROW 1: Reduced padding (py-2) and tighter gap */}
+  <div className="px-3 py-2 flex items-center justify-between">
+    
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-md"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+      <Logo />
+    </div>
 
-        {/* Right: Cart & Notifications */}
-        <div className="flex items-center gap-1 md:gap-2">
-          <Link href="/cart" className="relative p-1.5 md:p-2 text-gray-600 hover:bg-gray-100 rounded-full transition">
-            <ShoppingCart className="w-5 h-5 md:w-6 md:h-6" />
-            {cartCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 bg-green-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
-                {cartCount > 9 ? "9+" : cartCount}
-              </span>
-            )}
-          </Link>
-          
-          {status === "authenticated" && (
-            <Link href="/account/notifications" className="relative p-1.5 md:p-2 text-gray-600 hover:bg-gray-100 rounded-full transition">
-              <Bell className="w-5 h-5 md:w-6 md:h-6" />
-              {unreadNotifications > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
-                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                </span>
-              )}
-            </Link>
+    <div className="flex items-center gap-1">
+      <Link href="/cart" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
+        <ShoppingCart className="w-5 h-5" />
+        {cartCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-green-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+            {cartCount}
+          </span>
+        )}
+      </Link>
+      
+      {status === "authenticated" && (
+        <Link href="/account/notifications" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
+          <Bell className="w-5 h-5" />
+          {unreadNotifications > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+              {unreadNotifications}
+            </span>
           )}
-        </div>
-      </div>
+        </Link>
+      )}
+    </div>
+  </div>
+
+  {/* ✅ ROW 2: Search Bar with tighter padding */}
+  <div className="px-3 pb-2">
+    <form onSubmit={handleSearch} className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      <input
+        type="search"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Search..."
+        className="w-full pl-9 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/50"
+      />
+    </form>
+  </div>
 
       {/* ✅ ROW 2: Search Bar */}
       {/* Reduced padding for mobile */}
