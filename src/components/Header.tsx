@@ -1,4 +1,4 @@
-// src/components/Header.tsx
+ // src/components/Header.tsx
 "use client";
 
 import Link from "next/link";
@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Menu, X, Bell, ShoppingCart } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
+import Logo from "./Logo"; // ✅ Import the Logo
 
 export default function Header() {
   const { status } = useSession();
@@ -44,17 +45,22 @@ export default function Header() {
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
       <div className="px-4 py-3 flex items-center gap-3">
         
-        {/* 1. Mobile Menu Toggle */}
+        {/* ✅ 1. LOGO (Visible on all screens) */}
+        <div className="flex-shrink-0">
+          <Logo />
+        </div>
+
+        {/* 2. Mobile Menu Toggle */}
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg flex-shrink-0"
+          className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg flex-shrink-0"
           aria-label="Toggle menu"
         >
           {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
 
-        {/* 2. Search Bar (👇 min-w-0 is the magic fix for flexbox overflow) */}
-        <form onSubmit={handleSearch} className="flex-1 min-w-0 max-w-3xl mx-auto">
+        {/* 3. Search Bar */}
+        <form onSubmit={handleSearch} className="flex-1 min-w-0 max-w-3xl mx-auto hidden md:block">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
             <input
@@ -62,17 +68,17 @@ export default function Header() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search products, brands, categories..."
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white transition-all"
             />
           </div>
         </form>
 
-        {/* 3. Right Actions (Mobile Only) */}
-        <div className="md:hidden flex items-center gap-1 flex-shrink-0">
+        {/* 4. Right Actions (Mobile Only) */}
+        <div className="md:hidden flex items-center gap-1 flex-shrink-0 ml-auto">
           <Link href="/cart" className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
             <ShoppingCart className="w-6 h-6" />
             {cartCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-indigo-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-green-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {cartCount > 9 ? "9+" : cartCount}
               </span>
             )}
@@ -91,7 +97,21 @@ export default function Header() {
         </div>
       </div>
 
-      {/* 4. Mobile Menu Dropdown */}
+      {/* Mobile Search (Visible only on mobile) */}
+      <div className="md:hidden px-4 pb-3">
+         <form onSubmit={handleSearch} className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search iBUY..."
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </form>
+      </div>
+
+      {/* 5. Mobile Menu Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white px-4 py-4 space-y-1 max-h-[80vh] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
           <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">Home</Link>
@@ -106,14 +126,14 @@ export default function Header() {
               <Link href="/account/notifications" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">Notifications</Link>
               <div className="border-t border-gray-100 my-2" />
               <button 
-                onClick={() => { setMobileMenuOpen(false); /* signOut is handled in sidebar, or add next-auth signOut here */ }} 
+                onClick={() => { setMobileMenuOpen(false); /* signOut logic */ }} 
                 className="block w-full text-left px-3 py-2.5 text-rose-600 font-medium rounded-lg hover:bg-rose-50"
               >
                 Log Out
               </button>
             </>
           ) : (
-            <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-indigo-600 font-semibold rounded-lg hover:bg-indigo-50">Log In / Sign Up</Link>
+            <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-green-600 font-semibold rounded-lg hover:bg-green-50">Log In / Sign Up</Link>
           )}
         </div>
       )}
