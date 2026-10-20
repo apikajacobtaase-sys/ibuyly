@@ -66,17 +66,29 @@ export async function POST(req: Request) {
       }
     }
 
-    if (invalidReasons.length > 0) {
-      console.warn("⚠️ Invalid Items Detected:", invalidReasons);
-    }
+  console.log("🛒 CHECKOUT DEBUG:", {
+  cartItemsReceived: cartItems?.length ?? "cartItems is undefined",
+  validItemsCount: validItems.length,
+  invalidReasonsCount: invalidReasons.length,
+  cartItems: cartItems?.map((item: any) => ({
+    variantId: item.variantId,
+    offerId: item.offerId,
+    quantity: item.quantity,
+  })),
+  invalidReasons,
+});
 
-    if (validItems.length === 0) {
-      return NextResponse.json({ 
-        error: "No valid offers found in cart.", 
-        debug: invalidReasons 
-      }, { status: 400 });
-    }
-
+if (validItems.length === 0) {
+  return NextResponse.json(
+    {
+      error: "No valid offers found in cart.",
+      debug: invalidReasons,
+      cartItemsReceived: cartItems?.length ?? 0,
+      validItemsCount: validItems.length,
+    },
+    { status: 400 }
+  );
+}
     // 2. Validate Delivery Zone
     const zoneLocality = await db.deliveryZoneLocality.findFirst({
       where: {
