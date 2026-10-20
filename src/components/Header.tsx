@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Menu, X, Bell, ShoppingCart } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import Logo from "./Logo"; // ✅ Import the Logo
+import Logo from "./Logo";
 
 export default function Header() {
   const { status } = useSession();
@@ -42,53 +42,38 @@ export default function Header() {
   }, [status]);
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
-      <div className="px-4 py-3 flex items-center gap-3">
+    <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+      
+      {/* ✅ ROW 1: Logo & Actions */}
+      <div className="px-4 py-3 flex items-center justify-between">
         
-        {/* ✅ 1. LOGO (Visible on all screens) */}
-        <div className="flex-shrink-0">
+        {/* Left: Logo + Mobile Menu Trigger */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
           <Logo />
         </div>
 
-        {/* 2. Mobile Menu Toggle */}
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg flex-shrink-0"
-          aria-label="Toggle menu"
-        >
-          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
-
-        {/* 3. Search Bar */}
-        <form onSubmit={handleSearch} className="flex-1 min-w-0 max-w-3xl mx-auto hidden md:block">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search products, brands, categories..."
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white transition-all"
-            />
-          </div>
-        </form>
-
-        {/* 4. Right Actions (Mobile Only) */}
-        <div className="md:hidden flex items-center gap-1 flex-shrink-0 ml-auto">
-          <Link href="/cart" className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+        {/* Right: Cart & Notifications */}
+        <div className="flex items-center gap-2">
+          <Link href="/cart" className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full transition">
             <ShoppingCart className="w-6 h-6" />
             {cartCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-green-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 bg-green-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                 {cartCount > 9 ? "9+" : cartCount}
               </span>
             )}
           </Link>
           
           {status === "authenticated" && (
-            <Link href="/account/notifications" className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+            <Link href="/account/notifications" className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full transition">
               <Bell className="w-6 h-6" />
               {unreadNotifications > 0 && (
-                <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                   {unreadNotifications > 9 ? "9+" : unreadNotifications}
                 </span>
               )}
@@ -97,43 +82,42 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Mobile Search (Visible only on mobile) */}
-      <div className="md:hidden px-4 pb-3">
-         <form onSubmit={handleSearch} className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search iBUY..."
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </form>
+      {/* ✅ ROW 2: Search Bar (Full Width on Mobile, Centered on Desktop) */}
+      <div className="px-4 pb-3 md:px-6 md:pb-4">
+        <form onSubmit={handleSearch} className="relative max-w-3xl mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search products, brands, categories..."
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-100 border-transparent focus:bg-white border focus:border-green-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all"
+          />
+        </form>
       </div>
 
-      {/* 5. Mobile Menu Dropdown */}
+      {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-200 bg-white px-4 py-4 space-y-1 max-h-[80vh] overflow-y-auto animate-in slide-in-from-top-2 duration-200">
-          <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">Home</Link>
-          <Link href="/products" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">All Products</Link>
-          <Link href="/categories" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">Categories</Link>
+        <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 space-y-1 max-h-[80vh] overflow-y-auto animate-in slide-in-from-top-2 duration-200 shadow-inner">
+          <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-3 text-gray-700 font-medium rounded-lg hover:bg-green-50 hover:text-green-700">Home</Link>
+          <Link href="/products" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-3 text-gray-700 font-medium rounded-lg hover:bg-green-50 hover:text-green-700">All Products</Link>
+          <Link href="/categories" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-3 text-gray-700 font-medium rounded-lg hover:bg-green-50 hover:text-green-700">Categories</Link>
           
           {status === "authenticated" ? (
             <>
               <div className="border-t border-gray-100 my-2" />
-              <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">My Dashboard</Link>
-              <Link href="/account/orders" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">My Orders</Link>
-              <Link href="/account/notifications" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-gray-700 font-medium rounded-lg hover:bg-gray-50">Notifications</Link>
+              <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-3 text-gray-700 font-medium rounded-lg hover:bg-green-50 hover:text-green-700">My Dashboard</Link>
+              <Link href="/account/orders" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-3 text-gray-700 font-medium rounded-lg hover:bg-green-50 hover:text-green-700">My Orders</Link>
               <div className="border-t border-gray-100 my-2" />
               <button 
                 onClick={() => { setMobileMenuOpen(false); /* signOut logic */ }} 
-                className="block w-full text-left px-3 py-2.5 text-rose-600 font-medium rounded-lg hover:bg-rose-50"
+                className="block w-full text-left px-3 py-3 text-rose-600 font-medium rounded-lg hover:bg-rose-50"
               >
                 Log Out
               </button>
             </>
           ) : (
-            <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2.5 text-green-600 font-semibold rounded-lg hover:bg-green-50">Log In / Sign Up</Link>
+            <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="block mt-4 px-3 py-3 text-center bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Log In / Sign Up</Link>
           )}
         </div>
       )}
