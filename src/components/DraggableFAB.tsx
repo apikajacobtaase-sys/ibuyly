@@ -122,8 +122,6 @@ currentPos: Position
 if ("touches" in e) {
 e.preventDefault();
 }
-
-```
 const startX =
   "touches" in e
     ? e.touches[0].clientX
@@ -194,21 +192,20 @@ document.addEventListener("touchmove", moveHandler, {
 });
 document.addEventListener("touchend", cleanup);
 document.addEventListener("touchcancel", cleanup);
-```
-
 };
 
-// Conditional returns are now below every Hook.
+
 if (!mounted || !isMobile) {
-return null;
+  return null;
 }
 
 if (
-pathname === "/cart" ||
-pathname === "/account/wishlist"
+  pathname === "/cart" ||
+  pathname === "/account/wishlist"
 ) {
-return null;
+  return null;
 }
+
 
 return (
 <>

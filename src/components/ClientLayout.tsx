@@ -27,7 +27,8 @@ onClose={() => setMobileMenuOpen(false)}
 
     <main className="flex-1">{children}</main>
   </div>
-    <DraggableFAB />
+
+  <DraggableFAB />
 </div>
 
 );
