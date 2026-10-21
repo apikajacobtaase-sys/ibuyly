@@ -1,3 +1,4 @@
+ // src/app/seller/finances/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,6 +11,7 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Loader2
 } from "lucide-react";
 
 interface Transaction {
@@ -120,8 +122,6 @@ export default function SellerFinancesPage() {
         },
       };
 
-      console.log("Sending payout request:", payload);
-
       const res = await fetch("/api/seller/finances", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,23 +148,24 @@ export default function SellerFinancesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+      <div className="flex justify-center py-20 bg-white">
+        <Loader2 className="w-10 h-10 text-green-600 animate-spin" />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="p-8 text-center text-gray-500">
+      <div className="p-8 text-center text-gray-500 bg-white">
         Failed to load finances. Please try again.
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    // ✅ White Background
+    <div className="space-y-6 bg-white min-h-screen p-4 md:p-0">
+      <div className="flex items-center justify-between pt-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Finances</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -173,7 +174,7 @@ export default function SellerFinancesPage() {
         </div>
         <button
           onClick={() => setShowPayoutForm(!showPayoutForm)}
-          className="px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition"
+          className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition shadow-sm"
         >
           {showPayoutForm ? "Cancel" : "Request Payout"}
         </button>
@@ -206,14 +207,14 @@ export default function SellerFinancesPage() {
           title="Total Paid Out"
           value={`GH₵ ${(data.totalPaidOut || 0).toFixed(2)}`}
           icon={CheckCircle}
-          color="text-teal-600"
-          bg="bg-teal-100"
+          color="text-green-700"
+          bg="bg-green-50"
         />
       </div>
 
       {/* Payout Request Form */}
       {showPayoutForm && (
-        <div className="bg-white rounded-xl border p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Request Payout
           </h3>
@@ -230,7 +231,7 @@ export default function SellerFinancesPage() {
                 max={data.netBalance || 0}
                 required
                 placeholder="Enter amount"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Available: GH₵ {(data.netBalance || 0).toFixed(2)}
@@ -245,7 +246,7 @@ export default function SellerFinancesPage() {
                 name="paymentMethod"
                 required
                 defaultValue="MOBILE_MONEY"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none bg-white"
               >
                 <option value="MOBILE_MONEY">Mobile Money</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -261,7 +262,7 @@ export default function SellerFinancesPage() {
                 name="accountName"
                 required
                 placeholder="Full name on account"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
               />
             </div>
 
@@ -274,7 +275,7 @@ export default function SellerFinancesPage() {
                 name="accountNumber"
                 required
                 placeholder="e.g., 0241234567"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
               />
             </div>
 
@@ -286,24 +287,24 @@ export default function SellerFinancesPage() {
                 type="text"
                 name="network"
                 placeholder="e.g., MTN, Vodafone, GCB Bank"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
               />
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-teal-600 text-white py-3 rounded-lg font-medium hover:bg-teal-700 disabled:opacity-50 transition"
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition shadow-sm"
             >
-              {isSubmitting ? "Submitting..." : "Submit Payout Request"}
+              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Submit Payout Request"}
             </button>
           </form>
         </div>
       )}
 
       {/* Recent Transactions */}
-      <div className="bg-white rounded-xl border">
-        <div className="px-6 py-4 border-b">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">Recent Transactions</h3>
         </div>
         {(data.records || []).length === 0 ? (
@@ -315,7 +316,7 @@ export default function SellerFinancesPage() {
             {(data.records || []).map((t) => (
               <div
                 key={t.id || t.createdAt}
-                className="px-6 py-3 flex items-center justify-between"
+                className="px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-900 truncate">
@@ -341,8 +342,8 @@ export default function SellerFinancesPage() {
       </div>
 
       {/* Pending Payouts */}
-      <div className="bg-white rounded-xl border">
-        <div className="px-6 py-4 border-b">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">Pending Payouts</h3>
         </div>
         {(data.pendingPayouts || []).length === 0 ? (
@@ -354,7 +355,7 @@ export default function SellerFinancesPage() {
             {(data.pendingPayouts || []).map((p) => (
               <div
                 key={p.id}
-                className="px-6 py-3 flex items-center justify-between"
+                className="px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
               >
                 <div>
                   <p className="font-semibold text-gray-900">
@@ -392,7 +393,7 @@ function StatCard({
   bg: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border p-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm text-gray-500">{title}</p>
         <div className={`p-2 rounded-lg ${bg}`}>
