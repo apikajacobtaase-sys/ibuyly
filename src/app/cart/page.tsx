@@ -1,4 +1,4 @@
- // src/app/cart/page.tsx
+  // src/app/cart/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -103,7 +103,7 @@ function CartContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
       </div>
     );
@@ -111,8 +111,8 @@ function CartContent() {
 
   if (totalItems === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-32 h-32 bg-gray-200 rounded-full flex items-center justify-center mb-6">
+      <div className="min-h-screen bg-white pb-20 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mb-6">
           <ShoppingCart className="w-16 h-16 text-gray-400" />
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
@@ -125,8 +125,9 @@ function CartContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32 md:pb-8">
-      {/* HEADER - No Back Arrow */}
+    // ✅ White Background
+    <div className="min-h-screen bg-white pb-32 md:pb-8">
+      {/* HEADER */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <h1 className="text-lg font-bold text-gray-900">Shopping Cart ({totalItems})</h1>
         <button 
@@ -147,7 +148,7 @@ function CartContent() {
             <button onClick={toggleSelectAll} className="text-green-600">
               {allSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
             </button>
-            <span className="text-sm font-medium text-gray-700">Select All ({items.length} items)</span>
+            <span className="text-sm font-medium text-gray-900">Select All ({items.length} items)</span>
           </div>
 
           {/* Seller Groups */}
@@ -211,7 +212,7 @@ function CartContent() {
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="text-sm font-medium w-6 text-center">{item.quantity}</span>
+                          <span className="text-sm font-medium w-6 text-center text-gray-900">{item.quantity}</span>
                           <button
                             onClick={() => updateQuantity(item.id, item.quantity + 1)}
                             disabled={item.quantity >= item.stockQuantity || isOutOfStock}
@@ -220,39 +221,34 @@ function CartContent() {
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <span className="text-sm font-bold text-gray-900">{formatCurrency(item.price * item.quantity)}</span>
+                        {/* ✅ Green Price */}
+                        <span className="text-sm font-bold text-green-600">{formatCurrency(item.price * item.quantity)}</span>
                       </div>
                     </div>
 
                     {/* Remove Button */}
-                    {/* Remove Button */}
-{isManaging && (
-  <button
-    onClick={async () => {
-      // 1. Optimistic UI Update
-      removeItem(item.id); 
-      
-      // 2. Sync with Database
-      try {
-        await fetch(`/api/cart?itemId=${item.id}`, { method: "DELETE" });
-      } catch (error) {
-        console.error("Failed to delete from DB", error);
-        // Optional: Re-add item if API fails
-      }
-    }}
-    className="flex-shrink-0 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg self-start"
-  >
-    <Trash2 className="w-4 h-4" />
-  </button>
-)}
-                  
+                    {isManaging && (
+                      <button
+                        onClick={async () => {
+                          removeItem(item.id); 
+                          try {
+                            await fetch(`/api/cart?itemId=${item.id}`, { method: "DELETE" });
+                          } catch (error) {
+                            console.error("Failed to delete from DB", error);
+                          }
+                        }}
+                        className="flex-shrink-0 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg self-start"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
             </div>
           ))}
 
-          {/* ✅ SECTION 1: You Might Also Like (Real Data) */}
+          {/* ✅ SECTION 1: You Might Also Like */}
           <div>
             <h3 className="text-lg font-bold text-gray-900 mb-4">You might also like</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -274,12 +270,12 @@ function CartContent() {
                     </div>
                     <div className="p-3">
                       <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{product.title}</h4>
-                      <p className="text-sm font-bold text-green-700 mt-1">{formatCurrency(product.price)}</p>
+                      {/* ✅ Green Price */}
+                      <p className="text-sm font-bold text-green-600 mt-1">{formatCurrency(product.price)}</p>
                     </div>
                   </Link>
                 ))
               ) : (
-                // Loading Skeletons
                 [...Array(4)].map((_, i) => (
                   <div key={i} className="bg-white rounded-lg border border-gray-200 p-3 animate-pulse">
                     <div className="aspect-square bg-gray-200 rounded-lg mb-2" />
@@ -309,7 +305,8 @@ function CartContent() {
                     </div>
                     <div className="p-3">
                       <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{item.title}</h4>
-                      <p className="text-sm font-bold text-green-700 mt-1">{formatCurrency(item.price)}</p>
+                      {/* ✅ Green Price */}
+                      <p className="text-sm font-bold text-green-600 mt-1">{formatCurrency(item.price)}</p>
                     </div>
                   </Link>
                 ))}
@@ -327,14 +324,15 @@ function CartContent() {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Items ({selectedTotalItems})</span>
-                <span className="font-medium">{formatCurrency(selectedTotalAmount)}</span>
+                <span className="font-medium text-gray-900">{formatCurrency(selectedTotalAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Estimated Delivery</span>
-                <span className="font-medium">{formatCurrency(deliveryFee)}</span>
+                <span className="font-medium text-gray-900">{formatCurrency(deliveryFee)}</span>
               </div>
               <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
                 <span className="text-base font-bold text-gray-900">Total</span>
+                {/* ✅ Green Total */}
                 <span className="text-xl font-bold text-green-600">{formatCurrency(selectedTotalAmount + (selectedTotalItems > 0 ? deliveryFee : 0))}</span>
               </div>
             </div>
@@ -358,30 +356,12 @@ function CartContent() {
         </div>
       </main>
 
-      {/* MOBILE STICKY CHECKOUT BAR */}
-     
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-xs text-gray-500">Total ({selectedTotalItems} items)</p>
-            <p className="text-xl font-bold text-green-600">{formatCurrency(selectedTotalAmount + (selectedTotalItems > 0 ? deliveryFee : 0))}</p>
-          </div>
-          <Link
-            href={selectedTotalItems > 0 ? "/checkout" : "#"}
-            className={`px-8 py-3 rounded-lg font-semibold transition-colors ${
-              selectedTotalItems > 0 
-                ? "bg-green-600 hover:bg-green-700 text-white" 
-                : "bg-gray-200 text-gray-500 cursor-not-allowed"
-            }`}
-          >
-            Checkout
-          </Link>
-        </div>
-
       {/* ✅ FLOATING MOBILE CHECKOUT BAR */}
       <div className="md:hidden fixed bottom-6 left-4 right-4 z-40">
         <div className="bg-gray-900 text-white rounded-2xl shadow-2xl p-4 flex items-center justify-between border border-gray-800 backdrop-blur-md bg-opacity-95">
           <div className="flex flex-col">
             <span className="text-xs text-gray-400 font-medium">Total ({selectedTotalItems} items)</span>
+            {/* ✅ Green Total in Floating Bar */}
             <span className="text-lg font-bold text-green-400">
               {formatCurrency(selectedTotalAmount + (selectedTotalItems > 0 ? deliveryFee : 0))}
             </span>
