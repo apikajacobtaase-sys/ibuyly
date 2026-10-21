@@ -15,7 +15,17 @@ export default function WishlistPage() {
   const router = useRouter();
   
   // ✅ Get data and actions from the store
-  const { items, removeItem, clearWishlist } = useWishlistStore();
+ const {
+  items,
+  removeItem,
+  clearWishlist,
+  fetchWishlist,
+} = useWishlistStore();
+useEffect(() => {
+  if (status === "authenticated") {
+    void fetchWishlist();
+  }
+}, [status, fetchWishlist]);
 
   useEffect(() => {
     if (status === "unauthenticated") {

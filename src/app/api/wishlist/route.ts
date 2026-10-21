@@ -84,10 +84,20 @@ export async function DELETE(req: Request) {
     const productId = searchParams.get("productId");
 
     if (productId) {
-      await db.wishlist.deleteMany({
-        where: { userId: session.user.id, productId },
-      });
-    }
+  await db.wishlist.deleteMany({
+    where: {
+      userId: session.user.id,
+      productId,
+    },
+  });
+} else {
+  // Clear the authenticated user's entire wishlist.
+  await db.wishlist.deleteMany({
+    where: {
+      userId: session.user.id,
+    },
+  });
+}
 
     return NextResponse.json({ success: true });
   } catch (error) {
