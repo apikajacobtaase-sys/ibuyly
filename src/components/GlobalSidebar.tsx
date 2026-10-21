@@ -30,7 +30,7 @@ const accountLinks = [
 interface GlobalSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  onCollapseChange?: (collapsed: boolean) => void; // ✅ New Prop
+  onCollapseChange?: (collapsed: boolean) => void;
 }
 
 export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: GlobalSidebarProps) {
@@ -63,7 +63,6 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
     setIsCollapsed(newState);
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
     
-    // ✅ Notify parent layout
     if (onCollapseChange) {
       onCollapseChange(newState);
     }
@@ -105,13 +104,13 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
         />
       )}
 
-      {/* ✅ Sidebar Container */}
+      {/* ✅ Sidebar Container: Fixed height, no body scroll */}
       <aside className={`
         fixed top-0 left-0 z-50 h-full bg-white border-r border-gray-200 
-        transform transition-all duration-300 ease-in-out /* ✅ Added transition-all */
-        md:translate-x-0 md:static md:h-screen md:border-r
+        transform transition-all duration-300 ease-in-out
+        md:translate-x-0 md:static md:h-full md:border-r /* ✅ Changed md:h-screen to md:h-full to match parent */
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        ${isCollapsed ? "md:w-20" : "md:w-72"} /* ✅ Width changes here */
+        ${isCollapsed ? "md:w-20" : "md:w-72"}
       `}>
         
         {/* Mobile Header inside Sidebar */}
@@ -122,10 +121,11 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
           </button>
         </div>
 
-        <div className="flex flex-col h-full">
+        {/* ✅ Flex Column Wrapper for Desktop Structure */}
+        <div className="hidden md:flex flex-col h-full">
           
-          {/* Desktop Brand & Toggle */}
-          <div className={`hidden md:flex p-4 border-b border-gray-100 items-center ${isCollapsed ? "justify-center" : "justify-between"}`}>
+          {/* 1. Brand & Toggle (Fixed at top) */}
+          <div className={`flex-shrink-0 p-4 border-b border-gray-100 items-center ${isCollapsed ? "justify-center flex" : "flex justify-between"}`}>
             <Link href="/" className="flex items-center gap-3 overflow-hidden">
               <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
                 <ShoppingBag className="w-5 h-5 text-white" />
@@ -141,10 +141,10 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
             </button>
           </div>
 
-          {/* Scrollable Navigation */}
-          <div className="flex-1 p-3 space-y-6 overflow-y-auto scrollbar-thin">
+          {/* 2. Scrollable Navigation (Takes remaining space) */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-6">
             <div>
-              {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 hidden md:block">Browse</h3>}
+              {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Browse</h3>}
               <nav className="space-y-1">
                 {browseLinks.map(renderLink)}
               </nav>
@@ -152,7 +152,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
             {isAuthenticated && (
               <div>
-                {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 hidden md:block">Account</h3>}
+                {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</h3>}
                 <nav className="space-y-1">
                   {accountLinks.map(renderLink)}
                 </nav>
@@ -161,7 +161,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
             {isAuthenticated && (isSeller || isAdmin) && (
               <div>
-                {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 hidden md:block">Management</h3>}
+                {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>}
                 <nav className="space-y-1">
                   {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
                   {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
@@ -172,63 +172,60 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
             )}
           </div>
 
-          {/* Bottom Actions */}
-          <div className="p-3 border-t border-gray-100 space-y-2 bg-gray-50/50">
+          {/* 3. Bottom Actions (Fixed at bottom) */}
+          <div className="flex-shrink-0 p-3 border-t border-gray-100 space-y-2 bg-gray-50/50">
+            <Link
+              href="/cart"
+              onClick={onClose}
+              title={isCollapsed ? "View Cart" : ""}
+              className={`flex items-center ${isCollapsed ? "justify-center w-12 h-12 mx-auto" : "justify-between px-4 py-3"} bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors shadow-sm relative`}
+            >
+              <div className={`flex items-center ${isCollapsed ? "" : "gap-3"}`}>
+                <ShoppingCart className="w-5 h-5 flex-shrink-0" />
+                {!isCollapsed && <span className="font-semibold text-sm">View Cart</span>}
+              </div>
+              {cartCount > 0 && !isCollapsed && (
+                <span className="bg-white text-green-600 text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center">
+                  {cartCount > 99 ? "9+" : cartCount}
+                </span>
+              )}
+            </Link>
             
-            {/* ✅ DESKTOP: Show Cart Button */}
-            <div className="hidden md:block">
-              <Link
-                href="/cart"
-                onClick={onClose}
-                title={isCollapsed ? "View Cart" : ""}
-                className={`flex items-center ${isCollapsed ? "justify-center w-12 h-12 mx-auto" : "justify-between px-4 py-3"} bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors shadow-sm relative`}
+            {isAuthenticated && (
+               <button
+                onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
+                className={`flex items-center ${isCollapsed ? "justify-center w-10 h-10 mx-auto mt-2" : "gap-3 w-full px-3 py-2 mt-2"} text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors`}
               >
-                <div className={`flex items-center ${isCollapsed ? "" : "gap-3"}`}>
-                  <ShoppingCart className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && <span className="font-semibold text-sm">View Cart</span>}
-                </div>
-                {cartCount > 0 && !isCollapsed && (
-                  <span className="bg-white text-green-600 text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center">
-                    {cartCount > 99 ? "9+" : cartCount}
-                  </span>
-                )}
-              </Link>
-              
-              {isAuthenticated && (
-                 <button
-                  onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
-                  className={`flex items-center ${isCollapsed ? "justify-center w-10 h-10 mx-auto mt-2" : "gap-3 w-full px-3 py-2 mt-2"} text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors`}
-                >
-                  <LogOut className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && "Log Out"}
-                </button>
-              )}
-            </div>
-
-            {/* ✅ MOBILE: Show Login/Logout Button (Cart is Floating) */}
-            <div className="md:hidden mt-2">
-              {isAuthenticated ? (
-                <button
-                  onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
-                  className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-200"
-                >
-                  <LogOut className="w-5 h-5 flex-shrink-0" />
-                  <span>Log Out</span>
-                </button>
-              ) : (
-                <Link
-                  href="/login"
-                  onClick={onClose}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-sm shadow-md"
-                >
-                  <User className="w-5 h-5 flex-shrink-0" />
-                  <span>Log In / Sign Up</span>
-                </Link>
-              )}
-            </div>
-
+                <LogOut className="w-5 h-5 flex-shrink-0" />
+                {!isCollapsed && "Log Out"}
+              </button>
+            )}
           </div>
+
         </div>
+
+        {/* Mobile Bottom Actions (Visible only on mobile) */}
+        <div className="md:hidden p-3 border-t border-gray-100 space-y-2 bg-gray-50/50">
+           {isAuthenticated ? (
+            <button
+              onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-200"
+            >
+              <LogOut className="w-5 h-5 flex-shrink-0" />
+              <span>Log Out</span>
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              onClick={onClose}
+              className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-sm shadow-md"
+            >
+              <User className="w-5 h-5 flex-shrink-0" />
+              <span>Log In / Sign Up</span>
+            </Link>
+          )}
+        </div>
+
       </aside>
     </>
   );

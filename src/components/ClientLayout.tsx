@@ -16,25 +16,27 @@ export default function ClientLayout({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-white">
+    // ✅ 1. Lock to screen height
+    <div className="flex h-screen w-full overflow-hidden bg-white">
+      
+      {/* ✅ 2. Sidebar is static in flow, handles its own internal scroll */}
       <GlobalSidebar
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         onCollapseChange={(collapsed) => setIsSidebarCollapsed(collapsed)}
       />
       
-      {/* 
-         ✅ flex-1 ensures this area takes up all remaining space.
-         When the sidebar shrinks, this area automatically expands.
-      */}
-      <div className="flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out">
-        <OnboardingBanner />
+      {/* ✅ 3. Main Area takes remaining width and full height */}
+      <div className="flex-1 flex flex-col min-w-0 h-full relative">
+        
+        {/* Header is fixed at top of this column */}
+        <div className="flex-shrink-0 z-20">
+           <OnboardingBanner />
+           <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
+        </div>
 
-        <Header
-          onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
-        />
-
-        <main className="flex-1 p-4 md:p-6 w-full">
+        {/* ✅ 4. Main Content scrolls independently */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 w-full scroll-smooth">
           {children}
         </main>
       </div>
