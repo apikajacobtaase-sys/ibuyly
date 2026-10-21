@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useCartStore } from "@/store/cartStore";
 import { Loader2, ShoppingBag } from "lucide-react";
 
+// 1. The Inner Component that uses useSearchParams
 function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -17,82 +18,96 @@ function LoginFormContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // ✅ Redirect if already logged in
+  // Ensure we only run client-side logic after mount
   useEffect(() => {
-    if (status === "authenticated") {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isMounted && status === "authenticated") {
       const callbackUrl = searchParams.get("callbackUrl") || "/account";
-      router.replace(callbackUrl); // ✅ Use replace to prevent back-button loops
+      router.replace(callbackUrl);
     }
-  }, [status, router, searchParams]);
+  }, [status, router, searchParams, isMounted]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
 
-    if (result?.error) {
-      setError("Invalid email or password. Please try again.");
-      setIsLoading(false);
-    } else {
-      // ✅ SUCCESS: Merge guest cart with account cart
-      try {
-        const guestCartData = localStorage.getItem("cart-storage");
-        if (guestCartData) {
-          const parsed = JSON.parse(guestCartData);
-          const guestCart = parsed?.state?.items || [];
-          
-          if (guestCart.length > 0) {
-            const mergeRes = await fetch("/api/cart/merge", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                guestCart: guestCart.map((item: any) => ({
-                  productId: item.productId,
-                  variantId: item.variantId,
-                  quantity: item.quantity,
-                })),
-              }),
-            });
+      if (result?.error) {
+        setError("Invalid email or password. Please try again.");
+        setIsLoading(false);
+      } else {
+        // ✅ SUCCESS: Merge guest cart with account cart
+        try {
+          const guestCartData = localStorage.getItem("cart-storage");
+          if (guestCartData) {
+            const parsed = JSON.parse(guestCartData);
+            const guestCart = parsed?.state?.items || [];
+            
+            if (guestCart.length > 0) {
+              const mergeRes = await fetch("/api/cart/merge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  guestCart: guestCart.map((item: any) => ({
+                    productId: item.productId,
+                    variantId: item.variantId,
+                    quantity: item.quantity,
+                  })),
+                }),
+              });
 
-            if (mergeRes.ok) {
-              const store = useCartStore.getState();
-              if (typeof store.clearGuestCart === "function") {
-                store.clearGuestCart();
-              } else {
-                localStorage.removeItem("cart-storage");
+              if (mergeRes.ok) {
+                const store = useCartStore.getState();
+                if (typeof store.clearGuestCart === "function") {
+                  store.clearGuestCart();
+                } else {
+                  localStorage.removeItem("cart-storage");
+                }
               }
             }
           }
+        } catch (err) {
+          console.error("Cart merge failed:", err);
         }
-      } catch (error) {
-        console.error("Cart merge failed:", error);
-      }
 
-      const callbackUrl = searchParams.get("callbackUrl") || "/account";
-      router.replace(callbackUrl); // ✅ Use replace here too
+        const callbackUrl = searchParams.get("callbackUrl") || "/account";
+        router.replace(callbackUrl);
+      }
+    } catch (err) {
+      setError("An unexpected error occurred.");
+      setIsLoading(false);
     }
   };
 
-  if (status === "authenticated") {
+  if (!isMounted || status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <Loader2 className="w-10 h-10 text-green-600 animate-spin" />
       </div>
     );
   }
 
+  if (status === "authenticated") {
+    return null; // Redirecting...
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-gray-100">
         
-        {/* ✅ iBUY Branding */}
+        {/* Branding */}
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center mb-3 shadow-sm">
             <ShoppingBag className="w-7 h-7 text-white" />
@@ -113,7 +128,7 @@ function LoginFormContent() {
             <input
               type="email"
               required
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-colors bg-gray-50 focus:bg-white"
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-colors bg-gray-50 focus:bg-white text-gray-900"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
@@ -125,7 +140,7 @@ function LoginFormContent() {
             <input
               type="password"
               required
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-colors bg-gray-50 focus:bg-white"
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-colors bg-gray-50 focus:bg-white text-gray-900"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -164,10 +179,11 @@ function LoginFormContent() {
   );
 }
 
+// 2. The Wrapper Component with Suspense
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <Loader2 className="w-10 h-10 text-green-600 animate-spin" />
       </div>
     }>
