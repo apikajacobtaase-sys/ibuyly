@@ -1,151 +1,156 @@
  // src/app/products/page.tsx
-import ProductCard from "@/components/ProductCard";
-import { Search, SlidersHorizontal, ChevronLeft, ChevronRight, Package } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { headers } from "next/headers";
+import Image from "next/image";
+import { ShoppingCart, Heart } from "lucide-react";
+import { useCartStore } from "@/store/cartStore";
+import { useWishlistStore } from "@/store/wishlistStore";
+import { triggerFlyToCart, getElementRect } from "@/lib/cartAnimation";
 
-export default async function ProductsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ search?: string; page?: string }>;
-}) {
-  const { search: query = "", page = "1" } = await searchParams;
-  const pageNum = parseInt(page, 10) || 1;
-  const limit = 20;
+interface Product {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+  imageUrl?: string | null;
+  sellerName?: string;
+  sellerId?: string;
+  stockQuantity: number;
+  inStock: boolean;
+  bestVariantId?: string;
+  bestOfferId?: string | null;
+}
 
-  // ✅ BULLETPROOF ABSOLUTE URL FOR SERVER COMPONENTS
-  const headersList = await headers();
-  const host = headersList.get("host");
-  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-  const baseUrl = `${protocol}://${host}`;
+export default function AllProductsPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const { addItem } = useCartStore();
+  const { addItem: addWishlistItem, removeItem: removeWishlistItem, isInWishlist } = useWishlistStore();
 
-  let products = [];
-  let total = 0;
-  let totalPages = 0;
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch("/api/search?q=&page=1&limit=20");
+        if (res.ok) {
+          const data = await res.json();
+          setProducts(data.products || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch products", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
-  try {
-    const res = await fetch(
-      `${baseUrl}/api/search?q=${query}&page=${pageNum}&limit=${limit}`,
-      { cache: "no-store" }
-    );
+  const formatCurrency = (amount: number) => `GH₵ ${amount.toFixed(2)}`;
 
-    if (res.ok) {
-      const data = await res.json();
-      products = data.products || [];
-      total = data.total || 0;
-      totalPages = Math.ceil(total / limit);
-    } else {
-      console.error("API Error:", res.status);
-    }
-  } catch (error) {
-    console.error("Fetch failed:", error);
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      {/* Breadcrumbs */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-2 text-sm text-gray-500">
-          <Link href="/" className="hover:text-green-600 transition-colors">Home</Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-900 font-medium">
-            {query ? `Search Results for "${query}"` : "All Products"}
-          </span>
-        </div>
+    <div className="max-w-7xl mx-auto p-4 pb-20">
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">All Products</h1>
+      
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {products.map((product) => {
+          const isWishlisted = isInWishlist(product.id);
+          
+          return (
+            <div key={product.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden group relative flex flex-col">
+              
+              {/* Wishlist Button */}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (isWishlisted) removeWishlistItem(product.id);
+                  else addWishlistItem({
+                    id: product.id,
+                    title: product.title,
+                    price: product.price,
+                    imageUrl: product.imageUrl,
+                    slug: product.slug,
+                    sellerName: product.sellerName || "iBUY",
+                  });
+                }}
+                className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm z-10"
+              >
+                <Heart className={`w-4 h-4 ${isWishlisted ? "fill-rose-500 text-rose-500" : "text-gray-400"}`} />
+              </button>
+
+              <Link href={`/products/${product.slug}`} className="flex-1 flex flex-col">
+                <div className="aspect-square bg-gray-100 relative">
+                  {product.imageUrl ? (
+                    <Image src={product.imageUrl} alt={product.title} fill className="object-cover" unoptimized />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><ShoppingCart className="w-8 h-8 text-gray-400" /></div>
+                  )}
+                </div>
+                
+                <div className="p-3">
+                  <h3 className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">{product.title}</h3>
+                  <p className="text-xs text-gray-500 mb-2">{product.sellerName}</p>
+                  <span className="text-sm font-bold text-green-700">{formatCurrency(product.price)}</span>
+                </div>
+              </Link>
+
+              {/* Add to Cart Button */}
+              <div className="p-3 pt-0 mt-auto">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    
+                    // ✅ FIX: Check for required IDs before adding
+                    if (!product.bestOfferId || !product.bestVariantId) {
+                      alert("This product is currently unavailable.");
+                      return;
+                    }
+
+                    // Fly to cart animation
+                    const imgElement = e.currentTarget.closest('.group')?.querySelector('img');
+                    if (imgElement) {
+                      const rect = getElementRect(imgElement as HTMLElement);
+                      triggerFlyToCart({
+                        imageUrl: product.imageUrl || '',
+                        startX: rect.x,
+                        startY: rect.y,
+                        id: Date.now().toString(),
+                      });
+                    }
+
+                    addItem({
+                      productId: product.id,
+                      variantId: product.bestVariantId, // ✅ Pass Variant ID
+                      offerId: product.bestOfferId,     // ✅ Pass Offer ID
+                      title: product.title,
+                      price: product.price,
+                      imageUrl: product.imageUrl,
+                      stockQuantity: product.stockQuantity,
+                      sellerId: product.sellerId || "unknown",
+                      sellerName: product.sellerName || "iBUY Marketplace",
+                      quantity: 1,
+                    });
+                  }}
+                  disabled={!product.inStock}
+                  className={`w-full py-2 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-2 ${
+                    product.inStock 
+                      ? "bg-green-600 hover:bg-green-700 text-white" 
+                      : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  {product.inStock ? "Add to Cart" : "Out of Stock"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
-
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Search & Filter Bar */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <form action="/products" className="w-full">
-                <input
-                  type="search"
-                  name="search"
-                  defaultValue={query}
-                  placeholder="Search by name, brand, or description..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent focus:bg-white transition-all"
-                />
-              </form>
-            </div>
-            <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors w-full md:w-auto justify-center">
-              <SlidersHorizontal className="w-4 h-4" />
-              Filters
-            </button>
-          </div>
-        </div>
-
-        {/* Results Count */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-600">
-            Showing <span className="font-semibold text-gray-900">{products.length}</span> of{" "}
-            <span className="font-semibold text-gray-900">{total}</span> products
-          </p>
-        </div>
-
-        {/* Product Grid */}
-        {products.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-            {products.map((product: any) => (
-              <ProductCard
-                key={product.id}
-                id={product.id}
-                title={product.title}
-                slug={product.slug}
-                price={product.price}
-                compareAtPrice={product.compareAtPrice}
-                imageUrl={product.imageUrl}
-                sellerName={product.sellerName}
-                stockQuantity={product.stockQuantity}
-              />
-            ))}
-          </div>
-        ) : (
-          /* Empty State */
-          <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {query ? `No products found for "${query}"` : "No products available"}
-            </h3>
-            <p className="text-gray-500 max-w-md mx-auto mb-6">
-              Check back soon as we are constantly adding new products to our marketplace.
-            </p>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 mt-10">
-            <Link
-              href={`/products?search=${encodeURIComponent(query)}&page=${Math.max(1, pageNum - 1)}`}
-              className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pageNum === 1
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              <ChevronLeft className="w-4 h-4" /> Previous
-            </Link>
-            <span className="px-4 py-2 text-sm font-medium text-gray-700">
-              Page {pageNum} of {totalPages}
-            </span>
-            <Link
-              href={`/products?search=${encodeURIComponent(query)}&page=${Math.min(totalPages, pageNum + 1)}`}
-              className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pageNum === totalPages
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              Next <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-        )}
-      </main>
     </div>
   );
 }
