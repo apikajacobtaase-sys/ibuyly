@@ -95,34 +95,6 @@ export default function CategoriesPage() {
   return (
     <div className="min-h-screen bg-gray-100 pb-20 md:pb-0">
       {/* ==========================================
-          HEADER WITH SEARCH BAR
-      ========================================== */}
-      <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
-        <div className="px-3 py-3 flex items-center gap-3">
-          <button
-            onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-full transition flex-shrink-0"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-700" />
-          </button>
-          
-          <form onSubmit={handleSearch} className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search iBUY"
-                className="w-full bg-gray-100 rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-          </form>
-        </div>
-      </header>
-
-      {/* ==========================================
           TWO-COLUMN CATEGORY LAYOUT
       ========================================== */}
       <div className="flex max-w-7xl mx-auto">

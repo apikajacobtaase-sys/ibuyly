@@ -41,16 +41,6 @@ export default function AccountPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-8">
       
-      {/* ==========================================
-          SECTION A: TOP SEARCH BAR
-      ========================================== */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
-        <Link href="/search" className="flex items-center bg-gray-100 rounded-full h-[48px] px-4">
-          <Search className="w-5 h-5 text-gray-500 mr-3" />
-          <span className="text-gray-500 text-sm">Search on iBUY</span>
-        </Link>
-      </div>
-
       <main className="max-w-4xl mx-auto">
         
         {/* ==========================================
