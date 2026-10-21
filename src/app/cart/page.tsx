@@ -346,7 +346,7 @@ function CartContent() {
       </main>
 
       {/* MOBILE STICKY CHECKOUT BAR */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+     
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-xs text-gray-500">Total ({selectedTotalItems} items)</p>
@@ -363,7 +363,32 @@ function CartContent() {
             Checkout
           </Link>
         </div>
+
+      {/* ✅ FLOATING MOBILE CHECKOUT BAR */}
+      <div className="md:hidden fixed bottom-6 left-4 right-4 z-40">
+        <div className="bg-gray-900 text-white rounded-2xl shadow-2xl p-4 flex items-center justify-between border border-gray-800 backdrop-blur-md bg-opacity-95">
+          <div className="flex flex-col">
+            <span className="text-xs text-gray-400 font-medium">Total ({selectedTotalItems} items)</span>
+            <span className="text-lg font-bold text-green-400">
+              {formatCurrency(selectedTotalAmount + (selectedTotalItems > 0 ? deliveryFee : 0))}
+            </span>
+          </div>
+          
+          <Link
+            href={selectedTotalItems > 0 ? "/checkout" : "#"}
+            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all transform active:scale-95 ${
+              selectedTotalItems > 0 
+                ? "bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20" 
+                : "bg-gray-700 text-gray-400 cursor-not-allowed"
+            }`}
+          >
+            Checkout
+          </Link>
+        </div>
       </div>
+
+      {/* Add extra padding to body so the floating bar doesn't cover content */}
+      <div className="h-24 md:hidden" /> 
    
     </div>
   );
