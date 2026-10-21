@@ -46,11 +46,9 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
-    setIsMobile(window.innerWidth < 768);
     
     const savedState = localStorage.getItem("sidebar-collapsed");
     if (savedState !== null) {
@@ -79,15 +77,14 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
         key={link.href}
         href={link.href}
         onClick={onClose}
-        title={isCollapsed ? link.label : ""}
-        className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"} px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+        className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
           active
             ? "bg-green-50 text-green-700"
             : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
         }`}
       >
         <Icon className={`w-5 h-5 flex-shrink-0 ${active ? "text-green-600" : "text-gray-400"}`} />
-        {!isCollapsed && <span className="truncate">{link.label}</span>}
+        <span className="truncate">{link.label}</span>
       </Link>
     );
   };
@@ -104,11 +101,11 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
         />
       )}
 
-      {/* ✅ Sidebar Container: Fixed height, no body scroll */}
+      {/* ✅ Sidebar Container */}
       <aside className={`
         fixed top-0 left-0 z-50 h-full bg-white border-r border-gray-200 
         transform transition-all duration-300 ease-in-out
-        md:translate-x-0 md:static md:h-full md:border-r /* ✅ Changed md:h-screen to md:h-full to match parent */
+        md:translate-x-0 md:static md:h-full md:border-r
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
         ${isCollapsed ? "md:w-20" : "md:w-72"}
       `}>
@@ -144,7 +141,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
           {/* 2. Scrollable Navigation (Takes remaining space) */}
           <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-6">
             <div>
-              {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Browse</h3>}
+              <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Browse</h3>
               <nav className="space-y-1">
                 {browseLinks.map(renderLink)}
               </nav>
@@ -152,7 +149,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
             {isAuthenticated && (
               <div>
-                {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</h3>}
+                <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</h3>
                 <nav className="space-y-1">
                   {accountLinks.map(renderLink)}
                 </nav>
@@ -161,7 +158,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
             {isAuthenticated && (isSeller || isAdmin) && (
               <div>
-                {!isCollapsed && <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>}
+                <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>
                 <nav className="space-y-1">
                   {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
                   {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
@@ -177,7 +174,6 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
             <Link
               href="/cart"
               onClick={onClose}
-              title={isCollapsed ? "View Cart" : ""}
               className={`flex items-center ${isCollapsed ? "justify-center w-12 h-12 mx-auto" : "justify-between px-4 py-3"} bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors shadow-sm relative`}
             >
               <div className={`flex items-center ${isCollapsed ? "" : "gap-3"}`}>
@@ -204,26 +200,41 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
         </div>
 
-        {/* Mobile Bottom Actions (Visible only on mobile) */}
-        <div className="md:hidden p-3 border-t border-gray-100 space-y-2 bg-gray-50/50">
-           {isAuthenticated ? (
-            <button
-              onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-200"
-            >
-              <LogOut className="w-5 h-5 flex-shrink-0" />
-              <span>Log Out</span>
-            </button>
-          ) : (
-            <Link
-              href="/login"
-              onClick={onClose}
-              className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-sm shadow-md"
-            >
-              <User className="w-5 h-5 flex-shrink-0" />
-              <span>Log In / Sign Up</span>
-            </Link>
-          )}
+        {/* ✅ MOBILE NAVIGATION (Visible only on mobile) */}
+        <div className="md:hidden flex flex-col h-full pb-20">
+           <div className="flex-1 overflow-y-auto p-3 space-y-6">
+            
+            {/* Browse Section */}
+            <div>
+              <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Browse</h3>
+              <nav className="space-y-1">
+                {browseLinks.map(renderLink)}
+              </nav>
+            </div>
+
+            {/* Account Section */}
+            {isAuthenticated && (
+              <div>
+                <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</h3>
+                <nav className="space-y-1">
+                  {accountLinks.map(renderLink)}
+                </nav>
+              </div>
+            )}
+
+            {/* Management Section */}
+            {isAuthenticated && (isSeller || isAdmin) && (
+              <div>
+                <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>
+                <nav className="space-y-1">
+                  {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
+                  {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
+                  {isAdmin && renderLink({ href: "/admin", label: "Admin Dashboard", icon: Shield })}
+                  {isSuperAdmin && renderLink({ href: "/admin/users", label: "User Management", icon: Users })}
+                </nav>
+              </div>
+            )}
+          </div>
         </div>
 
       </aside>
