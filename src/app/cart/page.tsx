@@ -12,6 +12,14 @@ import { useCartStore, CartItem } from "@/store/cartStore";
 import { useWishlistStore } from "@/store/wishlistStore";
 import AuthGuard from "@/components/AuthGuard";
 
+interface Product {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+  imageUrl?: string | null;
+}
+
 export default function CartPage() {
   return (
     <AuthGuard>
@@ -40,6 +48,25 @@ function CartContent() {
   const [loading, setLoading] = useState(true);
   const [isManaging, setIsManaging] = useState(false);
   const [deliveryFee] = useState(15.00); 
+  
+  // ✅ State for Recommended Products
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
+
+  // ✅ Fetch Recommended Products
+  useEffect(() => {
+    const fetchRecommendations = async () => {
+      try {
+        const res = await fetch("/api/search?q=&page=1&limit=4");
+        if (res.ok) {
+          const data = await res.json();
+          setRecommendedProducts(data.products || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch recommendations", error);
+      }
+    };
+    fetchRecommendations();
+  }, []);
 
   // ✅ FIX: Sync with Database on load
   useEffect(() => {
@@ -212,21 +239,41 @@ function CartContent() {
             </div>
           ))}
 
-          {/* ✅ SECTION 1: You Might Also Like */}
+          {/* ✅ SECTION 1: You Might Also Like (Real Data) */}
           <div>
             <h3 className="text-lg font-bold text-gray-900 mb-4">You might also like</h3>
             <div className="grid grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <Link key={i} href={`/products/mock-${i}`} className="bg-white rounded-lg border border-gray-200 overflow-hidden group">
-                  <div className="aspect-square bg-gray-100 relative">
-                     <div className="w-full h-full flex items-center justify-center text-gray-400">Product Img</div>
+              {recommendedProducts.length > 0 ? (
+                recommendedProducts.map((product) => (
+                  <Link key={product.id} href={`/products/${product.slug}`} className="bg-white rounded-lg border border-gray-200 overflow-hidden group">
+                    <div className="aspect-square bg-gray-100 relative">
+                      {product.imageUrl ? (
+                        <Image 
+                          src={product.imageUrl} 
+                          alt={product.title} 
+                          fill 
+                          className="object-cover group-hover:scale-105 transition-transform" 
+                          unoptimized 
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{product.title}</h4>
+                      <p className="text-sm font-bold text-green-700 mt-1">{formatCurrency(product.price)}</p>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                // Loading Skeletons
+                [...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg border border-gray-200 p-3 animate-pulse">
+                    <div className="aspect-square bg-gray-200 rounded-lg mb-2" />
+                    <div className="h-4 bg-gray-200 rounded w-3/4" />
                   </div>
-                  <div className="p-3">
-                    <h4 className="text-sm font-medium text-gray-900 line-clamp-1">Recommended Product {i}</h4>
-                    <p className="text-sm font-bold text-green-700 mt-1">GH₵ {(Math.random() * 100).toFixed(2)}</p>
-                  </div>
-                </Link>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
