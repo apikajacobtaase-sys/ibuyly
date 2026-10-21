@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Menu, X, Bell, ShoppingCart } from "lucide-react";
+import { Search, Bell, ShoppingCart, Menu } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import Logo from "./Logo";
 
-export default function Header() {
+// ✅ Accept the onMenuToggle prop from layout.tsx
+export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   const { status } = useSession();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
@@ -47,8 +47,12 @@ export default function Header() {
       {/* ROW 1: Logo & Actions */}
       <div className="px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-md">
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {/* ✅ Use the prop to open the GlobalSidebar */}
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-md"
+          >
+            <Menu className="w-6 h-6" />
           </button>
           <Logo />
         </div>
@@ -75,7 +79,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* ROW 2: Single Search Bar (Full Width) */}
+      {/* ROW 2: Search Bar */}
       <div className="px-3 pb-2">
         <form onSubmit={handleSearch} className="relative max-w-3xl mx-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -88,15 +92,6 @@ export default function Header() {
           />
         </form>
       </div>
-
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 space-y-1 animate-in slide-in-from-top-2">
-          <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-gray-700 font-medium rounded-lg hover:bg-green-50">Home</Link>
-          <Link href="/products" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-gray-700 font-medium rounded-lg hover:bg-green-50">All Products</Link>
-          {/* ... other links ... */}
-        </div>
-      )}
     </header>
   );
 }

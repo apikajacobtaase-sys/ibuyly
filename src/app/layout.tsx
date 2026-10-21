@@ -1,13 +1,15 @@
-// src/app/layout.tsx
+ // src/app/layout.tsx
+"use client"; // ✅ Changed to Client Component to manage state
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import GlobalSidebar from "@/components/GlobalSidebar";
-import BottomNav from "@/components/BottomNav";
 import Header from "@/components/Header";
 import OnboardingBanner from "@/components/OnboardingBanner";
-import DailyFeedbackPopup from "@/components/DailyFeedbackPopup"; // ✅ Added
+import DailyFeedbackPopup from "@/components/DailyFeedbackPopup";
+import { useState } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,26 +23,35 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // ✅ State to control the mobile sidebar
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <html lang="en">
       <body className={`${inter.className} bg-gray-50`}>
         <Providers>
           <div className="flex min-h-screen">
-            <GlobalSidebar />
+            
+            {/* ✅ Pass state and setter to Sidebar */}
+            <GlobalSidebar 
+              isOpen={mobileMenuOpen} 
+              onClose={() => setMobileMenuOpen(false)} 
+            />
             
             <div className="flex-1 flex flex-col min-w-0">
                <OnboardingBanner />
-              <Header />
+              
+              {/* ✅ Pass setter to Header so the hamburger button works */}
+              <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
               
               <main className="flex-1">
                 {children}
               </main>
               
-              <BottomNav />
+              {/* ✅ BottomNav removed as requested */}
             </div>
           </div>
           
-          {/* ✅ Added: Feedback Popup outside the main layout div so it floats on top */}
           <DailyFeedbackPopup />
         </Providers>
       </body>
