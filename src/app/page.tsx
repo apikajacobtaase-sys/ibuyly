@@ -1,13 +1,14 @@
  // src/app/page.tsx
 "use client";
-import { useWishlistStore } from "@/store/wishlistStore";
+
 import React, { useEffect, useState, useRef, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Search, Heart, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingCart } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import { useCartStore } from "@/store/cartStore";
+import { useWishlistStore } from "@/store/wishlistStore"; // ✅ Correct Import
 import { triggerFlyToCart, getElementRect } from "@/lib/cartAnimation";
 import QuantitySelector from "@/components/QuantitySelector";
 
@@ -16,8 +17,8 @@ interface Product {
   title: string;
   slug: string;
   price: number;
-  originalPrice?: number | null; // ✅ Added for discounts
-  discountPercent?: number;      // ✅ Added for discounts
+  originalPrice?: number | null;
+  discountPercent?: number;
   imageUrl?: string | null;
   sellerId?: string;
   sellerName?: string;
@@ -29,10 +30,15 @@ interface Product {
 
 export default function HomePage() {
   const router = useRouter();
-  const { addItem, updateQuantity, removeItem,isInWishlist,items } = useCartStore();
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-   
-  const isWishlisted = isInWishlist(product.id);
+  
+  // ✅ Use Cart Store for Cart logic
+  const { addItem: addCartItem, updateQuantity, removeItem: removeCartItem, items: cartItems } = useCartStore();
+  
+  // ✅ Use Wishlist Store for Wishlist logic
+  const { addItem: addWishlistItem, removeItem: removeWishlistItem, isInWishlist } = useWishlistStore();
+
+  const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -93,10 +99,6 @@ export default function HomePage() {
 
       const data = await res.json();
       
-      if (data.products && data.products.length > 0) {
-        console.log("📦 API Response Sample:", data.products[0]);
-      }
-      
       if (reset) {
         setProducts(data.products || []);
       } else {
@@ -126,8 +128,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-0">
-      {/* STICKY HEADER */}
-     
       <main className="max-w-7xl mx-auto">
         <section className="p-4">
           <div className="flex items-center justify-between mb-4">
@@ -151,7 +151,11 @@ export default function HomePage() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {products.map((product, index) => {
                 const isLast = index === products.length - 1;
-                const cartItem = items.find((i) => i.offerId === product.bestOfferId);
+                
+                // ✅ Check wishlist status INSIDE the map
+                const isWishlisted = isInWishlist(product.id);
+                
+                const cartItem = cartItems.find((i) => i.offerId === product.bestOfferId);
                 const cartQuantity = cartItem?.quantity || 0;
 
                 return (
@@ -160,29 +164,30 @@ export default function HomePage() {
                     ref={isLast ? lastProductRef : null}
                     className="product-card bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition group relative flex flex-col"
                   >
+                    {/* ✅ WISHLIST BUTTON */}
                     <button
-  onClick={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (isWishlisted) {
-      removeItem(product.id);
-    } else {
-      addItem({
-        id: product.id,
-        title: product.title,
-        price: product.price,
-        imageUrl: product.imageUrl,
-        slug: product.slug,
-        sellerName: product.sellerName || "iBUY",
-      });
-    }
-  }}
-  className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:shadow-md transition z-10"
->
-  <Heart 
-    className={`w-4 h-4 transition ${isWishlisted ? "fill-rose-500 text-rose-500" : "text-gray-400"}`} 
-  />
-</button>
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (isWishlisted) {
+                          removeWishlistItem(product.id);
+                        } else {
+                          addWishlistItem({
+                            id: product.id,
+                            title: product.title,
+                            price: product.price,
+                            imageUrl: product.imageUrl,
+                            slug: product.slug,
+                            sellerName: product.sellerName || "iBUY",
+                          });
+                        }
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:shadow-md transition z-10"
+                    >
+                      <Heart 
+                        className={`w-4 h-4 transition ${isWishlisted ? "fill-rose-500 text-rose-500" : "text-gray-400"}`} 
+                      />
+                    </button>
 
                     <Link href={`/products/${product.slug}`} className="flex-1 flex flex-col">
                       <div className="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden relative">
@@ -201,7 +206,6 @@ export default function HomePage() {
                           </div>
                         )}
                         
-                        {/* ✅ DISCOUNT BADGE */}
                         {product.discountPercent && product.discountPercent > 0 && (
                           <span className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full">
                             -{product.discountPercent}%
@@ -213,7 +217,6 @@ export default function HomePage() {
                         {product.title}
                       </h3>
 
-                      {/* ✅ PRICE & DISCOUNT DISPLAY */}
                       <div className="flex flex-col mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-gray-900">{formatCurrency(product.price)}</span>
@@ -235,7 +238,7 @@ export default function HomePage() {
                         }}
                         onDecrease={() => {
                           if (cartItem) {
-                            if (cartQuantity <= 1) removeItem(cartItem.id);
+                            if (cartQuantity <= 1) removeCartItem(cartItem.id);
                             else updateQuantity(cartItem.id, cartQuantity - 1);
                           }
                         }}
@@ -246,13 +249,6 @@ export default function HomePage() {
                         onClick={(e) => {
                           e.preventDefault();
                           
-                          console.log("🛒 Homepage Click Data:", {
-                            id: product.id,
-                            bestVariantId: product.bestVariantId,
-                            bestOfferId: product.bestOfferId,
-                            inStock: product.inStock
-                          });
-
                           if (!product.bestOfferId || !product.bestVariantId) {
                             alert("Error: This product is missing seller information.");
                             return;
@@ -268,7 +264,7 @@ export default function HomePage() {
                               id: Date.now().toString(),
                             });
                             
-                            addItem({
+                            addCartItem({
                               productId: product.id,
                               variantId: product.bestVariantId,
                               offerId: product.bestOfferId,
