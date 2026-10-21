@@ -1,101 +1,86 @@
- // src/components/DraggableFAB.tsx
+ // src/components/Header.tsx
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart, Heart } from "lucide-react";
-import { useCartStore } from "@/store/cartStore";
-import { useWishlistStore } from "@/store/wishlistStore";
-import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Search, Bell, Menu } from "lucide-react";
+import Logo from "./Logo";
 
-export default function DraggableFAB() {
-  const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
-  const wishlistCount = useWishlistStore((state) => state.items.length);
+export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
+  const { status } = useSession();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const router = useRouter();
 
-  // Positions (default to bottom right)
-  const [cartPos, setCartPos] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 150 });
-  const [wishPos, setWishPos] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 220 });
-
-  // Load saved positions
-  useEffect(() => {
-    const savedCart = localStorage.getItem("fab-cart-pos");
-    const savedWish = localStorage.getItem("fab-wish-pos");
-    if (savedCart) setCartPos(JSON.parse(savedCart));
-    if (savedWish) setWishPos(JSON.parse(savedWish));
-  }, []);
-
-  const handleDrag = (e: React.TouchEvent | React.MouseEvent, setter: any, key: string) => {
-    const target = e.currentTarget as HTMLElement;
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    
-    const rect = target.getBoundingClientRect();
-    const offsetX = startX - rect.left;
-    const offsetY = startY - rect.top;
-
-    const moveHandler = (moveEvent: TouchEvent | MouseEvent) => {
-      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
-      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
-      
-      let newX = clientX - offsetX;
-      let newY = clientY - offsetY;
-
-      // Boundary checks
-      newX = Math.max(0, Math.min(window.innerWidth - 60, newX));
-      newY = Math.max(0, Math.min(window.innerHeight - 60, newY));
-
-      setter({ x: newX, y: newY });
-    };
-
-    const upHandler = () => {
-      document.removeEventListener('mousemove', moveHandler);
-      document.removeEventListener('mouseup', upHandler);
-      document.removeEventListener('touchmove', moveHandler);
-      document.removeEventListener('touchend', upHandler);
-      
-      // Save position
-      localStorage.setItem(key, JSON.stringify({ x: cartPos.x, y: cartPos.y })); // Note: Use current state or ref for accuracy
-    };
-
-    document.addEventListener('mousemove', moveHandler);
-    document.addEventListener('mouseup', upHandler);
-    document.addEventListener('touchmove', moveHandler, { passive: false });
-    document.addEventListener('touchend', upHandler);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+    }
   };
 
-  return (
-    <div className="fixed inset-0 pointer-events-none z-40 md:hidden">
-      
-      {/* Draggable Wishlist */}
-      <Link 
-        href="/account/wishlist"
-        className="pointer-events-auto absolute w-14 h-14 bg-white rounded-full shadow-xl flex items-center justify-center text-gray-700 hover:text-rose-500 transition-transform active:scale-95"
-        style={{ left: wishPos.x, top: wishPos.y }}
-        onTouchStart={(e) => handleDrag(e, setWishPos, "fab-wish-pos")}
-        onMouseDown={(e) => handleDrag(e, setWishPos, "fab-wish-pos")}
-      >
-        <Heart className={`w-6 h-6 ${wishlistCount > 0 ? "fill-rose-500 text-rose-500" : ""}`} />
-        {wishlistCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-            {wishlistCount}
-          </span>
-        )}
-      </Link>
+  useEffect(() => {
+    if (status === "authenticated") {
+      const fetchUnreadCount = async () => {
+        try {
+          const res = await fetch("/api/notifications?unreadOnly=true");
+          const data = await res.json();
+          if (res.ok) setUnreadNotifications(data.unreadCount || 0);
+        } catch (error) {
+          console.error("Failed to fetch notifications", error);
+        }
+      };
+      fetchUnreadCount();
+      const interval = setInterval(fetchUnreadCount, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [status]);
 
-      {/* Draggable Cart */}
-      <Link 
-        href="/cart"
-        className="pointer-events-auto absolute w-16 h-16 bg-green-600 rounded-full shadow-2xl shadow-green-600/40 flex items-center justify-center text-white hover:bg-green-700 transition-transform active:scale-95"
-        style={{ left: cartPos.x, top: cartPos.y }}
-        onTouchStart={(e) => handleDrag(e, setCartPos, "fab-cart-pos")}
-        onMouseDown={(e) => handleDrag(e, setCartPos, "fab-cart-pos")}
-      >
-        <ShoppingCart className="w-7 h-7" />
-        {cartCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[22px] h-6 px-1 bg-gray-900 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-            {cartCount}
-          </span>
-        )}
-      </Link>
-    </div>
+  return (
+    <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+      <div className="px-3 py-2 flex items-center justify-between">
+        
+        {/* Left: Menu & Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-md"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <Logo />
+        </div>
+
+        {/* Right: Desktop Actions Only */}
+        <div className="hidden md:flex items-center gap-4">
+          {status === "authenticated" && (
+            <Link href="/account/notifications" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
+              <Bell className="w-5 h-5" />
+              {unreadNotifications > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+                  {unreadNotifications}
+                </span>
+              )}
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="px-3 pb-2">
+        <form onSubmit={handleSearch} className="relative max-w-3xl mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search products..."
+            className="w-full pl-9 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500/50"
+          />
+        </form>
+      </div>
+    </header>
   );
 }
