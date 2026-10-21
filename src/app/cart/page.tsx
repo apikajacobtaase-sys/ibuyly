@@ -2,14 +2,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { 
-  ArrowLeft, ShoppingCart, Minus, Plus, Trash2, 
-  CheckSquare, Square, Loader2, MapPin, Store 
+  ShoppingCart, Minus, Plus, Trash2, 
+  CheckSquare, Square, Loader2, MapPin, Store, Heart 
 } from "lucide-react";
-
 import { useCartStore, CartItem } from "@/store/cartStore";
+import { useWishlistStore } from "@/store/wishlistStore";
 import AuthGuard from "@/components/AuthGuard";
 
 export default function CartPage() {
@@ -21,15 +21,15 @@ export default function CartPage() {
 }
 
 function CartContent() {
-  const router = useRouter();
-  
   // 1. Extract actions and state
   const items = useCartStore((state) => state.items);
   const removeItem = useCartStore((state) => state.removeItem);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const toggleSelect = useCartStore((state) => state.toggleSelect);
   const toggleSelectAll = useCartStore((state) => state.toggleSelectAll);
-  const syncFromDB = useCartStore((state) => state.syncFromDB); // ✅ Ensure this exists in your store
+  const syncFromDB = useCartStore((state) => state.syncFromDB);
+  
+  const wishlistItems = useWishlistStore((state) => state.items);
 
   // 2. Derived state
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -48,7 +48,6 @@ function CartContent() {
         const res = await fetch("/api/cart");
         if (res.ok) {
           const data = await res.json();
-          // Sync the local Zustand store with the live DB data
           if (data.items && syncFromDB) {
             syncFromDB(data.items);
           }
@@ -94,21 +93,15 @@ function CartContent() {
         <Link href="/categories" className="w-full max-w-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors">
           Start Shopping
         </Link>
-      
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32 md:pb-8">
-      {/* HEADER */}
+      {/* HEADER - No Back Arrow */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-full">
-            <ArrowLeft className="w-5 h-5 text-gray-700" />
-          </button>
-          <h1 className="text-lg font-bold text-gray-900">Shopping Cart ({totalItems})</h1>
-        </div>
+        <h1 className="text-lg font-bold text-gray-900">Shopping Cart ({totalItems})</h1>
         <button 
           onClick={() => setIsManaging(!isManaging)}
           className="text-sm font-semibold text-green-600 hover:text-green-700"
@@ -119,8 +112,8 @@ function CartContent() {
 
       <main className="max-w-6xl mx-auto p-4 md:grid md:grid-cols-3 md:gap-6">
         
-        {/* LEFT COLUMN: CART ITEMS */}
-        <div className="md:col-span-2 space-y-4">
+        {/* LEFT COLUMN: CART ITEMS & RECOMMENDATIONS */}
+        <div className="md:col-span-2 space-y-8">
           
           {/* Select All Bar */}
           <div className="bg-white p-3 rounded-lg border border-gray-200 flex items-center gap-3">
@@ -155,9 +148,9 @@ function CartContent() {
 
                     {/* Image */}
                     <Link href={`/products/${item.slug || item.productId}`} className="flex-shrink-0">
-                      <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden">
+                      <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden relative">
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                          <Image src={item.imageUrl} alt={item.title} fill className="object-cover" unoptimized />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"><ShoppingCart className="w-6 h-6 text-gray-400" /></div>
                         )}
@@ -218,6 +211,52 @@ function CartContent() {
               })}
             </div>
           ))}
+
+          {/* ✅ SECTION 1: You Might Also Like */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">You might also like</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Link key={i} href={`/products/mock-${i}`} className="bg-white rounded-lg border border-gray-200 overflow-hidden group">
+                  <div className="aspect-square bg-gray-100 relative">
+                     <div className="w-full h-full flex items-center justify-center text-gray-400">Product Img</div>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-sm font-medium text-gray-900 line-clamp-1">Recommended Product {i}</h4>
+                    <p className="text-sm font-bold text-green-700 mt-1">GH₵ {(Math.random() * 100).toFixed(2)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* ✅ SECTION 2: Saved for Later (Wishlist) */}
+          {wishlistItems.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Saved for Later</h3>
+                <Link href="/account/wishlist" className="text-sm text-green-600 font-medium">View All</Link>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {wishlistItems.slice(0, 4).map((item) => (
+                  <Link key={item.id} href={`/products/${item.slug}`} className="bg-white rounded-lg border border-gray-200 overflow-hidden group">
+                    <div className="aspect-square bg-gray-100 relative">
+                      {item.imageUrl ? (
+                        <Image src={item.imageUrl} alt={item.title} fill className="object-cover" unoptimized />
+                      ) : (
+                         <div className="w-full h-full flex items-center justify-center text-gray-400"><Heart className="w-6 h-6" /></div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{item.title}</h4>
+                      <p className="text-sm font-bold text-green-700 mt-1">{formatCurrency(item.price)}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* RIGHT COLUMN: ORDER SUMMARY */}
@@ -260,7 +299,7 @@ function CartContent() {
       </main>
 
       {/* MOBILE STICKY CHECKOUT BAR */}
-      <div className="md:hidden fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-xs text-gray-500">Total ({selectedTotalItems} items)</p>
@@ -278,7 +317,6 @@ function CartContent() {
           </Link>
         </div>
       </div>
-
    
     </div>
   );

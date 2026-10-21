@@ -20,5 +20,5 @@ export const sellerSidebarItems: SidebarItem[] = [
   { label: "Notifications", href: "/seller/notifications", iconName: "Bell" },
   { label: "Settings", href: "/seller/settings", iconName: "Settings" },
   { label: "Staff", href: "/seller/settings/staff", iconName: "Users" }, 
-  {label: "stocking", href:"seller/stocking", iconName: "stocking"},
+  {label: "stocking", href:"/seller/stocking", iconName: "stocking"},
 ];
