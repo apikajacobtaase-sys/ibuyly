@@ -10,15 +10,12 @@ const protectedRoutes = [
   "/admin",
 ];
 
-// API routes that require authentication
-const protectedApiRoutes = [
+ const protectedApiRoutes = [
   "/api/user",
-  "/api/cart", // Cart mutations require auth (guests use localStorage)
   "/api/admin",
   "/api/seller",
   "/api/payments",
 ];
-
 export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl;
