@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useCartStore, CartItem } from "@/store/cartStore";
 import { useWishlistStore } from "@/store/wishlistStore";
-import AuthGuard from "@/components/AuthGuard";
 
 interface Product {
   id: string;
@@ -22,9 +21,9 @@ interface Product {
 
 export default function CartPage() {
   return (
-    <AuthGuard>
+    
       <CartContent />
-    </AuthGuard>
+   
   );
 }
 
@@ -68,26 +67,45 @@ function CartContent() {
     fetchRecommendations();
   }, []);
 
-  // ✅ FIX: Sync with Database on load
-  useEffect(() => {
-    const fetchLiveCart = async () => {
-      try {
-        const res = await fetch("/api/cart");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.items && syncFromDB) {
-            syncFromDB(data.items);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch live cart", error);
-      } finally {
+  // Load the database cart for authenticated users.
+// Guests retain their locally persisted Zustand cart.
+useEffect(() => {
+  let cancelled = false;
+
+  const fetchLiveCart = async () => {
+    try {
+      const res = await fetch("/api/cart", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = await res.json();
+
+      // The API explicitly marks guest responses.
+      // Never overwrite a guest's local cart with an empty array.
+      if (!cancelled && data.authenticated === true && Array.isArray(data.items)) {
+        syncFromDB(data.items);
+      }
+    } catch (error) {
+      console.error("Failed to fetch live cart:", error);
+    } finally {
+      if (!cancelled) {
         setLoading(false);
       }
-    };
-    
-    fetchLiveCart();
-  }, [syncFromDB]);
+    }
+  };
+
+  fetchLiveCart();
+
+  return () => {
+    cancelled = true;
+  };
+}, [syncFromDB]);
 
   // Group items by seller
   const sellerGroups = items.reduce((acc, item) => {
