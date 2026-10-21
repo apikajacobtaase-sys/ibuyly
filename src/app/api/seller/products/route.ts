@@ -1,4 +1,4 @@
- // src/app/api/seller/products/route.ts
+// src/app/api/seller/products/route.ts
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -9,60 +9,93 @@ export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // 1. Find the seller profile associated with the user
+    // 1. Find the seller profile
     const seller = await db.seller.findFirst({
       where: { userId: session.user.id },
     });
 
-    if (!seller) return NextResponse.json({ products: [] });
+    if (!seller) return NextResponse.json({ products: [], pagination: { totalPages: 0 } });
 
-    // 2. Fetch Products with necessary relations
-    const products = await db.product.findMany({
-      where: { sellerId: seller.id },
-      include: {
-        category: { select: { name: true } }, // ✅ Added Category
-        images: { where: { isPrimary: true }, take: 1 },
-        variants: {
-          include: {
-            sellerOffers: {
-              where: { sellerId: seller.id }, // ✅ Only get offers from THIS seller
-              take: 1,
+    // 2. Parse Query Params
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const search = searchParams.get("search") || "";
+    const status = searchParams.get("status") || "";
+    
+    const skip = (page - 1) * limit;
+
+    // 3. Build Where Clause
+    // We look for products where the seller has an OFFER. This ensures we only show products the seller is actually selling.
+    const where: any = {
+      variants: {
+        some: {
+          sellerOffers: {
+            some: {
+              sellerId: seller.id,
+            }
+          }
+        }
+      },
+      ...(search && { title: { contains: search, mode: 'insensitive' } }),
+      // Note: Status filtering might need to be on the Offer or Product depending on your schema
+    };
+
+    // 4. Fetch Products
+    const [products, total] = await Promise.all([
+      db.product.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          images: { where: { isPrimary: true }, take: 1 },
+          category: { select: { name: true } },
+          variants: {
+            include: {
+              sellerOffers: {
+                where: { sellerId: seller.id },
+                take: 1,
+              }
             }
           }
         },
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+      }),
+      db.product.count({ where })
+    ]);
 
-    // 3. Format Data to Match Frontend Interface
-    const formattedProducts = products.map((p) => {
-      // Get the first variant and its offer
+    // 5. Format Data for Frontend
+    const formattedProducts = products.map(p => {
       const variant = p.variants[0];
       const offer = variant?.sellerOffers[0];
-
+      
       return {
         id: p.id,
         title: p.title,
         slug: p.slug,
-        status: p.status,
+        status: p.status, // Or offer.status if you track status per offer
         imageUrl: p.images[0]?.url || null,
         categoryName: p.category?.name || "Uncategorized",
-        reviewCount: 0, // Default if not calculated
+        reviewCount: 0,
         createdAt: p.createdAt.toISOString(),
-        
-        // ✅ Extract Price and Stock from the Offer
         price: offer ? parseFloat(offer.price.toString()) : 0,
         stock: offer?.stockQuantity || 0,
       };
     });
 
-    return NextResponse.json({ products: formattedProducts });
+    return NextResponse.json({
+      products: formattedProducts,
+      pagination: {
+        totalPages: Math.ceil(total / limit),
+        total,
+      }
+    });
+
   } catch (error) {
     console.error("GET Seller Products Error:", error);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }
-
 export async function DELETE(req: Request) {
   try {
     const session = await getServerSession(authOptions);
