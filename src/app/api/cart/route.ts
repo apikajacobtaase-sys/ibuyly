@@ -1,231 +1,156 @@
-// src/app/api/cart/route.ts
+ // src/app/api/cart/route.ts
 import { db } from "@/lib/db";
-import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session?.user?.id) {
       return NextResponse.json({ items: [] });
     }
 
-    const cart = await db.cart.findUnique({
+    // 1. Find or Create the User's Cart
+    let cart = await db.cart.findFirst({
       where: { userId: session.user.id },
-      include: {
-        items: {
-          include: {
-            // 👇 NEW: Include offer data to get seller-specific price/stock
-            offer: {
-              include: {
-                seller: { select: { id: true, businessName: true } },
-                variant: {
-                  include: {
-                    product: {
-                      select: { id: true, title: true, slug: true, images: { where: { isPrimary: true }, take: 1 } }
-                    }
-                  }
-                }
-              }
-            },
-            variant: {
-              include: {
-                product: {
-                  select: {
-                    id: true, 
-                    title: true, 
-                    slug: true, 
-                    sellerId: true,
-                    seller: { select: { businessName: true, id: true } },
-                    images: { where: { isPrimary: true }, take: 1 }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
     });
 
-    const formattedItems = cart?.items.map((item) => {
-      // 👇 If it has an offer, prioritize the seller's offer data
-      if (item.offer) {
-        return {
-          id: item.id,
-          productId: item.offer.variant.productId,
-          variantId: item.variantId,
-          offerId: item.offerId,
-          title: item.offer.variant.product.title,
-          price: parseFloat(item.offer.price.toString()),
-          quantity: item.quantity,
-          imageUrl: item.offer.variant.product.images[0]?.url || null,
-          slug: item.offer.variant.product.slug,
-          stockQuantity: item.offer.stockQuantity,
-          sellerId: item.offer.seller.id,
-          sellerName: item.offer.seller.businessName,
-          isSelected: item.isSelected,
-        };
-      }
-      
-      // 👇 Fallback to legacy global variant data
-      return {
-        id: item.id,
-        productId: item.variant.productId,
-        variantId: item.variantId,
-        offerId: null,
-        title: item.variant.product.title,
-        price: parseFloat(item.variant.price.toString()),
-        quantity: item.quantity,
-        imageUrl: item.variant.product.images[0]?.url || null,
-        slug: item.variant.product.slug,
-        stockQuantity: item.variant.stockQuantity,
-        sellerId: item.variant.product.sellerId,
-        sellerName: item.variant.product.seller?.businessName || "iBUY Marketplace",
-        isSelected: item.isSelected,
-      };
-    }) || [];
-
-    return NextResponse.json({ items: formattedItems });
-  } catch (error) {
-    console.error("🚨 Cart GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch cart" }, { status: 500 });
-  }
-}
-   
-// src/app/api/cart/route.ts (POST Handler)
-export async function POST(req: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const body = await req.json();
-    const { variantId, offerId, quantity } = body;
-
-    console.log("📥 Cart API Received:", { variantId, offerId, quantity });
-
-    if (!variantId || !offerId) {
-      return NextResponse.json({ error: "Variant ID and Offer ID are required" }, { status: 400 });
-    }
-
-    // ✅ DIAGNOSTIC: Check the offer exactly as it is in the DB
-    const offer = await db.sellerOffer.findUnique({ 
-      where: { id: offerId },
-      select: { id: true, status: true, stockQuantity: true, price: true }
-    });
-
-    console.log("🔍 Database Check for Offer:", offer);
-
-    if (!offer) {
-      return NextResponse.json({ error: "Offer not found in database", debug: offerId }, { status: 404 });
-    }
-
-    // ✅ CHECK: Ensure status is exactly "ACTIVE" (Case Sensitive)
-    if (offer.status !== "ACTIVE") {
-      return NextResponse.json({ 
-        error: "Invalid or inactive offer", 
-        debug: { receivedStatus: offer.status, expected: "ACTIVE" } 
-      }, { status: 400 });
-    }
-
-    if (offer.stockQuantity < (quantity || 1)) {
-      return NextResponse.json({ error: "Insufficient stock" }, { status: 400 });
-    }
-
-    // Get or Create Cart
-    let cart = await db.cart.findFirst({ where: { userId: session.user.id } });
     if (!cart) {
-      cart = await db.cart.create({ data: { userId: session.user.id } });
+      cart = await db.cart.create({
+        data: { userId: session.user.id },
+      });
     }
 
-    // Create Cart Item
-    const cartItem = await db.cartItem.create({
-      data: {
-        cartId: cart.id,
-        variantId: variantId,
-        offerId: offerId,
-        quantity: quantity || 1,
+    // 2. Fetch Items for this Cart
+    const cartItems = await db.cartItem.findMany({
+      where: { cartId: cart.id },
+      include: {
+        variant: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+                images: { where: { isPrimary: true }, take: 1, select: { url: true } },
+              },
+            },
+          },
+        },
+        offer: {
+          include: {
+            seller: { select: { businessName: true, id: true } },
+          },
+        },
       },
     });
 
-    console.log("✅ Cart Item Created:", cartItem.id);
-    return NextResponse.json({ success: true, item: cartItem });
+    const formattedItems = cartItems.map((item) => ({
+      id: item.id,
+      productId: item.variant.productId,
+      variantId: item.variantId,
+      offerId: item.offerId, // Can be null in your schema
+      title: item.variant.product.title,
+      slug: item.variant.product.slug,
+      imageUrl: item.variant.product.images[0]?.url || null,
+      price: item.offer ? parseFloat(item.offer.price.toString()) : 0,
+      stockQuantity: item.offer?.stockQuantity || 0,
+      sellerId: item.offer?.sellerId || "unknown",
+      sellerName: item.offer?.seller?.businessName || "Unknown Seller",
+      quantity: item.quantity,
+      isSelected: item.isSelected,
+    }));
 
-  } catch (error: any) {
-    console.error("💥 Cart API Crash:", error);
-    return NextResponse.json({ error: "Failed to update cart", details: error.message }, { status: 500 });
+    return NextResponse.json({ items: formattedItems });
+  } catch (error) {
+    console.error("GET Cart Error:", error);
+    return NextResponse.json({ error: "Failed to fetch cart" }, { status: 500 });
   }
 }
-export async function PATCH(req: Request) {
+
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ success: true, message: "Guest cart updated locally" });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { cartItemId, quantity, isSelected } = await req.json();
+    const body = await req.json();
+    const { productId, variantId, offerId, quantity = 1 } = body;
 
-    const item = await db.cartItem.findUnique({
-      where: { id: cartItemId },
-      include: { 
-        cart: true, 
-        variant: true,
-        offer: true 
-      }
+    if (!variantId) {
+      return NextResponse.json({ error: "Variant ID is required" }, { status: 400 });
+    }
+
+    // 1. Find or Create the User's Cart
+    let cart = await db.cart.findFirst({
+      where: { userId: session.user.id },
     });
 
-    if (!item || item.cart.userId !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!cart) {
+      cart = await db.cart.create({
+        data: { userId: session.user.id },
+      });
     }
 
-    const updateData: any = {};
-    
-    if (quantity !== undefined) {
-      const availableStock = item.offer ? item.offer.stockQuantity : item.variant.stockQuantity;
-      if (quantity > availableStock) {
-        return NextResponse.json({ error: "Exceeds available stock" }, { status: 400 });
-      }
-      updateData.quantity = quantity;
-    }
-    
-    if (isSelected !== undefined) {
-      updateData.isSelected = isSelected;
-    }
-
-    await db.cartItem.update({
-      where: { id: cartItemId },
-      data: updateData
+    // 2. Check if item already exists in cart (matching variant AND offer)
+    const existingItem = await db.cartItem.findFirst({
+      where: {
+        cartId: cart.id,
+        variantId,
+        offerId, // This will match null if offerId is null
+      },
     });
+
+    if (existingItem) {
+      // Update quantity
+      await db.cartItem.update({
+        where: { id: existingItem.id },
+        data: { quantity: existingItem.quantity + quantity },
+      });
+    } else {
+      // Create new item
+      await db.cartItem.create({
+        data: {
+          cartId: cart.id,
+          variantId,
+          offerId, // ✅ Now correctly handles optional offerId
+          quantity,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("🚨 Cart PATCH error:", error);
+    console.error("POST Cart Error:", error);
     return NextResponse.json({ error: "Failed to update cart" }, { status: 500 });
   }
 }
+
 export async function DELETE(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ success: true, message: "Guest cart updated locally" });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { cartItemId } = await req.json();
+    const { searchParams } = new URL(req.url);
+    const itemId = searchParams.get("itemId");
 
-    const item = await db.cartItem.findUnique({
-      where: { id: cartItemId },
-      include: { cart: true }
-    });
-
-    if (!item || item.cart.userId !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (itemId) {
+      // Ensure user owns the cart item before deleting
+      await db.cartItem.deleteMany({
+        where: { 
+          id: itemId,
+          cart: { userId: session.user.id } 
+        },
+      });
     }
 
-    await db.cartItem.delete({ where: { id: cartItemId } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("🚨 Cart DELETE error:", error);
+    console.error("DELETE Cart Error:", error);
     return NextResponse.json({ error: "Failed to remove item" }, { status: 500 });
   }
 }
