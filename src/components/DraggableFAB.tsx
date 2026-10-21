@@ -40,7 +40,7 @@ const [mounted, setMounted] = useState(false);
 useEffect(() => {
 setMounted(true);
 
-```
+
 const updateMobileStatus = () => {
   setIsMobile(window.innerWidth < 768);
 };
@@ -109,7 +109,6 @@ try {
 return () => {
   window.removeEventListener("resize", updateMobileStatus);
 };
-```
 
 }, []);
 
