@@ -196,7 +196,7 @@ if (validItems.length === 0) {
         email: session.user.email,
         amount: Math.round(finalTotal * 100),
         reference: `ORDER-${order.id}-${Date.now()}`,
-        callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
+        callback_url: "https://ibuyly.vercel.app/payment/success",
         metadata: { order_id: order.id },
       }),
     });
