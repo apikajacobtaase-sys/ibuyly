@@ -256,7 +256,6 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
         </div>
       </main>
 
-      <BottomNav />
     </div>
   );
 }

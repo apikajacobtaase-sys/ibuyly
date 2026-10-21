@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { MapPin, ArrowLeft, Plus } from "lucide-react";
-import MobileBottomNav from "@/components/MobileBottomNav";
 
 export default function AddressesPage() {
   const { status } = useSession();
@@ -51,8 +50,6 @@ export default function AddressesPage() {
           </button>
         </div>
       </div>
-
-      <MobileBottomNav />
     </div>
   );
 }

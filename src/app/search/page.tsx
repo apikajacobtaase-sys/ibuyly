@@ -128,7 +128,7 @@ function SearchContent() {
         )}
       </div>
 
-      <BottomNav />
+      
     </div>
   );
 }

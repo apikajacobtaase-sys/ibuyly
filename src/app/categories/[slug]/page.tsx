@@ -154,7 +154,7 @@ export default function CategoryProductsPage() {
         )}
       </div>
 
-      <BottomNav />
+
     </div>
   );
 }

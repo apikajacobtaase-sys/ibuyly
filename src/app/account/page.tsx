@@ -11,7 +11,6 @@ import {
   Package, Mail, Star, Ticket, MessageCircle, 
   Phone, HelpCircle, Edit2, Wallet
 } from "lucide-react";
-import MobileBottomNav from "@/components/MobileBottomNav";
 
 // Helper to create login links for guests
 const getLoginHref = (destination: string) => `/login?callbackUrl=${encodeURIComponent(destination)}`;
@@ -181,10 +180,7 @@ export default function AccountPage() {
 
       </main>
 
-      {/* ==========================================
-          SECTION I: FIXED BOTTOM NAVIGATION
-      ========================================== */}
-      <MobileBottomNav />
+
     </div>
   );
 }

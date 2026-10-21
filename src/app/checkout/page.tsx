@@ -142,7 +142,7 @@ export default function CheckoutPage() {
         <Link href="/cart" className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors">
           Return to Cart
         </Link>
-        <BottomNav />
+       
       </div>
     );
   }
@@ -234,7 +234,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
-      <BottomNav />
+ 
     </div>
   );
 }

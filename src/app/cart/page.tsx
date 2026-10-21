@@ -94,7 +94,7 @@ function CartContent() {
         <Link href="/categories" className="w-full max-w-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors">
           Start Shopping
         </Link>
-        <BottomNav />
+      
       </div>
     );
   }
@@ -279,7 +279,7 @@ function CartContent() {
         </div>
       </div>
 
-      <BottomNav />
+   
     </div>
   );
 }

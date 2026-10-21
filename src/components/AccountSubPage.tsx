@@ -3,7 +3,6 @@
 
 import Link from "next/link";
 import { ArrowLeft, LucideIcon } from "lucide-react";
-import MobileBottomNav from "./MobileBottomNav";
 
 interface AccountSubPageProps {
   title: string;
@@ -67,7 +66,6 @@ export default function AccountSubPage({
         )}
       </div>
 
-      <MobileBottomNav />
     </div>
   );
 }

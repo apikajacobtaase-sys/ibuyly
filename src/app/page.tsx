@@ -299,7 +299,7 @@ export default function HomePage() {
           )}
         </section>
       </main>
-      <BottomNav />
+  
     </div>
   );
 }

@@ -300,7 +300,7 @@ export default function CategoriesPage() {
         </main>
       </div>
 
-      <BottomNav />
+  
     </div>
   );
 }

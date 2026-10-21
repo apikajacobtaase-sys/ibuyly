@@ -82,7 +82,7 @@ export default function ComparePage() {
             Browse Products
           </Link>
         </div>
-        <BottomNav />
+        
       </div>
     );
   }
@@ -287,7 +287,6 @@ export default function ComparePage() {
         </div>
       </div>
 
-      <BottomNav />
     </div>
   );
 }

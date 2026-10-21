@@ -95,7 +95,7 @@ export default function WishlistPage() {
             Log In
           </Link>
         </div>
-        <BottomNav />
+     
       </div>
     );
   }
@@ -145,7 +145,7 @@ export default function WishlistPage() {
         )}
       </div>
 
-      <BottomNav />
+      
     </div>
   );
 }

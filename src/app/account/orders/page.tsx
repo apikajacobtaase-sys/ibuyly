@@ -77,7 +77,7 @@ export default async function MyOrdersPage() {
             <Link href="/" className="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors">
               Start Shopping
             </Link>
-            <BottomNav />
+  
           </div>
         ) : (
           orders.map((order) => (
@@ -148,7 +148,6 @@ export default async function MyOrdersPage() {
           ))
         )}
       </main>
-      <BottomNav />
     </div>
   );
 }
