@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { 
   Home, ShoppingBag, Tag, LayoutDashboard, Package, 
   Bell, MapPin, Settings, Store, LogOut, ShoppingCart, 
-  User, Shield, ChevronLeft, ChevronRight, Users, PackagePlus, X
+  User, Shield,  Heart, ChevronLeft, ChevronRight, Users, PackagePlus, X
 } from "lucide-react";
 
 const browseLinks = [
