@@ -1,20 +1,17 @@
- // src/components/Header.tsx
+// src/components/Header.tsx
 "use client";
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Bell, ShoppingCart, Menu } from "lucide-react";
-import { useCartStore } from "@/store/cartStore";
+import { Search, Bell } from "lucide-react"; // ✅ Removed ShoppingCart and Menu
 import Logo from "./Logo";
 
-// ✅ Accept the onMenuToggle prop from layout.tsx
 export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   const { status } = useSession();
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
   const router = useRouter();
 
   const handleSearch = (e: React.FormEvent) => {
@@ -44,27 +41,18 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
       
-      {/* ROW 1: Logo & Actions */}
+      {/* ROW 1: Logo & Desktop Actions */}
       <div className="px-3 py-2 flex items-center justify-between">
+        
+        {/* Left: Logo (No Hamburger here anymore, it's in the Floating Dock) */}
         <div className="flex items-center gap-2">
-          {/* ✅ Use the prop to open the GlobalSidebar */}
-          <button
-            onClick={onMenuToggle}
-            className="md:hidden p-1.5 text-gray-600 hover:bg-gray-100 rounded-md"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
           <Logo />
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Right: Desktop Only Actions (Hidden on Mobile) */}
+        <div className="hidden md:flex items-center gap-4">
           <Link href="/cart" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
-            <ShoppingCart className="w-5 h-5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-green-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
-                {cartCount}
-              </span>
-            )}
+            {/* You can keep desktop cart icon here if you want, or move it all to sidebar */}
           </Link>
           {status === "authenticated" && (
             <Link href="/account/notifications" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
@@ -79,7 +67,7 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
         </div>
       </div>
 
-      {/* ROW 2: Search Bar */}
+      {/* ROW 2: Search Bar (Visible on all screens) */}
       <div className="px-3 pb-2">
         <form onSubmit={handleSearch} className="relative max-w-3xl mx-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
