@@ -1,15 +1,9 @@
  // src/app/layout.tsx
-"use client"; // ✅ Changed to Client Component to manage state
-
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import GlobalSidebar from "@/components/GlobalSidebar";
-import Header from "@/components/Header";
-import OnboardingBanner from "@/components/OnboardingBanner";
-import DailyFeedbackPopup from "@/components/DailyFeedbackPopup";
-import { useState } from "react";
+import ClientLayout from "@/components/ClientLayout"; // ✅ Import the client wrapper
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,36 +17,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ State to control the mobile sidebar
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
   return (
     <html lang="en">
       <body className={`${inter.className} bg-gray-50`}>
         <Providers>
-          <div className="flex min-h-screen">
-            
-            {/* ✅ Pass state and setter to Sidebar */}
-            <GlobalSidebar 
-              isOpen={mobileMenuOpen} 
-              onClose={() => setMobileMenuOpen(false)} 
-            />
-            
-            <div className="flex-1 flex flex-col min-w-0">
-               <OnboardingBanner />
-              
-              {/* ✅ Pass setter to Header so the hamburger button works */}
-              <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
-              
-              <main className="flex-1">
-                {children}
-              </main>
-              
-              {/* ✅ BottomNav removed as requested */}
-            </div>
-          </div>
-          
-          <DailyFeedbackPopup />
+          {/* ✅ Wrap everything in the Client Layout */}
+          <ClientLayout>
+            {children}
+          </ClientLayout>
         </Providers>
       </body>
     </html>
