@@ -225,14 +225,27 @@ function CartContent() {
                     </div>
 
                     {/* Remove Button */}
-                    {isManaging && (
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        className="flex-shrink-0 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg self-start"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    {/* Remove Button */}
+{isManaging && (
+  <button
+    onClick={async () => {
+      // 1. Optimistic UI Update
+      removeItem(item.id); 
+      
+      // 2. Sync with Database
+      try {
+        await fetch(`/api/cart?itemId=${item.id}`, { method: "DELETE" });
+      } catch (error) {
+        console.error("Failed to delete from DB", error);
+        // Optional: Re-add item if API fails
+      }
+    }}
+    className="flex-shrink-0 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg self-start"
+  >
+    <Trash2 className="w-4 h-4" />
+  </button>
+)}
+                  
                   </div>
                 );
               })}

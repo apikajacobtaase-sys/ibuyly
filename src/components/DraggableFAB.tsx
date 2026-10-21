@@ -6,12 +6,18 @@ import { ShoppingCart, Heart } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { useWishlistStore } from "@/store/wishlistStore";
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation"; // ✅ Import usePathname
 
 export default function DraggableFAB() {
+  const pathname = usePathname(); // ✅ Get current path
   const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
   const wishlistCount = useWishlistStore((state) => state.items.length);
 
-  // ✅ FIX: Initialize with 0 to avoid "window is not defined" on server
+  // ✅ Hide FABs on Cart and Wishlist pages
+  if (pathname === "/cart" || pathname === "/account/wishlist") {
+    return null;
+  }
+
   const [cartPos, setCartPos] = useState({ x: 0, y: 0 });
   const [wishPos, setWishPos] = useState({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
@@ -21,7 +27,6 @@ export default function DraggableFAB() {
     setMounted(true);
     setIsMobile(window.innerWidth < 768);
     
-    // Load from storage or use defaults based on current screen size
     const savedCart = localStorage.getItem("fab-cart-pos");
     const savedWish = localStorage.getItem("fab-wish-pos");
     
@@ -52,7 +57,6 @@ export default function DraggableFAB() {
       let newX = clientX - offsetX;
       let newY = clientY - offsetY;
 
-      // Boundary checks
       const maxX = window.innerWidth - 64;
       const maxY = window.innerHeight - 64;
       
@@ -67,8 +71,6 @@ export default function DraggableFAB() {
       document.removeEventListener('mouseup', upHandler);
       document.removeEventListener('touchmove', moveHandler);
       document.removeEventListener('touchend', upHandler);
-      
-      // Save final position
       localStorage.setItem(key, JSON.stringify(currentPos)); 
     };
 
@@ -78,7 +80,6 @@ export default function DraggableFAB() {
     document.addEventListener('touchend', upHandler);
   };
 
-  // ✅ FIX: Don't render anything until mounted to prevent hydration mismatch
   if (!mounted || !isMobile) return null;
 
   return (
