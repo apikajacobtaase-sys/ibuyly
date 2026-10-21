@@ -1,4 +1,4 @@
-// src/app/checkout/page.tsx
+ // src/app/checkout/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,13 +7,13 @@ import Link from "next/link";
 import { ArrowLeft, Store, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import DeliveryAddressForm from "@/components/checkout/DeliveryAddressForm";
-import { useSession } from "next-auth/react"; // ✅ Import Session
+import { useSession } from "next-auth/react";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { data: session, status } = useSession(); // ✅ Get Session
+  const { data: session, status } = useSession();
   
-  // ✅ Use specific actions from the store instead of just state
+  // ✅ Use specific actions from the store
   const { selectedItems, selectedTotalAmount, clearCart } = useCartStore();
   
   const [loading, setLoading] = useState(false);
@@ -62,11 +62,8 @@ export default function CheckoutPage() {
     setError("");
 
     try {
-      // ✅ 2. Map IDs safely
       const cartItemIds = selectedCartItems.map((i) => i.id);
       
-      console.log("🚀 Sending Checkout Request with IDs:", cartItemIds);
-
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -86,10 +83,8 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ 3. Clear Cart Correctly (Use the action, not a loop)
         clearCart(); 
 
-        // ✅ 4. Redirect to Paystack
         if (data.authorizationUrl) {
           window.location.href = data.authorizationUrl;
           return; 
@@ -111,7 +106,8 @@ export default function CheckoutPage() {
 
   if (!isHydrated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      // ✅ White Background
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
       </div>
     );
@@ -119,14 +115,15 @@ export default function CheckoutPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-md w-full text-center">
+      // ✅ White Background
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h1>
-          <p className="text-gray-600 mb-2">Your order ID is: <span className="font-mono font-semibold">{orderId}</span></p>
-          <Link href="/account/orders" className="block w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors">
+          <p className="text-gray-500 mb-2">Your order ID is: <span className="font-mono font-semibold text-gray-900">{orderId}</span></p>
+          <Link href="/account/orders" className="block w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors mt-6">
             View My Orders
           </Link>
         </div>
@@ -136,20 +133,21 @@ export default function CheckoutPage() {
 
   if (selectedCartItems.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
-        <AlertTriangle className="w-16 h-16 text-gray-400 mb-4" />
+      // ✅ White Background
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
+        <AlertTriangle className="w-16 h-16 text-gray-300 mb-4" />
         <h2 className="text-xl font-bold text-gray-900 mb-2">No items selected</h2>
+        <p className="text-gray-500 mb-6">Go back to your cart to select items for checkout.</p>
         <Link href="/cart" className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors">
           Return to Cart
         </Link>
-       
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-8">
-      {/* ... Rest of your JSX remains exactly the same ... */}
+    // ✅ White Background
+    <div className="min-h-screen bg-white pb-24 md:pb-8">
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
         <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-full">
           <ArrowLeft className="w-5 h-5 text-gray-700" />
@@ -159,21 +157,22 @@ export default function CheckoutPage() {
 
       <main className="max-w-5xl mx-auto p-4 md:grid md:grid-cols-3 md:gap-6">
         <div className="md:col-span-2 space-y-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
             <DeliveryAddressForm 
               cartSubtotal={selectedTotal} 
               onAddressChange={handleAddressChange} 
             />
           </div>
-          {/* ... Seller Groups Summary ... */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          
+          {/* Order Summary List */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
              <div className="p-3 border-b border-gray-100 bg-gray-50">
                 <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
               </div>
               <div className="divide-y divide-gray-100">
                 {selectedCartItems.map((item) => (
                   <div key={item.id} className="p-4 flex gap-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+                    <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 relative">
                       {item.imageUrl ? (
                         <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
                       ) : (
@@ -186,7 +185,8 @@ export default function CheckoutPage() {
                       <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">GH₵ {(item.price * item.quantity).toFixed(2)}</p>
+                      {/* ✅ Green Price */}
+                      <p className="text-sm font-bold text-green-600">GH₵ {(item.price * item.quantity).toFixed(2)}</p>
                     </div>
                   </div>
                 ))}
@@ -195,21 +195,22 @@ export default function CheckoutPage() {
         </div>
 
         <div className="md:col-span-1">
-          <div className="bg-white rounded-lg border border-gray-200 p-5 sticky top-24">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 sticky top-24 shadow-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Payment Summary</h2>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium">GH₵ {selectedTotal.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">GH₵ {selectedTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Delivery Fee</span>
-                <span className="font-medium">
+                <span className="font-medium text-gray-900">
                   {quote?.isServiceable ? `GH₵ ${deliveryFee.toFixed(2)}` : "Calculated after location"}
                 </span>
               </div>
               <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
                 <span className="text-base font-bold text-gray-900">Total</span>
+                {/* ✅ Green Total */}
                 <span className="text-xl font-bold text-green-600">GH₵ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -225,12 +226,16 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 disabled={loading || selectedCartItems.length === 0 || !quote?.isServiceable || !quote?.minOrderMet}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
                 {loading ? "Processing..." : "Place Order"}
               </button>
             </form>
+            
+            <p className="text-xs text-gray-400 text-center mt-4">
+              Secure checkout powered by Paystack
+            </p>
           </div>
         </div>
       </main>
