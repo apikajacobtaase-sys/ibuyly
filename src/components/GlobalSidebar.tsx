@@ -30,9 +30,10 @@ const accountLinks = [
 interface GlobalSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  onCollapseChange?: (collapsed: boolean) => void; // ✅ New Prop
 }
 
-export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
+export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: GlobalSidebarProps) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
@@ -61,6 +62,11 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
+    
+    // ✅ Notify parent layout
+    if (onCollapseChange) {
+      onCollapseChange(newState);
+    }
   };
 
   const isActive = (path: string) => pathname === path || pathname?.startsWith(`${path}/`);
@@ -101,9 +107,11 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
 
       {/* ✅ Sidebar Container */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out
+        fixed top-0 left-0 z-50 h-full bg-white border-r border-gray-200 
+        transform transition-all duration-300 ease-in-out /* ✅ Added transition-all */
         md:translate-x-0 md:static md:h-screen md:border-r
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
+        ${isCollapsed ? "md:w-20" : "md:w-72"} /* ✅ Width changes here */
       `}>
         
         {/* Mobile Header inside Sidebar */}
@@ -114,7 +122,7 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
           </button>
         </div>
 
-        <div className={`flex flex-col h-full ${isCollapsed ? "md:w-20" : "md:w-72"}`}>
+        <div className="flex flex-col h-full">
           
           {/* Desktop Brand & Toggle */}
           <div className={`hidden md:flex p-4 border-b border-gray-100 items-center ${isCollapsed ? "justify-center" : "justify-between"}`}>
@@ -164,7 +172,7 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
             )}
           </div>
 
-                   {/* Bottom Actions */}
+          {/* Bottom Actions */}
           <div className="p-3 border-t border-gray-100 space-y-2 bg-gray-50/50">
             
             {/* ✅ DESKTOP: Show Cart Button */}
@@ -197,7 +205,7 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
               )}
             </div>
 
-                       {/* ✅ MOBILE: Show Login/Logout Button (Cart is Floating) */}
+            {/* ✅ MOBILE: Show Login/Logout Button (Cart is Floating) */}
             <div className="md:hidden mt-2">
               {isAuthenticated ? (
                 <button
