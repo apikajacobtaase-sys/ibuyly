@@ -164,34 +164,45 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
             )}
           </div>
 
-          {/* Bottom Actions */}
-          <div className={`p-3 border-t border-gray-100 space-y-2 bg-gray-50/50 ${isCollapsed ? "md:flex md:flex-col md:items-center" : ""}`}>
+                   {/* Bottom Actions */}
+          <div className="p-3 border-t border-gray-100 space-y-2 bg-gray-50/50">
             
-            {/* ✅ Conditional Rendering: Cart on Desktop, Auth on Mobile */}
-            {!isMobile ? (
-              // Desktop: Show Cart Button
+            {/* ✅ DESKTOP: Show Cart Button */}
+            <div className="hidden md:block">
               <Link
                 href="/cart"
                 onClick={onClose}
                 title={isCollapsed ? "View Cart" : ""}
-                className={`flex items-center ${isCollapsed ? "md:justify-center md:w-12 md:h-12" : "justify-between px-4 py-3"} bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors shadow-sm relative`}
+                className={`flex items-center ${isCollapsed ? "justify-center w-12 h-12 mx-auto" : "justify-between px-4 py-3"} bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors shadow-sm relative`}
               >
                 <div className={`flex items-center ${isCollapsed ? "" : "gap-3"}`}>
                   <ShoppingCart className="w-5 h-5 flex-shrink-0" />
                   {!isCollapsed && <span className="font-semibold text-sm">View Cart</span>}
                 </div>
-                {cartCount > 0 && (
-                  <span className={`${isCollapsed ? "absolute -top-1 -right-1 text-[9px] w-4 h-4 flex items-center justify-center" : "bg-white text-green-600 text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center"}`}>
+                {cartCount > 0 && !isCollapsed && (
+                  <span className="bg-white text-green-600 text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center">
                     {cartCount > 99 ? "9+" : cartCount}
                   </span>
                 )}
               </Link>
-            ) : (
-              // Mobile: Show Login/Logout Button (Since Cart is Floating)
-              isAuthenticated ? (
+              
+              {isAuthenticated && (
+                 <button
+                  onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
+                  className={`flex items-center ${isCollapsed ? "justify-center w-10 h-10 mx-auto mt-2" : "gap-3 w-full px-3 py-2 mt-2"} text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors`}
+                >
+                  <LogOut className="w-5 h-5 flex-shrink-0" />
+                  {!isCollapsed && "Log Out"}
+                </button>
+              )}
+            </div>
+
+            {/* ✅ MOBILE: Show Login/Logout Button (Cart is Floating) */}
+            <div className="md:hidden">
+              {isAuthenticated ? (
                 <button
                   onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
-                  className="flex items-center gap-3 w-full px-3 py-3 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition-colors bg-white border border-rose-100 shadow-sm"
                 >
                   <LogOut className="w-5 h-5 flex-shrink-0" />
                   <span>Log Out</span>
@@ -200,24 +211,14 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
                 <Link
                   href="/login"
                   onClick={onClose}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors font-semibold text-sm"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors font-semibold text-sm shadow-sm"
                 >
                   <User className="w-5 h-5 flex-shrink-0" />
                   <span>Log In</span>
                 </Link>
-              )
-            )}
+              )}
+            </div>
 
-            {/* Desktop: Also show Logout/Login below cart if needed, or keep it simple */}
-            {!isMobile && isAuthenticated && (
-               <button
-                onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
-                className={`flex items-center ${isCollapsed ? "md:justify-center md:w-10 md:h-10 md:mx-auto" : "gap-3 w-full px-3 py-2"} text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors mt-2`}
-              >
-                <LogOut className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && "Log Out"}
-              </button>
-            )}
           </div>
         </div>
       </aside>
