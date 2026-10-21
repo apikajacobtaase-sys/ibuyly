@@ -1,49 +1,52 @@
-// src/app/api/wishlist/route.ts
+ // src/app/api/wishlist/route.ts
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
+import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user) {
-      return NextResponse.json({ wishlist: [] });
-    }
+    if (!session?.user?.id) return NextResponse.json({ items: [] });
 
-    const wishlistItems = await db.wishlist.findMany({
+    const wishlist = await db.wishlist.findMany({
       where: { userId: session.user.id },
       include: {
         product: {
-          include: {
-            variants: { take: 1 },
-            images: { where: { isPrimary: true }, take: 1 },
-            seller: { select: { businessName: true } },
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            images: { where: { isPrimary: true }, take: 1, select: { url: true } },
+            variants: { 
+              take: 1, 
+              include: { 
+                sellerOffers: { 
+                  where: { status: "ACTIVE" }, 
+                  orderBy: { price: 'asc' }, 
+                  take: 1,
+                  include: { seller: { select: { businessName: true } } }
+                } 
+              } 
+            },
           },
         },
       },
-      orderBy: { createdAt: "desc" },
     });
 
-    const wishlist = wishlistItems.map((item) => {
-      const variant = item.product.variants[0];
-      return {
-        id: item.id,
-        productId: item.productId,
-        title: item.product.title,
-        slug: item.product.slug,
-        price: variant?.price ? parseFloat(variant.price.toString()) : 0,
-        compareAtPrice: variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.toString()) : null,
-        imageUrl: item.product.images[0]?.url || null,
-        sellerName: item.product.seller?.businessName,
-        stockQuantity: variant?.stockQuantity || 0,
-      };
-    });
+    const formattedItems = wishlist.map((w) => ({
+      id: w.productId,
+      title: w.product.title,
+      slug: w.product.slug,
+      imageUrl: w.product.images[0]?.url || null,
+      price: w.product.variants[0]?.sellerOffers[0]?.price 
+        ? parseFloat(w.product.variants[0].sellerOffers[0].price.toString()) 
+        : 0,
+      sellerName: w.product.variants[0]?.sellerOffers[0]?.seller?.businessName || "Unknown",
+    }));
 
-    return NextResponse.json({ wishlist });
+    return NextResponse.json({ items: formattedItems });
   } catch (error) {
-    console.error("Wishlist fetch error:", error);
     return NextResponse.json({ error: "Failed to fetch wishlist" }, { status: 500 });
   }
 }
@@ -51,57 +54,16 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { productId } = await req.json();
 
-    if (!productId) {
-      return NextResponse.json({ error: "Product ID required" }, { status: 400 });
-    }
-
-    // Check if already in wishlist
-    const existing = await db.wishlist.findUnique({
+    await db.wishlist.upsert({
       where: {
-        userId_productId: {
-          userId: session.user.id,
-          productId,
-        },
+        userId_productId: { userId: session.user.id, productId },
       },
-    });
-
-    if (existing) {
-      return NextResponse.json({ message: "Already in wishlist" });
-    }
-
-    const wishlistItem = await db.wishlist.create({
-      data: {
-        userId: session.user.id,
-        productId,
-      },
-    });
-
-    return NextResponse.json({ success: true, item: wishlistItem }, { status: 201 });
-  } catch (error) {
-    console.error("Wishlist add error:", error);
-    return NextResponse.json({ error: "Failed to add to wishlist" }, { status: 500 });
-  }
-}
-
-export async function DELETE(req: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { productId } = await req.json();
-
-    await db.wishlist.deleteMany({
-      where: {
+      update: {},
+      create: {
         userId: session.user.id,
         productId,
       },
@@ -109,7 +71,26 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Wishlist remove error:", error);
+    return NextResponse.json({ error: "Failed to add to wishlist" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { searchParams } = new URL(req.url);
+    const productId = searchParams.get("productId");
+
+    if (productId) {
+      await db.wishlist.deleteMany({
+        where: { userId: session.user.id, productId },
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
     return NextResponse.json({ error: "Failed to remove from wishlist" }, { status: 500 });
   }
 }

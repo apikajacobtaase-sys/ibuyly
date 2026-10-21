@@ -1,6 +1,6 @@
  // src/app/page.tsx
 "use client";
-
+import { useWishlistStore } from "@/store/wishlistStore";
 import React, { useEffect, useState, useRef, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -29,9 +29,10 @@ interface Product {
 
 export default function HomePage() {
   const router = useRouter();
-  const { addItem, updateQuantity, removeItem, items } = useCartStore();
+  const { addItem, updateQuantity, removeItem,isInWishlist,items } = useCartStore();
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  
+   
+  const isWishlisted = isInWishlist(product.id);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -160,14 +161,28 @@ export default function HomePage() {
                     className="product-card bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition group relative flex flex-col"
                   >
                     <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        router.push("/login?callbackUrl=/account/wishlist");
-                      }}
-                      className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:shadow-md transition z-10"
-                    >
-                      <Heart className="w-4 h-4 text-gray-400 hover:text-red-500 transition" />
-                    </button>
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isWishlisted) {
+      removeItem(product.id);
+    } else {
+      addItem({
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        slug: product.slug,
+        sellerName: product.sellerName || "iBUY",
+      });
+    }
+  }}
+  className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:shadow-md transition z-10"
+>
+  <Heart 
+    className={`w-4 h-4 transition ${isWishlisted ? "fill-rose-500 text-rose-500" : "text-gray-400"}`} 
+  />
+</button>
 
                     <Link href={`/products/${product.slug}`} className="flex-1 flex flex-col">
                       <div className="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden relative">

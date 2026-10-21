@@ -1,37 +1,68 @@
-// src/store/wishlistStore.ts
+ // src/store/wishlistStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-interface WishlistItem {
-  productId: string;
-  addedAt: number;
+export interface WishlistItem {
+  id: string; // productId
+  title: string;
+  price: number;
+  imageUrl: string | null;
+  slug: string;
+  sellerName: string;
 }
 
-interface WishlistStore {
+interface WishlistState {
   items: WishlistItem[];
-  addItem: (productId: string) => void;
-  removeItem: (productId: string) => void;
-  isInWishlist: (productId: string) => boolean;
+  addItem: (item: WishlistItem) => Promise<void>;
+  removeItem: (id: string) => Promise<void>;
+  isInWishlist: (id: string) => boolean;
   clearWishlist: () => void;
 }
 
-export const useWishlistStore = create<WishlistStore>()(
+export const useWishlistStore = create<WishlistState>()(
   persist(
     (set, get) => ({
       items: [],
-      addItem: (productId) =>
+
+      isInWishlist: (id) => get().items.some((i) => i.id === id),
+
+      addItem: async (item) => {
+        // 1. Optimistic Update
+        set((state) => {
+          if (state.items.some((i) => i.id === item.id)) return state;
+          return { items: [...state.items, item] };
+        });
+
+        // 2. Sync to DB
+        try {
+          await fetch("/api/wishlist", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productId: item.id }),
+          });
+        } catch (error) {
+          console.error("Failed to sync wishlist add:", error);
+        }
+      },
+
+      removeItem: async (id) => {
+        // 1. Optimistic Update
         set((state) => ({
-          items: [...state.items, { productId, addedAt: Date.now() }],
-        })),
-      removeItem: (productId) =>
-        set((state) => ({
-          items: state.items.filter((item) => item.productId !== productId),
-        })),
-      isInWishlist: (productId) => get().items.some((item) => item.productId === productId),
+          items: state.items.filter((i) => i.id !== id),
+        }));
+
+        // 2. Sync to DB
+        try {
+          await fetch(`/api/wishlist?productId=${id}`, {
+            method: "DELETE",
+          });
+        } catch (error) {
+          console.error("Failed to sync wishlist remove:", error);
+        }
+      },
+
       clearWishlist: () => set({ items: [] }),
     }),
-    {
-      name: "ibuy-wishlist",
-    }
+    { name: "ibuy-wishlist-storage" }
   )
 );
