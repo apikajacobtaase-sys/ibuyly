@@ -6,7 +6,7 @@ import GlobalSidebar from "@/components/GlobalSidebar";
 import Header from "@/components/Header";
 import OnboardingBanner from "@/components/OnboardingBanner";
 import DailyFeedbackPopup from "@/components/DailyFeedbackPopup";
-import FloatingDock from "@/components/FloatingDock"; // ✅ Import
+import DraggableFAB from "@/components/DraggableFAB"; // ✅ Import new component
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -27,11 +27,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </main>
       </div>
       
-      {/* ✅ Add Floating Dock for Mobile */}
-      <FloatingDock 
-        onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} 
-        isMenuOpen={mobileMenuOpen} 
-      />
+      {/* ✅ Add Draggable FABs */}
+      <DraggableFAB />
       
       <DailyFeedbackPopup />
     </div>
