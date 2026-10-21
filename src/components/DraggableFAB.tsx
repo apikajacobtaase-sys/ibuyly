@@ -11,38 +11,37 @@ export default function DraggableFAB() {
   const cartCount = useCartStore((state) => state.items.reduce((sum, item) => sum + item.quantity, 0));
   const wishlistCount = useWishlistStore((state) => state.items.length);
 
-  // Default positions (bottom right)
+  // ✅ FIX: Initialize with 0 to avoid "window is not defined" on server
   const [cartPos, setCartPos] = useState({ x: 0, y: 0 });
   const [wishPos, setWishPos] = useState({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Initialize positions only on client side
   useEffect(() => {
+    setMounted(true);
     setIsMobile(window.innerWidth < 768);
     
-    // Load from storage or use defaults
+    // Load from storage or use defaults based on current screen size
     const savedCart = localStorage.getItem("fab-cart-pos");
     const savedWish = localStorage.getItem("fab-wish-pos");
     
+    const defaultCartX = window.innerWidth - 80;
+    const defaultCartY = window.innerHeight - 150;
+    const defaultWishX = window.innerWidth - 80;
+    const defaultWishY = window.innerHeight - 230;
+
     if (savedCart) setCartPos(JSON.parse(savedCart));
-    else setCartPos({ x: window.innerWidth - 80, y: window.innerHeight - 150 });
+    else setCartPos({ x: defaultCartX, y: defaultCartY });
 
     if (savedWish) setWishPos(JSON.parse(savedWish));
-    else setWishPos({ x: window.innerWidth - 80, y: window.innerHeight - 230 });
+    else setWishPos({ x: defaultWishX, y: defaultWishY });
   }, []);
 
   const handleDrag = (e: React.TouchEvent | React.MouseEvent, setter: any, key: string) => {
-    // Prevent default to stop scrolling while dragging
-    if ('touches' in e) {
-      // e.preventDefault(); // Optional: uncomment if it blocks scrolling too much
-    }
-
     const startX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const startY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
     
-    // Get current position from state (or ref for better accuracy in rapid moves)
     const currentPos = key.includes('cart') ? cartPos : wishPos;
-    
     const offsetX = startX - currentPos.x;
     const offsetY = startY - currentPos.y;
 
@@ -53,8 +52,8 @@ export default function DraggableFAB() {
       let newX = clientX - offsetX;
       let newY = clientY - offsetY;
 
-      // Boundary checks (keep within screen)
-      const maxX = window.innerWidth - 64; // button width approx
+      // Boundary checks
+      const maxX = window.innerWidth - 64;
       const maxY = window.innerHeight - 64;
       
       newX = Math.max(0, Math.min(maxX, newX));
@@ -70,9 +69,7 @@ export default function DraggableFAB() {
       document.removeEventListener('touchend', upHandler);
       
       // Save final position
-      const finalPos = key.includes('cart') ? cartPos : wishPos; 
-      // Note: In a real app, use a ref to get the *very* last value during drag
-      localStorage.setItem(key, JSON.stringify(finalPos));
+      localStorage.setItem(key, JSON.stringify(currentPos)); 
     };
 
     document.addEventListener('mousemove', moveHandler);
@@ -81,7 +78,8 @@ export default function DraggableFAB() {
     document.addEventListener('touchend', upHandler);
   };
 
-  if (!isMobile) return null;
+  // ✅ FIX: Don't render anything until mounted to prevent hydration mismatch
+  if (!mounted || !isMobile) return null;
 
   return (
     <>
