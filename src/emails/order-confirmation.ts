@@ -1,4 +1,4 @@
-// src/emails/order-confirmation.ts
+﻿// src/emails/order-confirmation.ts
 
 interface OrderItem {
   title: string;
@@ -16,10 +16,7 @@ export function getOrderConfirmationEmail(params: {
 }): string {
   const { customerName, orderId, items, totalAmount, shippingAddress } = params;
   const shortOrderId = orderId.slice(-8).toUpperCase();
- // ✅ NUCLEAR FIX: Hardcode the live Vercel URL to guarantee no localhost fallback
-
-callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
-
+ // âœ… NUCLEAR FIX: Hardcode the live Vercel URL to guarantee no localhost fallback
   const itemsHtml = items.map(item => `
     <tr>
       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
@@ -28,7 +25,7 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
             <td style="width: 60px; vertical-align: top;">
               ${item.imageUrl 
                 ? `<img src="${item.imageUrl}" alt="${item.title}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb;" />`
-                : `<div style="width: 50px; height: 50px; background-color: #f3f4f6; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>`
+                : `<div style="width: 50px; height: 50px; background-color: #f3f4f6; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px;">ðŸ“¦</div>`
               }
             </td>
             <td style="padding-left: 12px; vertical-align: top;">
@@ -36,7 +33,7 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
               <p style="margin: 4px 0 0 0; font-size: 13px; color: #6b7280;">Qty: ${item.quantity}</p>
             </td>
             <td style="text-align: right; vertical-align: top; font-size: 14px; font-weight: 600; color: #111827;">
-              GH₵ ${(item.price * item.quantity).toFixed(2)}
+              GHâ‚µ ${(item.price * item.quantity).toFixed(2)}
             </td>
           </tr>
         </table>
@@ -61,7 +58,7 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px; text-align: center;">
-              <div style="font-size: 48px; margin-bottom: 8px;">✅</div>
+              <div style="font-size: 48px; margin-bottom: 8px;">âœ…</div>
               <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 800;">
                 Order Confirmed!
               </h1>
@@ -93,7 +90,7 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
                   <tr>
                     <td style="font-size: 16px; font-weight: 700; color: #111827;">Total</td>
                     <td style="text-align: right; font-size: 18px; font-weight: 800; color: #f97316;">
-                      GH₵ ${totalAmount.toFixed(2)}
+                      GHâ‚µ ${totalAmount.toFixed(2)}
                     </td>
                   </tr>
                 </table>
@@ -115,7 +112,7 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
                   <td style="border-radius: 8px; background-color: #111827;">
                     <a href="${appUrl}/account/orders/${orderId}" 
                        style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 8px;">
-                      Track Your Order →
+                      Track Your Order â†’
                     </a>
                   </td>
                 </tr>
@@ -127,7 +124,7 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
           <tr>
             <td style="background-color: #f9fafb; padding: 24px 32px; text-align: center; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                © ${new Date().getFullYear()} iBUY Marketplace. All rights reserved.
+                Â© ${new Date().getFullYear()} iBUY Marketplace. All rights reserved.
               </p>
             </td>
           </tr>
@@ -140,3 +137,4 @@ callback_url: `https://ibuy-apikajacobtaase-sys.vercel.app/payment/success`,
 </html>
   `.trim();
 }
+

@@ -30,8 +30,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const validated = checkoutSchema.parse(body);
 
-    console.log(`🛒 Checkout initiated by ${session.user.id} for items:`, validated.cartItemIds);
-
     // 1. Fetch cart items
     const cartItems = await db.cartItem.findMany({
       where: {
@@ -48,47 +46,17 @@ export async function POST(req: Request) {
       },
     });
 
-    console.log(`🔍 Found ${cartItems.length} items in DB.`);
-
-    // ✅ FIX: Explicitly type validItems to match cartItems type
     const validItems: typeof cartItems = [];
-    const invalidReasons: string[] = [];
-
     for (const item of cartItems) {
-      if (!item.offerId) {
-        invalidReasons.push(`Item ${item.id}: Missing offerId in DB`);
-      } else if (!item.offer) {
-        invalidReasons.push(`Item ${item.id}: Offer ${item.offerId} not found in DB`);
-      } else if (item.offer.status !== "ACTIVE") {
-        invalidReasons.push(`Item ${item.id}: Offer is ${item.offer.status}`);
-      } else {
+      if (item.offer && item.offer.status === "ACTIVE") {
         validItems.push(item);
       }
     }
 
-  console.log("🛒 CHECKOUT DEBUG:", {
-  cartItemsReceived: cartItems?.length ?? "cartItems is undefined",
-  validItemsCount: validItems.length,
-  invalidReasonsCount: invalidReasons.length,
-  cartItems: cartItems?.map((item: any) => ({
-    variantId: item.variantId,
-    offerId: item.offerId,
-    quantity: item.quantity,
-  })),
-  invalidReasons,
-});
+    if (validItems.length === 0) {
+      return NextResponse.json({ error: "No valid items in cart." }, { status: 400 });
+    }
 
-if (validItems.length === 0) {
-  return NextResponse.json(
-    {
-      error: "No valid offers found in cart.",
-      debug: invalidReasons,
-      cartItemsReceived: cartItems?.length ?? 0,
-      validItemsCount: validItems.length,
-    },
-    { status: 400 }
-  );
-}
     // 2. Validate Delivery Zone
     const zoneLocality = await db.deliveryZoneLocality.findFirst({
       where: {
@@ -102,13 +70,13 @@ if (validItems.length === 0) {
     });
 
     if (!zoneLocality) {
-      return NextResponse.json({ error: "Delivery is no longer available to this location." }, { status: 400 });
+      return NextResponse.json({ error: "Delivery unavailable to this location." }, { status: 400 });
     }
 
     const zone = zoneLocality.deliveryZone;
     const deliveryFee = parseFloat(zone.baseDeliveryFee.toString());
 
-    // 3. Calculate Server-Side Subtotal
+    // 3. Calculate Total
     let serverSubtotal = 0;
     for (const item of validItems) {
       serverSubtotal += parseFloat(item.offer!.price.toString()) * item.quantity;
@@ -119,12 +87,11 @@ if (validItems.length === 0) {
 
     // 4. Atomic Transaction
     const order = await db.$transaction(async (tx) => {
-      
       // A. Validate Stock
       for (const item of validItems) {
         const offer = item.offer!; 
         if (offer.stockQuantity < item.quantity) {
-          throw new Error(`Insufficient stock for "${offer.variant.product.title}". Only ${offer.stockQuantity} left.`);
+          throw new Error(`Insufficient stock for "${offer.variant.product.title}".`);
         }
       }
 
@@ -185,7 +152,10 @@ if (validItems.length === 0) {
       return newOrder;
     });
 
-    // 5. Paystack
+    // 5. Initialize Paystack
+    // ✅ Use a simple, unique reference based on Order ID
+    const localReference = `ORD-${order.id}`;
+
     const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: {
@@ -195,41 +165,43 @@ if (validItems.length === 0) {
       body: JSON.stringify({
         email: session.user.email,
         amount: Math.round(finalTotal * 100),
-        reference: `ORDER-${order.id}-${Date.now()}`,
-        callback_url: "https://ibuyly.vercel.app/payment/success",
-        metadata: { order_id: order.id },
+        reference: localReference, 
+        callback_url: `${process.env.NEXTAUTH_URL || "https://ibuyly.vercel.app"}/payment/success`,
+        metadata: { 
+          custom_fields: [
+            { display_name: "Order ID", variable_name: "order_id", value: order.id }
+          ] 
+        },
       }),
     });
 
+    const paystackData = await paystackResponse.json();
     
-const paystackData = await paystackResponse.json();
-if (!paystackData.status) {
-  throw new Error(paystackData.message || "Paystack initialization failed");
-}
+    if (!paystackData.status) {
+      throw new Error(paystackData.message || "Paystack initialization failed");
+    }
 
-// ✅ FIX: Ensure we save the reference from Paystack's response
-const paystackRef = paystackData.data.reference;
+    // ✅ IMPORTANT: Save the reference returned by Paystack, not just our local one
+    // Paystack sometimes modifies or validates the reference. We must use theirs for verification.
+    const paystackRef = paystackData.data.reference;
 
-await db.order.update({
-  where: { id: order.id },
-  data: { paymentReference: paystackRef }, // Save it here
-});
+    await db.order.update({
+      where: { id: order.id },
+      data: { paymentReference: paystackRef },
+    });
 
-return NextResponse.json({
-  success: true,
-  orderId: order.id,
-  authorizationUrl: paystackData.data.authorization_url,
-  reference: paystackRef, // Send it back to frontend too
-});
+    return NextResponse.json({
+      success: true,
+      orderId: order.id,
+      authorizationUrl: paystackData.data.authorization_url,
+      reference: paystackRef,
+    });
 
   } catch (error: any) {
     console.error("🚨 Checkout error:", error);
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues?.[0]?.message || "Invalid form data" }, { status: 400 });
+      return NextResponse.json({ error: error.issues?.[0]?.message }, { status: 400 });
     }
-    if (error.message?.includes("Insufficient stock")) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-    return NextResponse.json({ error: "Failed to process checkout", details: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Checkout failed", details: error.message }, { status: 500 });
   }
 }
