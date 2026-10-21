@@ -19,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gray-50`}>
+    <body className={`${inter.className} bg-white text-gray-900`}>
         <Providers>
           {/* ✅ Wrap everything in the Client Layout */}
           <ClientLayout>
