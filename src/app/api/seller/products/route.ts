@@ -13,7 +13,8 @@ export async function GET(req: Request) {
     const seller = await db.seller.findFirst({
       where: { userId: session.user.id },
     });
-
+console.log("[SELLER PRODUCTS] User ID:", session.user.id);
+console.log("[SELLER PRODUCTS] Seller profile:", seller?.id);
     if (!seller) return NextResponse.json({ products: [], pagination: { totalPages: 0 } });
 
     // 2. Parse Query Params
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
       ...(search && { title: { contains: search, mode: 'insensitive' } }),
       // Note: Status filtering might need to be on the Offer or Product depending on your schema
     };
-
+console.log("[SELLER PRODUCTS] Query filters:", JSON.stringify(where));
     // 4. Fetch Products
     const [products, total] = await Promise.all([
       db.product.findMany({
