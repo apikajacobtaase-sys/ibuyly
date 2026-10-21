@@ -5,7 +5,6 @@ import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package, Calendar } from "lucide-react";
-import BottomNav from "@/components/BottomNav";
 
 export default async function MyOrdersPage() {
   const session = await getServerSession(authOptions);

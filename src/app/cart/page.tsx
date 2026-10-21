@@ -8,7 +8,7 @@ import {
   ArrowLeft, ShoppingCart, Minus, Plus, Trash2, 
   CheckSquare, Square, Loader2, MapPin, Store 
 } from "lucide-react";
-import BottomNav from "@/components/BottomNav";
+
 import { useCartStore, CartItem } from "@/store/cartStore";
 import AuthGuard from "@/components/AuthGuard";
 

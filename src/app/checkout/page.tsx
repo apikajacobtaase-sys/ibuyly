@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Store, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import BottomNav from "@/components/BottomNav";
 import DeliveryAddressForm from "@/components/checkout/DeliveryAddressForm";
 import { useSession } from "next-auth/react"; // ✅ Import Session
 

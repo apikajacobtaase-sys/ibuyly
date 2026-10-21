@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Search as SearchIcon } from "lucide-react";
 import ProductCard from "@/components/ProductCard";
-import BottomNav from "@/components/BottomNav";
 
 // 1. Move all your existing search logic and JSX into this component
 function SearchContent() {

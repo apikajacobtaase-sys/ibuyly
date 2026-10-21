@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import ProductCard from "@/components/ProductCard";
-import BottomNav from "@/components/BottomNav";
 
 interface Product {
   id: string;

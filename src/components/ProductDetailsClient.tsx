@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ArrowLeft, Share2, Star, ShoppingCart, Store } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import BottomNav from "@/components/BottomNav";
+
 import QuantitySelector from "@/components/QuantitySelector";
 import { triggerFlyToCart, getElementRect } from "@/lib/cartAnimation";
 

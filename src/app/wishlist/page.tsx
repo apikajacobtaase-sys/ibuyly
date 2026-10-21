@@ -5,7 +5,6 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Trash2, ShoppingCart } from "lucide-react";
 import ProductCard from "@/components/ProductCard";
-import BottomNav from "@/components/BottomNav";
 import { useCartStore } from "@/store/cartStore";
 
 interface WishlistProduct {

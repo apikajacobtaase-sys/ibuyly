@@ -5,7 +5,6 @@ import { useCompareStore } from "@/store/compareStore";
 import Link from "next/link";
 import Image from "next/image";
 import { X, Star, ShieldCheck } from "lucide-react";
-import BottomNav from "@/components/BottomNav";
 
 interface ProductData {
   id: string;
