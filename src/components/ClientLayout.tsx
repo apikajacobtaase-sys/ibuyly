@@ -4,7 +4,7 @@ import { useState } from "react";
 import GlobalSidebar from "@/components/GlobalSidebar";
 import Header from "@/components/Header";
 import OnboardingBanner from "@/components/OnboardingBanner";
-import DraggableFAB from "@/components/DraggableFAB";
+
 export default function ClientLayout({
 children,
 }: {
@@ -26,7 +26,6 @@ onClose={() => setMobileMenuOpen(false)}
 
     <main className="flex-1">{children}</main>
   </div>
-<DraggableFAB />
 </div>
 
 );
