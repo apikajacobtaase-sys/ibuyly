@@ -1,14 +1,14 @@
  // src/app/account/wishlist/page.tsx
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react"; // ✅ Added useState
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
-import { Heart, ShoppingBag, Trash2, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingBag, Trash2, ShoppingCart, Loader2 } from "lucide-react";
 import { useWishlistStore, WishlistItem } from "@/store/wishlistStore";
-import { useCartStore } from "@/store/cartStore"; // ✅ Import Cart Store
+import { useCartStore } from "@/store/cartStore";
 import AccountSubPageLayout from "@/components/AccountSubPageLayout";
 
 export default function WishlistPage() {
@@ -16,42 +16,56 @@ export default function WishlistPage() {
   const router = useRouter();
   
   const { items, removeItem, clearWishlist } = useWishlistStore();
-  const { addItem: addCartItem } = useCartStore(); // ✅ Get cart action
+  const { addItem: addCartItem } = useCartStore();
+
+  // ✅ Fix: Use state to ensure we only render after hydration
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     if (status === "unauthenticated") {
       router.push("/login?callbackUrl=/account/wishlist");
     }
   }, [status, router]);
 
-  if (status === "loading" || status === "unauthenticated") return null;
+  if (!isMounted || status === "loading") {
+    return (
+      <AccountSubPageLayout title="My Wishlist">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+        </div>
+      </AccountSubPageLayout>
+    );
+  }
+
+  if (status === "unauthenticated") return null;
 
   const formatCurrency = (amount: number) => `GH₵ ${amount.toFixed(2)}`;
 
-  // ✅ Function to move item to cart
   const handleMoveToCart = (item: WishlistItem) => {
+    // ✅ Fix: Ensure all required fields are present for the Cart Store
     addCartItem({
       productId: item.id,
-      variantId: item.variantId || "unknown", // ✅ Provide variantId
-      offerId: item.offerId || "unknown",     // ✅ Provide offerId
+      variantId: item.variantId || "default-variant", 
+      offerId: item.offerId || "default-offer",     
       title: item.title,
       price: item.price,
       imageUrl: item.imageUrl,
-      stockQuantity: 10, // ✅ Default stock quantity if not known
-      sellerId: item.sellerId || "unknown",  // ✅ Provide sellerId
+      stockQuantity: 99, // Safe default
+      sellerId: item.sellerId || "unknown",
       sellerName: item.sellerName || "iBUY Marketplace",
       quantity: 1,
     });
     
-    // Optional: Remove from wishlist after moving to cart
-    // removeItem(item.id); 
+    // Optional: Provide feedback
+    alert("Moved to cart!"); 
   };
 
   return (
     <AccountSubPageLayout title="My Wishlist">
       <div className="max-w-4xl mx-auto p-4 pb-20">
         
-        {items.length === 0 ? (
+        {!isMounted ? null : items.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 md:p-12 text-center">
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Heart className="w-8 h-8 text-rose-500" />
@@ -84,7 +98,6 @@ export default function WishlistPage() {
               {items.map((item) => (
                 <div key={item.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden group relative flex flex-col">
                   
-                  {/* Remove Button */}
                   <button
                     onClick={() => removeItem(item.id)}
                     className="absolute top-2 right-2 p-1.5 bg-white/90 backdrop-blur-sm rounded-full shadow-sm hover:bg-red-50 hover:text-red-600 transition z-10"
