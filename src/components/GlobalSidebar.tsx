@@ -197,12 +197,12 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
               )}
             </div>
 
-            {/* ✅ MOBILE: Show Login/Logout Button (Cart is Floating) */}
-            <div className="md:hidden">
+                       {/* ✅ MOBILE: Show Login/Logout Button (Cart is Floating) */}
+            <div className="md:hidden mt-2">
               {isAuthenticated ? (
                 <button
                   onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
-                  className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition-colors bg-white border border-rose-100 shadow-sm"
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-200"
                 >
                   <LogOut className="w-5 h-5 flex-shrink-0" />
                   <span>Log Out</span>
@@ -211,10 +211,10 @@ export default function GlobalSidebar({ isOpen, onClose }: GlobalSidebarProps) {
                 <Link
                   href="/login"
                   onClick={onClose}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition-colors font-semibold text-sm shadow-sm"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-sm shadow-md"
                 >
                   <User className="w-5 h-5 flex-shrink-0" />
-                  <span>Log In</span>
+                  <span>Log In / Sign Up</span>
                 </Link>
               )}
             </div>

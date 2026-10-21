@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Bell, Menu } from "lucide-react";
+import { Search, Bell, Menu, User } from "lucide-react"; // ✅ Added User icon
 import Logo from "./Logo";
 
 export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
@@ -53,18 +53,33 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
           <Logo />
         </div>
 
-        {/* Right: Desktop Actions Only */}
-        <div className="hidden md:flex items-center gap-4">
-          {status === "authenticated" && (
-            <Link href="/account/notifications" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
-              <Bell className="w-5 h-5" />
-              {unreadNotifications > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
-                  {unreadNotifications}
-                </span>
-              )}
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2">
+          
+          {/* ✅ Mobile Login Button (Visible only on mobile if not logged in) */}
+          {status === "unauthenticated" && (
+            <Link 
+              href="/login" 
+              className="md:hidden flex items-center gap-1 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-full hover:bg-gray-800 transition"
+            >
+              <User className="w-3 h-3" />
+              <span>Log In</span>
             </Link>
           )}
+
+          {/* Desktop Actions Only */}
+          <div className="hidden md:flex items-center gap-4">
+            {status === "authenticated" && (
+              <Link href="/account/notifications" className="relative p-1.5 text-gray-600 hover:bg-gray-100 rounded-full">
+                <Bell className="w-5 h-5" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+                    {unreadNotifications}
+                  </span>
+                )}
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
