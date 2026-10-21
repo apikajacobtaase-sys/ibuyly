@@ -1,32 +1,24 @@
  import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-        pathname: "/**",
-      },
-      // ✅ ADD THIS: Allow placeholder images for testing
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-        pathname: "/**",
-      },
-    ],
-  },
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+images: {
+remotePatterns: [
+{
+protocol: "https",
+hostname: "res.cloudinary.com",
+pathname: "/**",
+},
+{
+protocol: "https",
+hostname: "placehold.co",
+pathname: "/**",
+},
+],
+},
+
+typescript: {
+ignoreBuildErrors: true,
+},
 };
 
 export default nextConfig;

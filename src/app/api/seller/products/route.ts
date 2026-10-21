@@ -124,40 +124,97 @@ export async function GET(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    // 1. Authenticate the seller
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please log in." },
+        { status: 401 }
+      );
+    }
+
+    // 2. Find the seller profile
+    const seller = await db.sellerProfile.findUnique({
+      where: {
+        userId: session.user.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!seller) {
+      return NextResponse.json(
+        { error: "Seller profile not found." },
+        { status: 403 }
+      );
+    }
+
+    // 3. Get the product ID
     const { searchParams } = new URL(req.url);
     const productId = searchParams.get("id");
 
-    if (!productId) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
-
-    // ✅ FIX: Verify ownership via SellerOffer instead of product.seller
-    const seller = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!seller) return NextResponse.json({ error: "Seller profile not found" }, { status: 403 });
-
-    // Check if this seller actually has an offer for this product
-    const offer = await db.sellerOffer.findFirst({
-      where: {
-        sellerId: seller.id,
-        variant: { productId: productId }
-      }
-    });
-
-    if (!offer) {
-      return NextResponse.json({ error: "Forbidden or Product not found" }, { status: 403 });
+    if (!productId) {
+      return NextResponse.json(
+        { error: "Product ID is required." },
+        { status: 400 }
+      );
     }
 
-    // Delete the product (Cascade will handle variants/offers if set up in Prisma)
-    await db.product.delete({ where: { id: productId } });
-    
-    return NextResponse.json({ success: true });
+    // 4. Find offers belonging to this seller for this product
+    const sellerOffers = await db.sellerOffer.findMany({
+      where: {
+        sellerId: seller.id,
+        variant: {
+          productId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (sellerOffers.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This product is not available in your inventory or has already been removed.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // 5. Remove only this seller's offers
+    const result = await db.sellerOffer.deleteMany({
+      where: {
+        sellerId: seller.id,
+        variant: {
+          productId,
+        },
+      },
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "No seller offers were deleted." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Product removed from your inventory successfully.",
+      deletedOffers: result.count,
+      productId,
+    });
   } catch (error) {
-    console.error("DELETE Error:", error);
-    return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
+    console.error("DELETE Seller Product Error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to remove product from your inventory." },
+      { status: 500 }
+    );
   }
 }
 
