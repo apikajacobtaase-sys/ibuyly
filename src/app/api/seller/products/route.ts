@@ -9,30 +9,56 @@ export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // Find the seller profile associated with the user
+    // 1. Find the seller profile associated with the user
     const seller = await db.seller.findFirst({
       where: { userId: session.user.id },
     });
 
     if (!seller) return NextResponse.json({ products: [] });
 
+    // 2. Fetch Products with necessary relations
     const products = await db.product.findMany({
       where: { sellerId: seller.id },
       include: {
+        category: { select: { name: true } }, // ✅ Added Category
+        images: { where: { isPrimary: true }, take: 1 },
         variants: {
           include: {
             sellerOffers: {
-              include: { seller: { select: { businessName: true } } }
+              where: { sellerId: seller.id }, // ✅ Only get offers from THIS seller
+              take: 1,
             }
           }
         },
-        images: { where: { isPrimary: true }, take: 1 }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({ products });
+    // 3. Format Data to Match Frontend Interface
+    const formattedProducts = products.map((p) => {
+      // Get the first variant and its offer
+      const variant = p.variants[0];
+      const offer = variant?.sellerOffers[0];
+
+      return {
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        status: p.status,
+        imageUrl: p.images[0]?.url || null,
+        categoryName: p.category?.name || "Uncategorized",
+        reviewCount: 0, // Default if not calculated
+        createdAt: p.createdAt.toISOString(),
+        
+        // ✅ Extract Price and Stock from the Offer
+        price: offer ? parseFloat(offer.price.toString()) : 0,
+        stock: offer?.stockQuantity || 0,
+      };
+    });
+
+    return NextResponse.json({ products: formattedProducts });
   } catch (error) {
+    console.error("GET Seller Products Error:", error);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }
@@ -73,7 +99,6 @@ export async function PUT(req: Request) {
     const { productId, price, stockQuantity } = body;
 
     // Update the offer price and stock
-    // Note: This assumes one primary offer per variant for simplicity
     await db.sellerOffer.updateMany({
       where: {
         variant: {
