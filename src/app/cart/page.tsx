@@ -1,4 +1,4 @@
-// src/app/cart/page.tsx
+ // src/app/cart/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -23,14 +23,15 @@ export default function CartPage() {
 function CartContent() {
   const router = useRouter();
   
-  // 1. Extract only the raw data and actions from the store
+  // 1. Extract actions and state
   const items = useCartStore((state) => state.items);
   const removeItem = useCartStore((state) => state.removeItem);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const toggleSelect = useCartStore((state) => state.toggleSelect);
   const toggleSelectAll = useCartStore((state) => state.toggleSelectAll);
+  const syncFromDB = useCartStore((state) => state.syncFromDB); // ✅ Ensure this exists in your store
 
-  // 2. Compute derived state locally (avoids "function as child" errors)
+  // 2. Derived state
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const selectedItems = items.filter((i) => i.isSelected && i.stockQuantity > 0);
   const selectedTotalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -40,20 +41,17 @@ function CartContent() {
   const [isManaging, setIsManaging] = useState(false);
   const [deliveryFee] = useState(15.00); 
 
-    useEffect(() => {
+  // ✅ FIX: Sync with Database on load
+  useEffect(() => {
     const fetchLiveCart = async () => {
       try {
         const res = await fetch("/api/cart");
         if (res.ok) {
           const data = await res.json();
-          
-          // 👇 CRITICAL: Sync the local store with the live database data.
-          // Ensure your `useCartStore` has a `setItems` (or similar) action.
-          // If it does, uncomment the line below:
-          // useCartStore.getState().setItems(data.items);
-          
-          // If your store already handles syncing automatically via a provider, 
-          // this fetch acts as a safety net to ensure the latest stockQuantity and price are present.
+          // Sync the local Zustand store with the live DB data
+          if (data.items && syncFromDB) {
+            syncFromDB(data.items);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch live cart", error);
@@ -63,7 +61,9 @@ function CartContent() {
     };
     
     fetchLiveCart();
-  }, []);
+  }, [syncFromDB]);
+
+  // Group items by seller
   const sellerGroups = items.reduce((acc, item) => {
     if (!acc[item.sellerId]) {
       acc[item.sellerId] = { sellerName: item.sellerName, items: [] };
@@ -141,7 +141,7 @@ function CartContent() {
               {group.items.map((item) => {
                 const isOutOfStock = item.stockQuantity === 0;
                 return (
-                  <div key={item.id} className={`p-4 flex gap-4 border-b border-gray-100 last:border-0 ${isOutOfStock ? "opacity-60" : ""}`}>
+                  <div key={item.id} className={`p-4 flex gap-4 border-b border-gray-100 last:border-0 ${isOutOfStock ? "opacity-60 bg-gray-50" : ""}`}>
                     {/* Checkbox */}
                     <div className="flex items-center pt-2">
                       <button 
@@ -164,19 +164,19 @@ function CartContent() {
                       </div>
                     </Link>
 
-                                        {/* Details */}
+                    {/* Details */}
                     <div className="flex-1 min-w-0">
                       <Link href={`/products/${item.slug || item.productId}`}>
                         <h3 className="text-sm font-medium text-gray-900 line-clamp-2 hover:text-green-600">{item.title}</h3>
                       </Link>
                       
-                      {/* 👇 NEW: Live Stock Status Badge */}
+                      {/* Stock Status Badge */}
                       {isOutOfStock ? (
                         <p className="text-xs text-red-600 font-medium mt-1">Out of Stock</p>
                       ) : item.stockQuantity <= 5 ? (
                         <p className="text-xs text-orange-600 font-medium mt-1 flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                          Only {item.stockQuantity} left in stock!
+                          Only {item.stockQuantity} left!
                         </p>
                       ) : (
                         <p className="text-xs text-green-600 font-medium mt-1">In Stock</p>
@@ -204,7 +204,7 @@ function CartContent() {
                       </div>
                     </div>
 
-                    {/* Remove */}
+                    {/* Remove Button */}
                     {isManaging && (
                       <button
                         onClick={() => removeItem(item.id)}
@@ -220,7 +220,7 @@ function CartContent() {
           ))}
         </div>
 
-        {/* RIGHT COLUMN: ORDER SUMMARY (Sticky on Desktop) */}
+        {/* RIGHT COLUMN: ORDER SUMMARY */}
         <div className="hidden md:block">
           <div className="bg-white rounded-lg border border-gray-200 p-5 sticky top-24">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h3>
@@ -255,20 +255,6 @@ function CartContent() {
               <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <p>Delivery fees are estimated and will be finalized based on your shipping address at checkout.</p>
             </div>
-          </div>
-        </div>
-
-        {/* RECOMMENDATIONS */}
-        <div className="md:col-span-3 mt-8">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">You might also like</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-white rounded-lg border border-gray-200 p-3 animate-pulse">
-                <div className="aspect-square bg-gray-200 rounded-lg mb-2" />
-                <div className="h-3 bg-gray-200 rounded w-3/4 mb-2" />
-                <div className="h-4 bg-gray-200 rounded w-1/2" />
-              </div>
-            ))}
           </div>
         </div>
       </main>
