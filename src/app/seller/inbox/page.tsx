@@ -1,8 +1,9 @@
  // src/app/seller/inbox/page.tsx
 "use client";
 
-// ✅ Force Dynamic Rendering
+// ✅ Force Dynamic Rendering to prevent Prerender Error
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -27,7 +28,6 @@ const formatTime = (dateString: string | undefined) => {
 };
 
 export default function SellerInboxPage() {
-  // ✅ Safe access to searchParams
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("id");
   
