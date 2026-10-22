@@ -80,21 +80,22 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         
         <div className="lg:col-span-2">
-          <div className="space-y-4 mb-8">
-            <div className="aspect-square bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-200">
-              {product.images[0] ? (
-                <Image 
-                  src={product.images[0].url} 
-                  alt={product.title} 
-                  fill 
-                  className="object-cover hover:scale-105 transition-transform duration-500"
-                  priority 
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
-              )}
-            </div>
-          </div>
+        // Inside src/app/products/[slug]/page.tsx
+
+<div className="aspect-square bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-200">
+  {product.images[0] ? (
+    <Image 
+      src={product.images[0].url} 
+      alt={product.title} 
+      fill 
+      className="object-cover hover:scale-105 transition-transform duration-500"
+      priority 
+      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // ✅ Added sizes
+    />
+  ) : (
+    <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+  )}
+</div>
 
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{product.title}</h1>
           

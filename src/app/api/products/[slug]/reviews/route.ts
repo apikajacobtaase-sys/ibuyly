@@ -4,10 +4,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-export async function GET(req: Request, { params }: { params: { slug: string } }) {
+// ✅ FIX: Await params in GET
+export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
+    const resolvedParams = await params; // ✅ Unwrap promise
+    const slug = resolvedParams.slug;
+
     const product = await db.product.findUnique({
-      where: { slug: params.slug },
+      where: { slug: slug },
       include: {
         reviews: {
           include: {
@@ -20,7 +24,6 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
 
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
 
-    // Calculate average rating
     const totalRating = product.reviews.reduce((acc, rev) => acc + rev.rating, 0);
     const avgRating = product.reviews.length > 0 ? totalRating / product.reviews.length : 0;
 
@@ -34,9 +37,10 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   }
 }
 
+// ✅ FIX: Await params in POST
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const resolvedParams = await params;
+    const resolvedParams = await params; // ✅ Unwrap promise
     const slug = resolvedParams.slug;
 
     const session = await getServerSession(authOptions);
@@ -46,19 +50,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     
     if (rating < 1 || rating > 5) return NextResponse.json({ error: "Invalid rating" }, { status: 400 });
 
-    const product = await db.product.findUnique({ where: { slug: slug } }); // ✅ Use resolved slug
+    const product = await db.product.findUnique({ where: { slug: slug } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
 
-
-    // ✅ Verification Logic: Check if user actually bought this product
+    // ... Rest of your POST logic (Verification, Creation, etc.) ...
     let isVerified = false;
     if (orderId) {
       const order = await db.order.findUnique({ 
         where: { id: orderId, userId: session.user.id },
         include: { items: { include: { variant: true } } }
       });
-      
-      // Check if any item in the order belongs to this product
       isVerified = order?.items.some(i => i.variant.productId === product.id) || false;
     }
 
@@ -70,7 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         title: title || null,
         comment: comment || null,
         orderId: orderId || null,
-        isVerified: isVerified // ✅ Set based on purchase history
+        isVerified: isVerified
       }
     });
 
