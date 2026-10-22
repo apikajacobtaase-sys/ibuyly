@@ -523,7 +523,7 @@ model Review {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  @@unique([userId, productId])
+  @@unique([userId, productId], name: "userId_productId")
   @@index([productId])
   @@map("reviews")
 }

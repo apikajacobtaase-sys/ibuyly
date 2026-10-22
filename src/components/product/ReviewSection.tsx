@@ -140,8 +140,8 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
             <div key={review.id} className="border-b border-gray-100 pb-8 last:border-0">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-3">
-                  {review.user.image ? (
-                    <Image src={review.user.image} alt="" width={40} height={40} className="rounded-full object-cover" />
+                  {review.user.avatarUrl? (
+                    <Image src={review.user.avatarUrl} alt="" width={40} height={40} className="rounded-full object-cover" />
                   ) : (
                     <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold">
                       {review.user.firstName[0]}

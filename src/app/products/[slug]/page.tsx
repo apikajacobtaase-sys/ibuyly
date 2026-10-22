@@ -80,7 +80,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         
         <div className="lg:col-span-2">
-        // Inside src/app/products/[slug]/page.tsx
+        
 
 <div className="aspect-square bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-200">
   {product.images[0] ? (

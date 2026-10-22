@@ -4,39 +4,52 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// ✅ FIX: Await params in GET
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const resolvedParams = await params; // ✅ Unwrap promise
+    const resolvedParams = await params;
     const slug = resolvedParams.slug;
+
+    if (!slug) {
+      return NextResponse.json({ error: "Slug is required" }, { status: 400 });
+    }
 
     const product = await db.product.findUnique({
       where: { slug: slug },
       include: {
         reviews: {
           include: {
-            user: { select: { firstName: true, lastName: true, image: true } }
+            user: { 
+              // ✅ FIX: Use avatarUrl instead of image
+              select: { firstName: true, lastName: true, avatarUrl: true } 
+            }
           },
           orderBy: { createdAt: 'desc' }
         }
       }
     });
 
-    if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    if (!product) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
 
-    const totalRating = product.reviews.reduce((acc, rev) => acc + rev.rating, 0);
-    const avgRating = product.reviews.length > 0 ? totalRating / product.reviews.length : 0;
+    const reviewList = product.reviews || [];
+    const totalRating = reviewList.reduce((acc, rev) => acc + rev.rating, 0);
+    const avgRating = reviewList.length > 0 ? totalRating / reviewList.length : 0;
 
     return NextResponse.json({
-      reviews: product.reviews,
+      reviews: reviewList,
       avgRating: Number(avgRating.toFixed(1)),
-      totalReviews: product.reviews.length
+      totalReviews: reviewList.length
     });
+
   } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch reviews" }, { status: 500 });
+    console.error("GET Reviews Error:", error);
+    return NextResponse.json({ 
+      error: "Failed to fetch reviews", 
+      details: error instanceof Error ? error.message : "Unknown error" 
+    }, { status: 500 });
   }
 }
-
 // ✅ FIX: Await params in POST
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
@@ -63,16 +76,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       isVerified = order?.items.some(i => i.variant.productId === product.id) || false;
     }
 
-    const review = await db.review.create({
-      data: {
+   const review = await db.review.upsert({
+      where: {
+        // This matches the @@unique constraint in your schema
+        userId_productId: {
+          userId: session.user.id,
+          productId: product.id,
+        }
+      },
+      update: {
+        rating,
+        title: title || null,
+        comment: comment || null,
+        orderId: orderId || null,
+        isVerified: isVerified,
+        updatedAt: new Date(),
+      },
+      create: {
         userId: session.user.id,
         productId: product.id,
         rating,
         title: title || null,
         comment: comment || null,
         orderId: orderId || null,
-        isVerified: isVerified
-      }
+        isVerified: isVerified,
+      },
     });
 
     return NextResponse.json({ success: true, review });
