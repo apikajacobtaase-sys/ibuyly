@@ -139,6 +139,7 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   notifications Notification[]
   reviewsGiven  SellerReview[] @relation("BuyerReviews")
+  
 
   @@map("users")
 }
@@ -1072,8 +1073,8 @@ model Conversation {
   buyerId   String
   sellerId  String
   productId String?  // Optional: Link chat to a specific product
-  createdAt DateTime @default(now())
-  
+  //updatedAt DateTime @updatedAt @default(now()) // ✅ Add @default(now()) temporarily
+  updatedAt DateTime @updatedAt // ✅ Add this line
   buyer     User     @relation("BuyerConversations", fields: [buyerId], references: [id])
   seller    User     @relation("SellerConversations", fields: [sellerId], references: [id])
   product   Product? @relation(fields: [productId], references: [id])

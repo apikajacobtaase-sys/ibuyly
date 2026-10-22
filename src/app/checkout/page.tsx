@@ -1,245 +1,152 @@
- // src/app/checkout/page.tsx
+ // src/app/cart/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Store, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import DeliveryAddressForm from "@/components/checkout/DeliveryAddressForm";
+import Link from "next/link";
+import Image from "next/image";
+import { Trash2, ShoppingBag, ArrowRight, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-export default function CheckoutPage() {
-  const router = useRouter();
+export default function CartPage() {
   const { data: session, status } = useSession();
-  
-  // ✅ Use specific actions from the store
-  const { selectedItems, selectedTotalAmount, clearCart } = useCartStore();
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [orderId, setOrderId] = useState("");
-  const [isHydrated, setIsHydrated] = useState(false);
+  const router = useRouter();
+  const { items, removeItem, updateQuantity, clearCart } = useCartStore();
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
-  // Address & Quote State
-  const [addressData, setAddressData] = useState<any>(null);
-  const [quote, setQuote] = useState<any>(null);
+  // Calculate totals
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const deliveryFee = subtotal > 0 ? 20 : 0; // Example flat fee or calculate dynamically
+  const total = subtotal + deliveryFee;
 
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  const handleCheckout = () => {
+    if (items.length === 0) return;
 
-  const selectedCartItems = isHydrated ? selectedItems() : [];
-  const selectedTotal = isHydrated ? selectedTotalAmount() : 0;
-  
-  const deliveryFee = (quote?.isServiceable && quote?.minOrderMet) ? quote.deliveryFee : 0;
-  const finalTotal = selectedTotal + deliveryFee;
+    setIsCheckingOut(true);
 
-  const handleAddressChange = (data: any, newQuote: any) => {
-    setAddressData(data);
-    setQuote(newQuote);
-    setError("");
-  };
-
-  const handlePlaceOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // ✅ 1. Check if User is Logged In
+    // ✅ Check if user is logged in
     if (status === "unauthenticated") {
+      // Redirect to login, but remember they wanted to go to checkout
       router.push("/login?callbackUrl=/checkout");
       return;
     }
 
-    if (selectedCartItems.length === 0 || !addressData || !quote?.isServiceable) return;
-    
-    if (quote.minOrderValue && selectedTotal < quote.minOrderValue) {
-      setError(`Minimum order value for this location is GH₵ ${quote.minOrderValue.toFixed(2)}`);
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const cartItemIds = selectedCartItems.map((i) => i.id);
-      
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cartItemIds: cartItemIds,
-          localityId: addressData.localityId,
-          address: {
-            recipientName: addressData.recipientName,
-            phone: addressData.phone,
-            landmark: addressData.landmark,
-            street: addressData.street,
-            instructions: addressData.instructions,
-          },
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        clearCart(); 
-
-        if (data.authorizationUrl) {
-          window.location.href = data.authorizationUrl;
-          return; 
-        }
-
-        setSuccess(true);
-        setOrderId(data.orderId);
-      } else {
-        console.error("❌ Checkout API Error:", data);
-        setError(data.error || "Checkout failed. Please try again.");
-      }
-    } catch (err) {
-      console.error("❌ Network Error:", err);
-      setError("Network error. Please check your connection.");
-    } finally {
-      setLoading(false);
-    }
+    // If logged in, proceed to checkout page
+    router.push("/checkout");
   };
 
-  if (!isHydrated) {
+  if (items.length === 0) {
     return (
-      // ✅ White Background
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
-      </div>
-    );
-  }
-
-  if (success) {
-    return (
-      // ✅ White Background
-      <div className="min-h-screen bg-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h1>
-          <p className="text-gray-500 mb-2">Your order ID is: <span className="font-mono font-semibold text-gray-900">{orderId}</span></p>
-          <Link href="/account/orders" className="block w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors mt-6">
-            View My Orders
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (selectedCartItems.length === 0) {
-    return (
-      // ✅ White Background
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
-        <AlertTriangle className="w-16 h-16 text-gray-300 mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">No items selected</h2>
-        <p className="text-gray-500 mb-6">Go back to your cart to select items for checkout.</p>
-        <Link href="/cart" className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors">
-          Return to Cart
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
+        <ShoppingBag className="w-16 h-16 text-gray-300 mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
+        <p className="text-gray-500 mb-6">Looks like you haven't added anything yet.</p>
+        <Link href="/products" className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition">
+          Start Shopping
         </Link>
       </div>
     );
   }
 
   return (
-    // ✅ White Background
-    <div className="min-h-screen bg-white pb-24 md:pb-8">
-      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-20">
-        <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-full">
-          <ArrowLeft className="w-5 h-5 text-gray-700" />
-        </button>
-        <h1 className="text-lg font-bold text-gray-900">Checkout</h1>
-      </header>
+    <div className="max-w-7xl mx-auto p-4 md:p-8 bg-white min-h-screen">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Shopping Cart ({items.length})</h1>
 
-      <main className="max-w-5xl mx-auto p-4 md:grid md:grid-cols-3 md:gap-6">
-        <div className="md:col-span-2 space-y-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-            <DeliveryAddressForm 
-              cartSubtotal={selectedTotal} 
-              onAddressChange={handleAddressChange} 
-            />
-          </div>
-          
-          {/* Order Summary List */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-             <div className="p-3 border-b border-gray-100 bg-gray-50">
-                <h3 className="text-sm font-semibold text-gray-900">Order Summary</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Cart Items List */}
+        <div className="lg:col-span-2 space-y-4">
+          {items.map((item) => (
+            <div key={`${item.productId}-${item.variantId}`} className="flex gap-4 p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
+              <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 relative">
+                {item.imageUrl && (
+                  <Image src={item.imageUrl} alt={item.title} fill className="object-cover" />
+                )}
               </div>
-              <div className="divide-y divide-gray-100">
-                {selectedCartItems.map((item) => (
-                  <div key={item.id} className="p-4 flex gap-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 relative">
-                      {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Img</div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-gray-900 line-clamp-2">{item.title}</h3>
-                      <p className="text-xs text-gray-500 mt-1">Sold by: {item.sellerName}</p>
-                      <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
-                    </div>
-                    <div className="text-right">
-                      {/* ✅ Green Price */}
-                      <p className="text-sm font-bold text-green-600">GH₵ {(item.price * item.quantity).toFixed(2)}</p>
-                    </div>
+              
+              <div className="flex-1 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900 line-clamp-1">{item.title}</h3>
+                  <p className="text-sm text-gray-500">{item.sellerName}</p>
+                </div>
+                
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateQuantity(item.productId, item.variantId, item.quantity - 1)}
+                      className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600"
+                    >
+                      -
+                    </button>
+                    <span className="font-medium w-4 text-center">{item.quantity}</span>
+                    <button 
+                      onClick={() => updateQuantity(item.productId, item.variantId, item.quantity + 1)}
+                      className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600"
+                    >
+                      +
+                    </button>
                   </div>
-                ))}
+                  
+                  <div className="flex items-center gap-4">
+                    <span className="font-bold text-green-600">GH₵ {(item.price * item.quantity).toFixed(2)}</span>
+                    <button 
+                      onClick={() => removeItem(item.productId, item.variantId)}
+                      className="text-red-500 hover:text-red-700 p-1"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
               </div>
-          </div>
+            </div>
+          ))}
         </div>
 
-        <div className="md:col-span-1">
-          <div className="bg-white rounded-lg border border-gray-200 p-5 sticky top-24 shadow-sm">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Payment Summary</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium text-gray-900">GH₵ {selectedTotal.toFixed(2)}</span>
+        {/* Order Summary & Checkout Button */}
+        <div className="lg:col-span-1">
+          <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 sticky top-24">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between text-gray-600">
+                <span>Subtotal</span>
+                <span>GH₵ {subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Delivery Fee</span>
-                <span className="font-medium text-gray-900">
-                  {quote?.isServiceable ? `GH₵ ${deliveryFee.toFixed(2)}` : "Calculated after location"}
-                </span>
+              <div className="flex justify-between text-gray-600">
+                <span>Delivery Fee</span>
+                <span>GH₵ {deliveryFee.toFixed(2)}</span>
               </div>
-              <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
-                <span className="text-base font-bold text-gray-900">Total</span>
-                {/* ✅ Green Total */}
-                <span className="text-xl font-bold text-green-600">GH₵ {finalTotal.toFixed(2)}</span>
+              <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-lg text-gray-900">
+                <span>Total</span>
+                <span>GH₵ {total.toFixed(2)}</span>
               </div>
             </div>
 
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handlePlaceOrder} className="mt-6">
-              <button
-                type="submit"
-                disabled={loading || selectedCartItems.length === 0 || !quote?.isServiceable || !quote?.minOrderMet}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-                {loading ? "Processing..." : "Place Order"}
-              </button>
-            </form>
+            <button
+              onClick={handleCheckout}
+              disabled={isCheckingOut || status === "loading"}
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isCheckingOut || status === "loading" ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  Proceed to Checkout
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
             
-            <p className="text-xs text-gray-400 text-center mt-4">
-              Secure checkout powered by Paystack
+            <p className="text-xs text-gray-500 text-center mt-4">
+              {status === "authenticated" 
+                ? "You are logged in. Ready to pay!" 
+                : "You will be asked to log in or sign up at checkout."}
             </p>
           </div>
         </div>
-      </main>
- 
+
+      </div>
     </div>
   );
 }
