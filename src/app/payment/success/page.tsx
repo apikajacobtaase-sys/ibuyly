@@ -1,9 +1,9 @@
-// src/app/payment/success/page.tsx
+ // src/app/payment/success/page.tsx
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 function SuccessContent() {
@@ -22,28 +22,41 @@ function SuccessContent() {
     }
 
     const verifyPayment = async () => {
+      // ✅ FIX: Add a timeout to prevent infinite loading
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds
+
       try {
-        // 👇 FIX: Call your POST /api/payments/verify endpoint with a JSON body
         const res = await fetch("/api/payments/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reference }),
+          signal: controller.signal,
         });
         
+        clearTimeout(timeoutId);
         const data = await res.json();
 
         if (res.ok && data.success) {
           setStatus("success");
           setOrderId(data.orderId || "");
-          setMessage(data.message || "Your payment was successful and your order has been confirmed!");
+          setMessage(data.message || "Your payment was successful!");
         } else {
           setStatus("failed");
-          setMessage(data.error || data.message || "Payment verification failed. Please contact support with your reference ID.");
+          // ✅ Show specific error from API
+          setMessage(data.error || "Payment verification failed.");
         }
       } catch (error) {
+        clearTimeout(timeoutId);
         console.error("Verification network error:", error);
         setStatus("failed");
-        setMessage("Network error while verifying payment. Please check your orders page or contact support.");
+        
+        // ✅ Helpful message for timeouts or network issues
+        if (error instanceof DOMException && error.name === "AbortError") {
+           setMessage("Verification is taking longer than expected. Please check your order status manually.");
+        } else {
+           setMessage("Network error. Please check your orders page or contact support.");
+        }
       }
     };
 
@@ -51,14 +64,14 @@ function SuccessContent() {
   }, [reference]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-md w-full text-center">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8 max-w-md w-full text-center">
         
         {status === "loading" && (
           <>
             <Loader2 className="w-16 h-16 text-green-600 animate-spin mx-auto mb-4" />
             <h1 className="text-xl font-bold text-gray-900 mb-2">Verifying Payment...</h1>
-            <p className="text-gray-500">Please wait while we securely confirm your transaction with Paystack.</p>
+            <p className="text-gray-500">Please wait while we securely confirm your transaction.</p>
           </>
         )}
 
@@ -86,21 +99,40 @@ function SuccessContent() {
         {status === "failed" && (
           <>
             <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <XCircle className="w-8 h-8" />
+              <AlertTriangle className="w-8 h-8" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Verification Issue</h1>
-            <p className="text-gray-600 mb-2">{message}</p>
+            <p className="text-gray-600 mb-4">{message}</p>
+            
+            {/* ✅ Helpful tip for insufficient funds */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6 text-left">
+              <p className="text-xs text-yellow-800 font-medium mb-1">💡 Tip:</p>
+              <p className="text-xs text-yellow-700">
+                If your payment was declined, it may be due to insufficient funds or a daily limit. 
+                Please try a different card or mobile money number.
+              </p>
+            </div>
+
             {reference && (
               <p className="text-xs text-gray-400 mb-6">
                 Reference: <span className="font-mono">{reference}</span>
               </p>
             )}
-            <Link 
-              href="/account/orders" 
-              className="block w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg transition-colors"
-            >
-              Check Order Status
-            </Link>
+            
+            <div className="flex flex-col gap-3">
+              <Link 
+                href="/account/orders" 
+                className="block w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                Check Order Status
+              </Link>
+              <Link 
+                href="/cart" 
+                className="block w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-lg transition-colors"
+              >
+                Return to Cart
+              </Link>
+            </div>
           </>
         )}
 
@@ -112,7 +144,7 @@ function SuccessContent() {
 export default function PaymentSuccessPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
       </div>
     }>
