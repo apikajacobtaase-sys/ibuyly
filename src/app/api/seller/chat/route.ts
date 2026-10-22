@@ -19,18 +19,18 @@ export async function GET(req: Request) {
     // Fetch all conversations where this user is the seller
     const conversations = await db.conversation.findMany({
       where: {
-        sellerId: session.user.id // Assuming sellerId in Conversation links to User ID
+        sellerId: session.user.id 
       },
       include: {
         buyer: { select: { firstName: true, lastName: true, avatarUrl: true } },
         product: { select: { title: true, images: { take: 1 } } },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 1 // Get only the last message for preview
+          take: 1 // Only get the LAST message for the preview list
         }
       },
       orderBy: {
-        createdAt: 'desc'
+        updatedAt: 'desc' // Sort by most recently updated
       }
     });
 

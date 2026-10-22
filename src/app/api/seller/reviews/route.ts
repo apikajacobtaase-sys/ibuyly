@@ -32,7 +32,7 @@ export async function GET() {
       where: { sellerId: sellerProfile.id },
       include: {
         buyer: {
-          select: { name: true, email: true },
+          select: { firstName: true, lastName: true, email: true }
         },
       },
       orderBy: { createdAt: "desc" },
