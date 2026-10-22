@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Store, Loader2, CheckCircle, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import DeliveryAddressForm from "@/components/checkout/DeliveryAddressForm";
 import { useSession } from "next-auth/react";
@@ -13,30 +13,26 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   
-  // ✅ Get hydration state from store if available, or manage locally
-  const { selectedItems, selectedTotalAmount, clearCart, hasHydrated } = useCartStore();
+  const { selectedItems, selectedTotalAmount, clearCart } = useCartStore();
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [orderId, setOrderId] = useState("");
-  
-  // Address & Quote State
+  const [isHydrated, setIsHydrated] = useState(false);
+
   const [addressData, setAddressData] = useState<any>(null);
   const [quote, setQuote] = useState<any>(null);
 
-  const selectedCartItems = selectedItems();
-  const selectedTotal = selectedTotalAmount();
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  const selectedCartItems = isHydrated ? selectedItems() : [];
+  const selectedTotal = isHydrated ? selectedTotalAmount() : 0;
   
   const deliveryFee = (quote?.isServiceable && quote?.minOrderMet) ? quote.deliveryFee : 0;
   const finalTotal = selectedTotal + deliveryFee;
-
-  // ✅ Redirect if not logged in
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login?callbackUrl=/checkout");
-    }
-  }, [status, router]);
 
   const handleAddressChange = (data: any, newQuote: any) => {
     setAddressData(data);
@@ -47,23 +43,12 @@ export default function CheckoutPage() {
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (status !== "authenticated") return;
-
-    // ✅ Wait for hydration if needed
-    if (!hasHydrated) {
-      setError("Loading your cart... Please try again in a moment.");
+    if (status === "unauthenticated") {
+      router.push("/login?callbackUrl=/checkout");
       return;
     }
 
-    if (selectedCartItems.length === 0) {
-      setError("Your cart is empty.");
-      return;
-    }
-
-    if (!addressData || !quote?.isServiceable) {
-      setError("Please select a valid delivery address.");
-      return;
-    }
+    if (selectedCartItems.length === 0 || !addressData || !quote?.isServiceable) return;
     
     if (quote.minOrderValue && selectedTotal < quote.minOrderValue) {
       setError(`Minimum order value for this location is GH₵ ${quote.minOrderValue.toFixed(2)}`);
@@ -74,11 +59,8 @@ export default function CheckoutPage() {
     setError("");
 
     try {
-      // ✅ Ensure we are sending the correct IDs
       const cartItemIds = selectedCartItems.map((i) => i.id);
       
-      console.log("🚀 Initiating Checkout with Items:", cartItemIds);
-
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,17 +80,15 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // ✅ Clear cart ONLY after successful API response
-        clearCart(); 
-
+        // ✅ Only clear cart if we are definitely moving forward
         if (data.authorizationUrl) {
-          console.log("✅ Redirecting to Paystack:", data.authorizationUrl);
           window.location.href = data.authorizationUrl;
-          return; 
+        } else {
+          // Fallback for non-Paystack flows (e.g., COD)
+          clearCart();
+          setSuccess(true);
+          setOrderId(data.orderId);
         }
-
-        setSuccess(true);
-        setOrderId(data.orderId);
       } else {
         console.error("❌ Checkout API Error:", data);
         setError(data.error || "Checkout failed. Please try again.");
@@ -121,8 +101,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // ✅ Show loading while hydrating or checking session
-  if (status === "loading" || !hasHydrated) {
+  if (!isHydrated) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
@@ -241,13 +220,14 @@ export default function CheckoutPage() {
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-                {loading ? "Processing..." : "Place Order"}
+                {loading ? "Processing..." : "Place Order & Pay"}
               </button>
             </form>
             
-            <p className="text-xs text-gray-400 text-center mt-4">
+            <div className="flex items-center justify-center gap-2 mt-4 text-xs text-gray-400">
+              <ShieldCheck className="w-3 h-3" />
               Secure checkout powered by Paystack
-            </p>
+            </div>
           </div>
         </div>
       </main>
