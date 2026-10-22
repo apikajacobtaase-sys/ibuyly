@@ -14,9 +14,11 @@ interface Message {
   replyTo?: { content: string };
 }
 
-export default function ChatBox({ conversationId, initialMessages }: { conversationId: string, initialMessages: Message[] }) {
+export default function ChatBox({ conversationId, initialMessages }: { conversationId: string, initialMessages?: Message[] }) {
   const { data: session } = useSession();
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  
+  // ✅ FIX: Ensure default value is an empty array
+  const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -31,6 +33,8 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
 
   // ✅ Initialize Pusher for Real-Time Updates
   useEffect(() => {
+    if (!conversationId) return;
+
     const pusher = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
     });
@@ -39,7 +43,7 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
     
     channel.bind('new-message', (data: Message) => {
       setMessages((prev) => {
-        // Prevent duplicates if the message was already added by the sender
+        // Prevent duplicates
         if (prev.some(m => m.id === data.id)) return prev;
         return [...prev, data];
       });
@@ -50,7 +54,7 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
     };
   }, [conversationId]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -59,20 +63,19 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
     e.preventDefault();
     if (!input.trim()) return;
 
-    // Optimistically add message to UI
     const tempId = Date.now().toString();
-    const newMessage = {
+    const newMessage: Message = {
       id: tempId,
       content: input,
       senderId: session?.user?.id || "",
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, newMessage as Message]);
+    // Optimistic update
+    setMessages((prev) => [...prev, newMessage]);
     setInput("");
     setReplyTo(null);
 
-    // Send to API
     await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -84,7 +87,6 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
     });
   };
 
-  // Handle Right-Click / Long-Press for Reply
   const handleContextMenu = (e: React.MouseEvent, msg: Message) => {
     e.preventDefault();
     setReplyTo(msg);
@@ -95,7 +97,8 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
       
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-        {messages.map((msg) => {
+        {/* ✅ Safety Check: Only map if messages is an array */}
+        {Array.isArray(messages) && messages.map((msg) => {
           const isMe = msg.senderId === session?.user?.id;
           return (
             <div 
@@ -107,7 +110,6 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
                 isMe ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none"
               }`}>
                 
-                {/* Reply Context */}
                 {msg.replyTo && (
                   <div className="border-l-2 border-green-500 pl-2 mb-1 text-xs text-gray-500 italic bg-black/5 rounded p-1">
                     {msg.replyTo.content.slice(0, 40)}...
@@ -131,10 +133,8 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
 
       {/* Input Area */}
       <form onSubmit={sendMessage} className="p-3 bg-gray-100 flex gap-2 items-end relative">
-        
-        {/* Reply Preview Bar */}
         {replyTo && (
-          <div className="absolute bottom-16 left-2 right-2 bg-white p-2 rounded-lg shadow-md border-l-4 border-green-500 flex justify-between items-center z-10 animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-16 left-2 right-2 bg-white p-2 rounded-lg shadow-md border-l-4 border-green-500 flex justify-between items-center z-10">
             <div className="text-xs text-gray-500 truncate pr-2">
               <span className="font-semibold text-green-600">Replying:</span> {replyTo.content}
             </div>
@@ -155,7 +155,7 @@ export default function ChatBox({ conversationId, initialMessages }: { conversat
         <button 
           type="submit" 
           disabled={!input.trim()}
-          className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition shadow-sm disabled:opacity-50"
         >
           <Send className="w-5 h-5" />
         </button>
