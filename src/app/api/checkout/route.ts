@@ -163,16 +163,17 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        email: session.user.email,
-        amount: Math.round(finalTotal * 100),
-        reference: localReference, 
-        callback_url: `${process.env.NEXTAUTH_URL || "https://ibuyly.vercel.app"}/payment/success`,
-        metadata: { 
-          custom_fields: [
-            { display_name: "Order ID", variable_name: "order_id", value: order.id }
-          ] 
-        },
-      }),
+  email: session.user.email,
+  amount: Math.round(finalTotal * 100),
+  reference: localReference,
+  callback_url: `${process.env.NEXTAUTH_URL}/payment/success`,
+  channels: ["card", "mobile_money", "apple_pay"], // ✅ Added apple_pay
+  metadata: { 
+    custom_fields: [
+      { display_name: "Order ID", variable_name: "order_id", value: order.id }
+    ] 
+  },
+}),
     });
 
     const paystackData = await paystackResponse.json();
