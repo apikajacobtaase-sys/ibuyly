@@ -22,6 +22,8 @@ interface Review {
 
 export default function ReviewSection({ productSlug, orderId }: { productSlug: string, orderId?: string }) {
   const { data: session } = useSession();
+  
+  // ✅ FIX: Initialize as empty array [] instead of undefined
   const [reviews, setReviews] = useState<Review[]>([]);
   const [avgRating, setAvgRating] = useState(0);
   const [rating, setRating] = useState(5);
@@ -33,9 +35,11 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
     fetch(`/api/products/${productSlug}/reviews`)
       .then(res => res.json())
       .then(data => {
-        setReviews(data.reviews);
-        setAvgRating(data.avgRating);
-      });
+        // ✅ Safety check: ensure data.reviews is an array
+        setReviews(Array.isArray(data.reviews) ? data.reviews : []);
+        setAvgRating(data.avgRating || 0);
+      })
+      .catch(err => console.error("Failed to fetch reviews", err));
   }, [productSlug]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,8 +60,8 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
         setRating(5);
         // Refresh reviews
         const data = await (await fetch(`/api/products/${productSlug}/reviews`)).json();
-        setReviews(data.reviews);
-        setAvgRating(data.avgRating);
+        setReviews(Array.isArray(data.reviews) ? data.reviews : []);
+        setAvgRating(data.avgRating || 0);
       } else {
         const err = await res.json();
         alert(err.error || "Failed to submit review");
@@ -79,13 +83,14 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
               ))}
             </div>
             <span className="text-sm font-medium text-gray-900">{avgRating} out of 5</span>
-            <span className="text-sm text-gray-500">({reviews.length} reviews)</span>
+            {/* ✅ FIX: Use optional chaining or safe access */}
+            <span className="text-sm text-gray-500">({reviews?.length || 0} reviews)</span>
           </div>
         </div>
       </div>
 
       {/* Review Form */}
-      {session && !reviews.find(r => r.user.firstName === session.user?.firstName && r.productId) && (
+      {session && !reviews.find(r => r.user.firstName === session.user?.firstName) && (
         <form onSubmit={handleSubmit} className="bg-gray-50 p-6 rounded-xl mb-10 border border-gray-100">
           <h4 className="font-semibold text-gray-900 mb-4">Share your thoughts</h4>
           
