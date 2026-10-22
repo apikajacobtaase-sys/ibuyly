@@ -20,6 +20,8 @@ export interface CartItem {
 
 interface CartState {
   items: CartItem[];
+  hasHydrated: boolean; // ✅ Add this
+  setHasHydrated: (state: boolean) => void; // ✅ Add this
   addItem: (item: Omit<CartItem, 'id' | 'isSelected'>) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   updateQuantity: (id: string, quantity: number) => Promise<void>;
@@ -39,129 +41,109 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
+      hasHydrated: false, // ✅ Initialize as false
+      setHasHydrated: (state) => set({ hasHydrated: state }),
 
       selectedItems: () => get().items.filter((i) => i.isSelected && i.stockQuantity > 0),
       selectedTotalAmount: () => get().selectedItems().reduce((sum, item) => sum + item.price * item.quantity, 0),
       selectedTotalItems: () => get().selectedItems().reduce((sum, item) => sum + item.quantity, 0),
       totalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
 
-     
+      addItem: async (newItem) => {
+        const availableStock = newItem.stockQuantity ?? 0;
+        if (availableStock === 0) {
+          alert("This item is out of stock.");
+          return;
+        }
 
-addItem: async (newItem) => {
-  const availableStock = newItem.stockQuantity ?? 0;
-  if (availableStock === 0) {
-    alert("This item is out of stock.");
-    return;
-  }
+        if (!newItem.variantId || !newItem.offerId) {
+          console.error("❌ CRITICAL: Missing IDs in addItem", {
+            variantId: newItem.variantId,
+            offerId: newItem.offerId,
+            fullItem: newItem
+          });
+          alert("Error: Product data is incomplete. Please refresh the page.");
+          return;
+        }
 
-  // ✅ FIX: Strict Validation before any processing
-  if (!newItem.variantId || !newItem.offerId) {
-    console.error("❌ CRITICAL: Missing IDs in addItem", {
-      variantId: newItem.variantId,
-      offerId: newItem.offerId,
-      fullItem: newItem
-    });
-    alert("Error: Product data is incomplete. Please refresh the page.");
-    return;
-  }
+        // 1. Optimistic Update
+        const tempId = crypto.randomUUID();
+        set((state) => {
+          const existing = state.items.find(
+            (i) => i.productId === newItem.productId && i.variantId === newItem.variantId && i.offerId === newItem.offerId
+          );
 
-  // 1. Optimistic Update
-  const tempId = crypto.randomUUID();
-  set((state) => {
-    // ... (Your existing optimistic update logic) ...
-    const existing = state.items.find(
-      (i) => i.productId === newItem.productId && i.variantId === newItem.variantId && i.offerId === newItem.offerId
-    );
+          if (existing) {
+            const newQuantity = Math.min(existing.quantity + (newItem.quantity || 1), availableStock);
+            if (newQuantity <= existing.quantity) {
+              alert(`Sorry, only ${availableStock} items are available.`);
+              return state;
+            }
+            return {
+              items: state.items.map((i) =>
+                i.productId === newItem.productId && i.variantId === newItem.variantId && i.offerId === newItem.offerId
+                  ? { ...i, quantity: newQuantity, isSelected: true }
+                  : i
+              ),
+            };
+          }
 
-    if (existing) {
-      const newQuantity = Math.min(existing.quantity + (newItem.quantity || 1), availableStock);
-      if (newQuantity <= existing.quantity) {
-        alert(`Sorry, only ${availableStock} items are available.`);
-        return state;
-      }
-      return {
-        items: state.items.map((i) =>
-          i.productId === newItem.productId && i.variantId === newItem.variantId && i.offerId === newItem.offerId
-            ? { ...i, quantity: newQuantity, isSelected: true }
-            : i
-        ),
-      };
-    }
+          return { 
+            items: [
+              ...state.items, 
+              { 
+                ...newItem, 
+                id: tempId, 
+                quantity: Math.min(newItem.quantity || 1, availableStock), 
+                isSelected: true,
+                stockQuantity: availableStock
+              } 
+            ] 
+          };
+        });
 
-    return { 
-      items: [
-        ...state.items, 
-        { 
-          ...newItem, 
-          id: tempId, 
-          quantity: Math.min(newItem.quantity || 1, availableStock), 
-          isSelected: true,
-          stockQuantity: availableStock
-        } 
-      ] 
-    };
-  });
+        // 2. Sync to DB
+        try {
+          const res = await fetch("/api/cart", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productId: newItem.productId,
+              variantId: newItem.variantId,
+              offerId: newItem.offerId,
+              quantity: Math.min(newItem.quantity || 1, availableStock),
+            }),
+          });
 
-  // 2. Sync to DB when the user is authenticated.
-  // Guest cart items remain in Zustand/localStorage.
-  try {
-    console.log("📤 Sending to Cart API:", {
-      variantId: newItem.variantId,
-      offerId: newItem.offerId,
-      quantity: Math.min(newItem.quantity || 1, availableStock),
-    });
+          if (res.status === 401) {
+            console.log("Guest cart saved locally; database sync skipped.");
+            return;
+          }
 
-    const res = await fetch("/api/cart", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        productId: newItem.productId,
-        variantId: newItem.variantId,
-        offerId: newItem.offerId,
-        quantity: Math.min(newItem.quantity || 1, availableStock),
-      }),
-    });
+          const contentType = res.headers.get("content-type");
+          const data = contentType?.includes("application/json")
+            ? await res.json()
+            : null;
 
-    // Guests are allowed to use their locally persisted cart.
-    // A 401 means the database sync was skipped, not that the
-    // local cart addition failed.
-    if (res.status === 401) {
-      console.log("Guest cart saved locally; database sync skipped.");
-      return;
-    }
+          if (!res.ok) {
+            console.error("Cart API Error:", { status: res.status, data });
+            return;
+          }
 
-    const contentType = res.headers.get("content-type");
-    const data = contentType?.includes("application/json")
-      ? await res.json()
-      : null;
+          const realId = data?.item?.id || data?.cartItem?.id || data?.id;
 
-    if (!res.ok) {
-      console.error("Cart API Error:", {
-        status: res.status,
-        data,
-      });
+          if (realId) {
+            set((state) => ({
+              items: state.items.map((item) =>
+                item.id === tempId ? { ...item, id: realId } : item
+              ),
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to sync cart with DB; local cart preserved:", error);
+        }
+      },
 
-      // Keep the local cart intact. Database synchronization can
-      // be retried after the underlying API issue is corrected.
-      return;
-    }
-
-    const realId = data?.item?.id || data?.cartItem?.id || data?.id;
-
-    if (realId) {
-      set((state) => ({
-        items: state.items.map((item) =>
-          item.id === tempId ? { ...item, id: realId } : item
-        ),
-      }));
-
-      console.log("✅ Cart synced with DB ID:", realId);
-    }
-  } catch (error) {
-    console.error("Failed to sync cart with DB; local cart preserved:", error);
-  }
-
-},
       removeItem: async (id) => {
         const item = get().items.find((i) => i.id === id);
         set((state) => ({
@@ -262,6 +244,12 @@ addItem: async (newItem) => {
     }),
     {
       name: "ibuy-cart-storage",
+      // ✅ Add onRehydrateStorage to track when hydration is complete
+      onRehydrateStorage: (state) => {
+        return () => {
+          state.setHasHydrated(true);
+        };
+      },
     }
   )
 );
