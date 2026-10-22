@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { 
   Home, ShoppingBag, Tag, LayoutDashboard, Package, 
   Bell, MapPin, Settings, Store, LogOut, ShoppingCart, 
-  User, Shield, Heart, ChevronLeft, ChevronRight, Users, PackagePlus, X
+  User, Shield, Heart, ChevronLeft, ChevronRight, Users, PackagePlus,MessageSquare, X
 } from "lucide-react";
 
 const browseLinks = [
@@ -229,6 +229,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
                 <nav className="space-y-1">
                   {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
                   {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
+                  {isSeller && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
                   {isAdmin && renderLink({ href: "/admin", label: "Admin Dashboard", icon: Shield })}
                   {isSuperAdmin && renderLink({ href: "/admin/users", label: "User Management", icon: Users })}
                 </nav>
