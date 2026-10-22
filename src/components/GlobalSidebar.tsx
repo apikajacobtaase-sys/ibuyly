@@ -7,9 +7,9 @@ import { signOut, useSession } from "next-auth/react";
 import { useCartStore } from "@/store/cartStore";
 import { useState, useEffect } from "react";
 import { 
-  Home, ShoppingBag, Tag, LayoutDashboard, Package, 
+  Home, ShoppingBag, Tag, LayoutDashboard, Package,MessageSquare,
   Bell, MapPin, Settings, Store, LogOut, ShoppingCart, 
-  User, Shield, Heart, ChevronLeft, ChevronRight, Users, PackagePlus,MessageSquare, X
+  User, Shield, Heart, ChevronLeft, ChevronRight, Users, PackagePlus, X
 } from "lucide-react";
 
 const browseLinks = [
@@ -160,6 +160,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
               <div>
                 <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>
                 <nav className="space-y-1">
+                   {isSeller && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
                   {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
                   {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
                   {isAdmin && renderLink({ href: "/admin", label: "Admin Dashboard", icon: Shield })}
@@ -227,9 +228,9 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
               <div>
                 <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>
                 <nav className="space-y-1">
+                  {isSeller && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
                   {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
                   {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
-                  {isSeller && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
                   {isAdmin && renderLink({ href: "/admin", label: "Admin Dashboard", icon: Shield })}
                   {isSuperAdmin && renderLink({ href: "/admin/users", label: "User Management", icon: Users })}
                 </nav>

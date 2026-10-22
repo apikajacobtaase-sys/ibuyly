@@ -2,21 +2,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MessageSquare, Clock } from "lucide-react";
+import { Search, MessageSquare, Clock, ArrowLeft, MoreVertical } from "lucide-react";
 import Image from "next/image";
+import ChatBox from "@/components/chat/ChatBox";
 
 interface Conversation {
   id: string;
   buyer: { firstName: string; lastName: string; avatarUrl?: string | null };
   product: { title: string; images: { url: string }[] };
-  messages: { content: string; createdAt: string }[];
-  createdAt: string;
+  messages: { content: string; createdAt: string; senderId: string }[];
+  updatedAt: string;
 }
 
 export default function SellerInboxPage() {
+  const searchParams = useSearchParams();
+  const selectedId = searchParams.get("id");
+  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetch("/api/seller/chat")
@@ -27,65 +33,97 @@ export default function SellerInboxPage() {
       });
   }, []);
 
-  if (loading) return <div className="p-8 text-center">Loading inbox...</div>;
+  const filteredConvs = conversations.filter(c => 
+    c.buyer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.product?.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-        <MessageSquare className="w-6 h-6 text-green-600" />
-        Seller Inbox
-      </h1>
-
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        {conversations.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p>No conversations yet.</p>
+    <div className="h-[calc(100vh-80px)] flex bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm m-4 md:m-6">
+      
+      {/* LEFT: Conversation List */}
+      <div className={`w-full md:w-96 border-r border-gray-200 flex flex-col ${selectedId ? "hidden md:flex" : "flex"}`}>
+        
+        {/* Header & Search */}
+        <div className="p-4 border-b border-gray-100 bg-gray-50">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Messages</h2>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search messages..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
           </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {conversations.map((conv) => (
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="p-4 text-center text-gray-500">Loading...</div>
+          ) : filteredConvs.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">No conversations found.</div>
+          ) : (
+            filteredConvs.map((conv) => (
               <Link 
-                href={`/seller/inbox/${conv.id}`} 
+                href={`/seller/inbox?id=${conv.id}`} 
                 key={conv.id}
-                className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors group"
+                className={`flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors border-b border-gray-50 ${selectedId === conv.id ? "bg-green-50 border-l-4 border-l-green-600" : ""}`}
               >
-                {/* Buyer Avatar */}
-                <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
                   {conv.buyer.avatarUrl ? (
                     <Image src={conv.buyer.avatarUrl} alt="" fill className="object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-500 font-bold">
+                    <div className="w-full h-full flex items-center justify-center text-gray-500 font-bold text-lg">
                       {conv.buyer.firstName[0]}
                     </div>
                   )}
                 </div>
-
-                {/* Content */}
+                
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-gray-900 truncate">
-                      {conv.buyer.firstName} {conv.buyer.lastName}
-                    </h3>
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {new Date(conv.createdAt).toLocaleDateString()}
-                    </span>
+                  <div className="flex justify-between items-baseline mb-1">
+                    <h3 className="font-semibold text-gray-900 truncate">{conv.buyer.firstName}</h3>
+                    <span className="text-xs text-gray-400">{new Date(conv.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
-                  
-                  <p className="text-sm text-green-600 font-medium truncate mb-1">
-                    Re: {conv.product?.title || "General Inquiry"}
-                  </p>
-                  
+                  <p className="text-xs text-green-600 truncate mb-1">{conv.product?.title || "General Inquiry"}</p>
                   <p className="text-sm text-gray-500 truncate">
-                    {conv.messages[0]?.content || "No messages yet"}
+                    {conv.messages[0]?.senderId === "SELLER_ID" ? "You: " : ""}
+                    {conv.messages[0]?.content || "Start a conversation"}
                   </p>
                 </div>
               </Link>
-            ))}
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT: Chat Window */}
+      <div className={`flex-1 flex flex-col bg-gray-50 ${selectedId ? "flex" : "hidden md:flex"}`}>
+        {selectedId ? (
+          <>
+            {/* Mobile Back Button Header */}
+            <div className="md:hidden p-3 bg-white border-b border-gray-200 flex items-center gap-3">
+              <Link href="/seller/inbox" className="p-2 hover:bg-gray-100 rounded-full">
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </Link>
+              <span className="font-semibold text-gray-900">Chat</span>
+            </div>
+            
+            {/* Reuse our ChatBox component */}
+            <div className="flex-1 p-4">
+               <ChatBox conversationId={selectedId} initialMessages={[]} />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+            <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
+            <p>Select a conversation to start messaging</p>
           </div>
         )}
       </div>
+
     </div>
   );
 }
