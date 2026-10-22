@@ -1,13 +1,16 @@
  // src/app/seller/inbox/page.tsx
 "use client";
 
+// ✅ Force Dynamic Rendering
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Search, MessageSquare, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import ChatBox from "@/components/chat/ChatBox";
-export const dynamic = 'force-dynamic';
+
 interface Conversation {
   id: string;
   buyer: { firstName: string; lastName: string; avatarUrl?: string | null };
@@ -24,13 +27,14 @@ const formatTime = (dateString: string | undefined) => {
 };
 
 export default function SellerInboxPage() {
+  // ✅ Safe access to searchParams
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("id");
   
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [fullMessages, setFullMessages] = useState<any[]>([]); // ✅ Store full history
+  const [fullMessages, setFullMessages] = useState<any[]>([]);
 
   // 1. Fetch List of Conversations
   useEffect(() => {
@@ -38,6 +42,10 @@ export default function SellerInboxPage() {
       .then(res => res.json())
       .then(data => {
         setConversations(data.conversations || []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch chats", err);
         setLoading(false);
       });
   }, []);
