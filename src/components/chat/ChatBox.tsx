@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import PusherClient from "pusher-js";
 import { Send, X } from "lucide-react";
 import { useSession } from "next-auth/react";
-
+export const dynamic = 'force-dynamic'; 
 // ... interfaces ...
 
 export default function ChatBox({ conversationId, initialMessages }: { conversationId: string, initialMessages: any[] }) {
