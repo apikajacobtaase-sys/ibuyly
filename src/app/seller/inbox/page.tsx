@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Search, MessageSquare, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import ChatBox from "@/components/chat/ChatBox";
-
+export const dynamic = 'force-dynamic';
 interface Conversation {
   id: string;
   buyer: { firstName: string; lastName: string; avatarUrl?: string | null };
