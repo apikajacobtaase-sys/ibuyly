@@ -32,6 +32,8 @@
     "openai": "^7.32.0",
     "papaparse": "^5.7.0",
     "paystack-api": "^2.0.6",
+    "pusher": "^5.3.4",
+    "pusher-js": "^8.6.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.32.1",
