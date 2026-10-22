@@ -14,7 +14,7 @@ import StartChatButton from "@/components/chat/StartChatButton"; // ✅ Import t
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = await params;
   const slug = resolvedParams.slug;
-
+ 
   if (!slug) notFound();
 
   const session = await getServerSession(authOptions);
@@ -127,17 +127,20 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </div>
 
           <AddToCartButton 
-            product={{
-              id: product.id,
-              title: product.title,
-              slug: product.slug,
-              images: product.images.map(img => ({ url: img.url }))
-            }}
-            bestOfferId={bestOffer?.id}
-            bestVariantId={product.variants[0]?.id}
-            price={price}
-            stock={stock}
-          />
+  product={{
+    id: product.id,
+    title: product.title,
+    slug: product.slug,
+    images: product.images.map(img => ({ url: img.url }))
+  }}
+  bestOfferId={bestOffer?.id}
+  bestVariantId={product.variants[0]?.id}
+  price={price}
+  stock={stock}
+  // ✅ Pass these new props
+  sellerId={seller?.id}
+  sellerName={seller?.businessName}
+/>
         </div>
 
         <div className="space-y-6">

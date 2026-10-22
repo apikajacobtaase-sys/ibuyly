@@ -34,8 +34,11 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
   }
 }
 
-export async function POST(req: Request, { params }: { params: { slug: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
+    const resolvedParams = await params;
+    const slug = resolvedParams.slug;
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -43,8 +46,9 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     
     if (rating < 1 || rating > 5) return NextResponse.json({ error: "Invalid rating" }, { status: 400 });
 
-    const product = await db.product.findUnique({ where: { slug: params.slug } });
+    const product = await db.product.findUnique({ where: { slug: slug } }); // ✅ Use resolved slug
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+
 
     // ✅ Verification Logic: Check if user actually bought this product
     let isVerified = false;

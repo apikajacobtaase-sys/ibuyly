@@ -7,14 +7,29 @@ import { useCartStore } from "@/store/cartStore";
 import { triggerFlyToCart, getElementRect } from "@/lib/cartAnimation";
 
 interface Props {
-  product: any;
+  product: {
+    id: string;
+    title: string;
+    slug: string;
+    images: { url: string }[];
+  };
   bestOfferId?: string;
   bestVariantId?: string;
   price: number;
   stock: number;
+  sellerId?: string;   // ✅ Added
+  sellerName?: string; // ✅ Added
 }
 
-export default function AddToCartButton({ product, bestOfferId, bestVariantId, price, stock }: Props) {
+export default function AddToCartButton({ 
+  product, 
+  bestOfferId, 
+  bestVariantId, 
+  price, 
+  stock,
+  sellerId,
+  sellerName 
+}: Props) {
   const { addItem } = useCartStore();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -41,8 +56,8 @@ export default function AddToCartButton({ product, bestOfferId, bestVariantId, p
       price: price,
       imageUrl: product.images[0]?.url,
       stockQuantity: stock,
-      sellerId: product.variants[0]?.sellerOffers[0]?.sellerId || "unknown",
-      sellerName: product.variants[0]?.sellerOffers[0]?.seller?.businessName || "iBUY",
+      sellerId: sellerId || "unknown",   // ✅ Use prop directly
+      sellerName: sellerName || "iBUY",  // ✅ Use prop directly
       quantity: 1,
     });
 
