@@ -34,14 +34,19 @@ async function main() {
     if (dbRegion) {
       console.log(`✅ Created Region: ${region.name}`);
       
-      // The package doesn't have "Districts", so we create one main district per region
-      const districtName = `${region.name} Municipal`;
-      const dbDistrict = await prisma.district.create({
-        data: {
-          name: districtName,
-          regionId: dbRegion.id,
-        }
-      }).catch(() => null);
+   const districtName = `${region.name} Municipal`;
+
+const districtCode = `${region.isoCode}-MUNICIPAL`
+  .toUpperCase()
+  .replace(/[^A-Z0-9-]/g, "-");
+
+const dbDistrict = await prisma.district.create({
+  data: {
+    name: districtName,
+    code: districtCode,
+    regionId: dbRegion.id,
+  },
+}).catch(() => null);
 
       if (dbDistrict) {
         // Get all Cities for this region directly from the package

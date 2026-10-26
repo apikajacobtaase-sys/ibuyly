@@ -22,7 +22,9 @@ interface CartState {
   items: CartItem[];
   hasHydrated: boolean; // ✅ Add this
   setHasHydrated: (state: boolean) => void; // ✅ Add this
-  addItem: (item: Omit<CartItem, 'id' | 'isSelected'>) => Promise<void>;
+  addItem: (
+  item: Omit<CartItem, "id" | "isSelected">
+) => Promise<boolean>;
   removeItem: (id: string) => Promise<void>;
   updateQuantity: (id: string, quantity: number) => Promise<void>;
   toggleSelect: (id: string) => Promise<void>;
@@ -48,102 +50,189 @@ export const useCartStore = create<CartState>()(
       selectedTotalAmount: () => get().selectedItems().reduce((sum, item) => sum + item.price * item.quantity, 0),
       selectedTotalItems: () => get().selectedItems().reduce((sum, item) => sum + item.quantity, 0),
       totalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
+addItem: async (newItem) => {
+  const availableStock = newItem.stockQuantity ?? 0;
 
-      addItem: async (newItem) => {
-        const availableStock = newItem.stockQuantity ?? 0;
-        if (availableStock === 0) {
-          alert("This item is out of stock.");
-          return;
-        }
+  if (availableStock < 1) {
+    alert("This item is out of stock.");
+    return false;
+  }
 
-        if (!newItem.variantId || !newItem.offerId) {
-          console.error("❌ CRITICAL: Missing IDs in addItem", {
-            variantId: newItem.variantId,
-            offerId: newItem.offerId,
-            fullItem: newItem
-          });
-          alert("Error: Product data is incomplete. Please refresh the page.");
-          return;
-        }
+  if (!newItem.variantId || !newItem.offerId || !newItem.sellerId) {
+    console.error("Cannot add item: required seller offer data is missing.", {
+      variantId: newItem.variantId,
+      offerId: newItem.offerId,
+      sellerId: newItem.sellerId,
+    });
 
-        // 1. Optimistic Update
-        const tempId = crypto.randomUUID();
-        set((state) => {
-          const existing = state.items.find(
-            (i) => i.productId === newItem.productId && i.variantId === newItem.variantId && i.offerId === newItem.offerId
+    alert("Product information is incomplete. Please refresh and try again.");
+    return false;
+  }
+
+  const previousItems = get().items;
+  const tempId = crypto.randomUUID();
+
+  const existingItem = previousItems.find(
+    (item) =>
+      item.productId === newItem.productId &&
+      item.variantId === newItem.variantId &&
+      item.offerId === newItem.offerId
+  );
+
+  const requestedQuantity = Math.max(1, newItem.quantity || 1);
+
+  const nextQuantity = Math.min(
+    (existingItem?.quantity ?? 0) + requestedQuantity,
+    availableStock
+  );
+
+  if (existingItem && nextQuantity <= existingItem.quantity) {
+    alert(`Sorry, only ${availableStock} items are available.`);
+    return false;
+  }
+
+  // Save the previous state so a rejected request can be rolled back.
+  const optimisticItems = existingItem
+    ? previousItems.map((item) =>
+        item.id === existingItem.id
+          ? {
+              ...item,
+              quantity: nextQuantity,
+              stockQuantity: availableStock,
+              isSelected: true,
+            }
+          : item
+      )
+    : [
+        ...previousItems,
+        {
+          ...newItem,
+          id: tempId,
+          quantity: Math.min(requestedQuantity, availableStock),
+          stockQuantity: availableStock,
+          isSelected: true,
+        },
+      ];
+
+  // Optimistically update the UI.
+  set({ items: optimisticItems });
+
+  try {
+    const res = await fetch("/api/cart", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        productId: newItem.productId,
+        variantId: newItem.variantId,
+        offerId: newItem.offerId,
+        quantity: Math.min(requestedQuantity, availableStock),
+      }),
+    });
+
+    const contentType = res.headers.get("content-type");
+
+    const data = contentType?.includes("application/json")
+      ? await res.json()
+      : null;
+
+    if (!res.ok) {
+      console.error("Cart API rejected the item:", {
+        status: res.status,
+        data,
+      });
+
+      // Roll back only if this operation's optimistic state
+      // is still present, avoiding overwriting a later cart change.
+      set((state) => {
+        const currentItems = state.items;
+
+        if (existingItem) {
+          const currentItem = currentItems.find(
+            (item) => item.id === existingItem.id
           );
 
-          if (existing) {
-            const newQuantity = Math.min(existing.quantity + (newItem.quantity || 1), availableStock);
-            if (newQuantity <= existing.quantity) {
-              alert(`Sorry, only ${availableStock} items are available.`);
-              return state;
-            }
-            return {
-              items: state.items.map((i) =>
-                i.productId === newItem.productId && i.variantId === newItem.variantId && i.offerId === newItem.offerId
-                  ? { ...i, quantity: newQuantity, isSelected: true }
-                  : i
-              ),
-            };
+          if (
+            currentItem &&
+            currentItem.quantity === nextQuantity &&
+            currentItem.stockQuantity === availableStock
+          ) {
+            return { items: previousItems };
           }
 
-          return { 
-            items: [
-              ...state.items, 
-              { 
-                ...newItem, 
-                id: tempId, 
-                quantity: Math.min(newItem.quantity || 1, availableStock), 
-                isSelected: true,
-                stockQuantity: availableStock
-              } 
-            ] 
-          };
-        });
-
-        // 2. Sync to DB
-        try {
-          const res = await fetch("/api/cart", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productId: newItem.productId,
-              variantId: newItem.variantId,
-              offerId: newItem.offerId,
-              quantity: Math.min(newItem.quantity || 1, availableStock),
-            }),
-          });
-
-          if (res.status === 401) {
-            console.log("Guest cart saved locally; database sync skipped.");
-            return;
-          }
-
-          const contentType = res.headers.get("content-type");
-          const data = contentType?.includes("application/json")
-            ? await res.json()
-            : null;
-
-          if (!res.ok) {
-            console.error("Cart API Error:", { status: res.status, data });
-            return;
-          }
-
-          const realId = data?.item?.id || data?.cartItem?.id || data?.id;
-
-          if (realId) {
-            set((state) => ({
-              items: state.items.map((item) =>
-                item.id === tempId ? { ...item, id: realId } : item
-              ),
-            }));
-          }
-        } catch (error) {
-          console.error("Failed to sync cart with DB; local cart preserved:", error);
+          return state;
         }
-      },
 
+        const stillPresent = currentItems.some(
+          (item) => item.id === tempId
+        );
+
+        return stillPresent
+          ? {
+              items: currentItems.filter(
+                (item) => item.id !== tempId
+              ),
+            }
+          : state;
+      });
+
+      return false;
+    }
+
+    const realId = data?.item?.id ?? data?.cartItem?.id ?? data?.id;
+
+    if (realId && !existingItem) {
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === tempId
+            ? { ...item, id: realId }
+            : item
+        ),
+      }));
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Failed to sync cart with the server:", error);
+
+    // A network failure does not confirm that the server rejected
+    // the request. Roll back the optimistic change and report failure.
+    set((state) => {
+      const currentItems = state.items;
+
+      if (existingItem) {
+        const currentItem = currentItems.find(
+          (item) => item.id === existingItem.id
+        );
+
+        if (
+          currentItem &&
+          currentItem.quantity === nextQuantity &&
+          currentItem.stockQuantity === availableStock
+        ) {
+          return { items: previousItems };
+        }
+
+        return state;
+      }
+
+      const stillPresent = currentItems.some(
+        (item) => item.id === tempId
+      );
+
+      return stillPresent
+        ? {
+            items: currentItems.filter(
+              (item) => item.id !== tempId
+            ),
+          }
+        : state;
+    });
+
+    return false;
+  }
+},
       removeItem: async (id) => {
         const item = get().items.find((i) => i.id === id);
         set((state) => ({

@@ -1,4 +1,6 @@
+
 // src/app/api/cart/merge/route.ts
+
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
@@ -10,16 +12,21 @@ const MergeCartSchema = z.object({
     z.object({
       productId: z.string().cuid(),
       variantId: z.string().cuid(),
-      quantity: z.number().int().positive(),
+      offerId: z.string().cuid(),
+      quantity: z.number().int().positive().max(100),
     })
-  ),
+  ).max(200),
 });
 
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const body = await req.json();
@@ -27,7 +34,10 @@ export async function POST(req: Request) {
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: "Invalid cart data", details: validation.error.flatten() },
+        {
+          error: "Invalid cart data",
+          details: validation.error.flatten(),
+        },
         { status: 400 }
       );
     }
@@ -35,120 +45,184 @@ export async function POST(req: Request) {
     const { guestCart } = validation.data;
 
     if (guestCart.length === 0) {
-      return NextResponse.json({ success: true, merged: false, message: "Guest cart is empty" });
+      return NextResponse.json({
+        success: true,
+        merged: false,
+        itemCount: 0,
+        skippedCount: 0,
+        message: "Guest cart is empty",
+      });
     }
 
-    // Get user's existing cart
-    let userCart = await db.cart.findUnique({
-      where: { userId: session.user.id },
-      include: {
-        items: {
+    // Combine duplicate entries for the same seller offer.
+    const groupedItems = new Map<
+      string,
+      {
+        productId: string;
+        variantId: string;
+        offerId: string;
+        quantity: number;
+      }
+    >();
+
+    for (const item of guestCart) {
+      const key = `${item.offerId}:${item.variantId}`;
+      const existing = groupedItems.get(key);
+
+      if (existing) {
+        existing.quantity = Math.min(
+          existing.quantity + item.quantity,
+          100
+        );
+      } else {
+        groupedItems.set(key, { ...item });
+      }
+    }
+
+    const itemsToMerge = [...groupedItems.values()];
+
+    const result = await db.$transaction(
+      async (tx) => {
+        let userCart = await tx.cart.findUnique({
+          where: { userId: session.user.id },
+          select: { id: true },
+        });
+
+        if (!userCart) {
+          userCart = await tx.cart.create({
+            data: { userId: session.user.id },
+            select: { id: true },
+          });
+        }
+
+        const offerIds = [
+          ...new Set(itemsToMerge.map((item) => item.offerId)),
+        ];
+
+        const variantIds = [
+          ...new Set(itemsToMerge.map((item) => item.variantId)),
+        ];
+
+        // Fetch all relevant offers in one database query.
+        const offers = await tx.sellerOffer.findMany({
+          where: {
+            id: { in: offerIds },
+          },
           include: {
             variant: {
               include: {
-                product: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    // Create cart if it doesn't exist
-    if (!userCart) {
-      userCart = await db.cart.create({
-        data: {
-          userId: session.user.id,
-          items: { create: [] },
-        },
-        include: {
-          items: {
-            include: {
-              variant: {
-                include: {
-                  product: true,
+                product: {
+                  select: {
+                    id: true,
+                    status: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
-    }
-
-    // Merge logic
-    const mergedItems: Array<{
-      variantId: string;
-      quantity: number;
-    }> = [];
-
-    for (const guestItem of guestCart) {
-      // Check if product/variant exists and is active
-      const variant = await db.productVariant.findUnique({
-        where: { id: guestItem.variantId },
-        include: { product: true },
-      });
-
-      if (!variant || !variant.isActive || variant.product.status !== "ACTIVE") {
-        continue; // Skip unavailable items
-      }
-
-      // Check if item already exists in user's cart
-      const existingItem = userCart.items.find(
-        (item) => item.variantId === guestItem.variantId
-      );
-
-      if (existingItem) {
-        // Combine quantities, but cap at stock
-        const combinedQty = existingItem.quantity + guestItem.quantity;
-        const finalQty = Math.min(combinedQty, variant.stockQuantity);
-        
-        if (finalQty > 0) {
-          mergedItems.push({
-            variantId: guestItem.variantId,
-            quantity: finalQty,
-          });
-        }
-      } else {
-        // Add new item, capped at stock
-        const finalQty = Math.min(guestItem.quantity, variant.stockQuantity);
-        if (finalQty > 0) {
-          mergedItems.push({
-            variantId: guestItem.variantId,
-            quantity: finalQty,
-          });
-        }
-      }
-    }
-
-    // Update cart items atomically
-    await db.$transaction(async (tx) => {
-      // Delete existing items
-      await tx.cartItem.deleteMany({
-        where: { cartId: userCart!.id },
-      });
-
-      // Create merged items
-      if (mergedItems.length > 0) {
-        await tx.cartItem.createMany({
-          data: mergedItems.map((item) => ({
-            cartId: userCart!.id,
-            variantId: item.variantId,
-            quantity: item.quantity,
-          })),
         });
+
+        const offerById = new Map(
+          offers.map((offer) => [offer.id, offer])
+        );
+
+        // Fetch existing cart entries in one query.
+        const existingItems = await tx.cartItem.findMany({
+          where: {
+            cartId: userCart.id,
+            variantId: { in: variantIds },
+          },
+        });
+
+        const existingByKey = new Map(
+          existingItems.map((item) => [
+            `${item.offerId}:${item.variantId}`,
+            item,
+          ])
+        );
+
+        let mergedCount = 0;
+        let skippedCount = 0;
+
+        for (const guestItem of itemsToMerge) {
+          const offer = offerById.get(guestItem.offerId);
+
+          // Validate the exact product, variant and seller offer.
+          if (
+            !offer ||
+            offer.variantId !== guestItem.variantId ||
+            offer.variant.productId !== guestItem.productId ||
+            offer.status !== "ACTIVE" ||
+            !offer.variant.isActive ||
+            offer.variant.product.status !== "ACTIVE" ||
+            offer.stockQuantity <= 0
+          ) {
+            skippedCount++;
+            continue;
+          }
+
+          const key = `${guestItem.offerId}:${guestItem.variantId}`;
+          const existingItem = existingByKey.get(key);
+
+          const finalQuantity = Math.min(
+            (existingItem?.quantity ?? 0) + guestItem.quantity,
+            offer.stockQuantity
+          );
+
+          if (finalQuantity <= 0) {
+            skippedCount++;
+            continue;
+          }
+
+          if (existingItem) {
+            await tx.cartItem.update({
+              where: { id: existingItem.id },
+              data: {
+                quantity: finalQuantity,
+                isSelected: true,
+              },
+            });
+          } else {
+            const createdItem = await tx.cartItem.create({
+              data: {
+                cartId: userCart.id,
+                variantId: guestItem.variantId,
+                offerId: guestItem.offerId,
+                quantity: finalQuantity,
+                isSelected: true,
+              },
+            });
+
+            // Keep the in-memory map in sync with writes.
+            existingByKey.set(key, createdItem);
+          }
+
+          mergedCount++;
+        }
+
+        return {
+          mergedCount,
+          skippedCount,
+        };
+      },
+      {
+        maxWait: 5000,
+        timeout: 15000,
       }
-    });
+    );
 
     return NextResponse.json({
       success: true,
-      merged: true,
-      itemCount: mergedItems.length,
-      message: `Cart merged successfully. ${mergedItems.length} item${mergedItems.length !== 1 ? "s" : ""} in your cart.`,
+      merged: result.mergedCount > 0,
+      itemCount: result.mergedCount,
+      skippedCount: result.skippedCount,
+      message: "Cart merge completed.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Cart merge error:", error);
+
     return NextResponse.json(
-      { error: error.message || "Failed to merge cart" },
+      { error: "Failed to merge cart" },
       { status: 500 }
     );
   }

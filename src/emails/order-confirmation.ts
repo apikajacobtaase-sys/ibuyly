@@ -16,6 +16,11 @@ export function getOrderConfirmationEmail(params: {
 }): string {
   const { customerName, orderId, items, totalAmount, shippingAddress } = params;
   const shortOrderId = orderId.slice(-8).toUpperCase();
+  const appUrl = (
+  process.env.NEXTAUTH_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "https://ibuyly.vercel.app"
+).replace(/\/+$/, "");
  // âœ… NUCLEAR FIX: Hardcode the live Vercel URL to guarantee no localhost fallback
   const itemsHtml = items.map(item => `
     <tr>

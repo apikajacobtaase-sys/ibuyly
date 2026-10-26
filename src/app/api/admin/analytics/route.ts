@@ -62,15 +62,19 @@ export async function GET() {
       dayEntry.gmv += orderTotal;
 
       for (const item of order.items) {
-        const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
-        const itemTotal = price * item.quantity;
+      const price = Number(item.price.toString());
+const itemTotal = price * item.quantity;
         
         // Approximate revenue (use 5% default commission)
         dayEntry.revenue += itemTotal * 0.05;
 
         // Track seller revenue
-        const currentSellerRev = sellerRevenue.get(item.sellerId) || 0;
-        sellerRevenue.set(item.sellerId, currentSellerRev + itemTotal);
+     const sellerId = item.sellerId;
+
+if (sellerId) {
+  const currentSellerRev = sellerRevenue.get(sellerId) || 0;
+  sellerRevenue.set(sellerId, currentSellerRev + itemTotal);
+}
 
         // Track product revenue
         const currentProduct = productRevenue.get(item.variantId) || {

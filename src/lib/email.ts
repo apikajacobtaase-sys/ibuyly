@@ -8,24 +8,58 @@ interface SendEmailOptions {
   subject: string;
   html: string;
 }
-
-export async function sendEmail({ to, subject, html }: SendEmailOptions) {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+}: SendEmailOptions) {
   try {
-    const fromEmail = process.env.FROM_EMAIL || "iBUY <onboarding@resend.dev>";
-    
-    const data = await resend.emails.send({
+    const fromEmail =
+      process.env.FROM_EMAIL || "iBUY <onboarding@resend.dev>";
+
+    const { data, error } = await resend.emails.send({
       from: fromEmail,
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
     });
 
-    console.log("✅ Email sent successfully:", data.id);
-    return { success: true, id: data.id };
-  } catch (error: any) {
-    console.error("🚨 Failed to send email:", error);
-    // Return success: false but don't throw, so payment verification doesn't crash if email fails
-    return { success: false, error: error.message };
+    if (error) {
+      console.error("Email delivery failed:", error.message);
+
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    if (!data?.id) {
+      console.error("Email provider returned no email ID.");
+
+      return {
+        success: false,
+        error: "Email provider returned no confirmation ID",
+      };
+    }
+
+    console.log("Email accepted by Resend:", data.id);
+
+    return {
+      success: true,
+      id: data.id,
+    };
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "An unexpected email error occurred";
+
+    console.error("Email sending failed:", message);
+
+    return {
+      success: false,
+      error: message,
+    };
   }
 }
 
@@ -211,5 +245,72 @@ export async function sendDeliveryConfirmationEmail({
     to, 
     subject: `Your order #${orderId.slice(-8).toUpperCase()} has been delivered! ✅`, 
     html 
+  });
+}
+
+export async function sendSellerApplicationEmail({
+  to,
+  businessName,
+  status,
+  reason,
+}: {
+  to: string;
+  businessName: string;
+  status: "APPROVED" | "REJECTED" | "MORE_INFORMATION_REQUIRED";
+  reason?: string;
+}) {
+  const messages = {
+    APPROVED: {
+      subject: "Your iBUY Seller Application Has Been Approved",
+      heading: "Congratulations! Your application is approved.",
+      message:
+        "Your seller application has been approved. You can now proceed with setting up your seller account.",
+    },
+    REJECTED: {
+      subject: "Update on Your iBUY Seller Application",
+      heading: "Your application was not approved.",
+      message:
+        "Unfortunately, we are unable to approve your seller application at this time.",
+    },
+    MORE_INFORMATION_REQUIRED: {
+      subject: "Additional Information Required for Your iBUY Application",
+      heading: "We need additional information.",
+      message:
+        "Please review the additional information requested by our team and provide the necessary details.",
+    },
+  } as const;
+
+  const notification = messages[status];
+
+  const escapeHtml = (value: string) =>
+    value.replace(/[&<>"']/g, (character) => {
+      const entities: Record<string, string> = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      };
+
+      return entities[character];
+    });
+
+  const reasonHtml = reason
+    ? `<p><strong>Additional details:</strong> ${escapeHtml(reason)}</p>`
+    : "";
+
+  return sendEmail({
+    to,
+    subject: notification.subject,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #111827;">
+        <h2>${notification.heading}</h2>
+        <p>Hello ${escapeHtml(businessName)},</p>
+        <p>${notification.message}</p>
+        ${reasonHtml}
+        <p>Thank you for choosing iBUY.</p>
+        <p>The iBUY Team</p>
+      </div>
+    `,
   });
 }

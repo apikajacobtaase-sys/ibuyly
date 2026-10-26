@@ -38,10 +38,10 @@ export default function CheckoutEntry() {
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {cartItems.slice(0, 3).map((item) => (
                 <div key={item.id} className="flex items-center gap-3">
-                  {item.image ? (
+                  {item.imageUrl ? (
                     <img
-                      src={item.image}
-                      alt={item.name}
+                      src={item.imageUrl}
+                      alt={item.title}
                       className="w-16 h-16 object-cover rounded-lg border border-gray-200"
                     />
                   ) : (
@@ -51,7 +51,7 @@ export default function CheckoutEntry() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
-                      {item.name}
+                      {item.title}
                     </p>
                     <p className="text-xs text-gray-500">
                       Qty: {item.quantity}

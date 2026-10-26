@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     }
 
     for (const item of orderItems) {
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+       const price = Number(item.price.toString());
       const itemTotal = price * item.quantity;
       const orderDate = item.order.createdAt.toISOString().split("T")[0];
       
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
     // Top products by revenue
     const productRevenue = new Map<string, { title: string; slug: string; quantity: number; revenue: number }>();
     for (const item of orderItems) {
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+      const price = Number(item.price.toString());
       const existing = productRevenue.get(item.variantId) || {
         title: item.title,
         slug: "",
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
 
     // Summary stats
     const totalRevenue = orderItems.reduce((sum, item) => {
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+      const price = Number(item.price.toString());
       return sum + price * item.quantity;
     }, 0);
 

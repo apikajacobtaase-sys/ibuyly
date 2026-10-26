@@ -31,8 +31,16 @@ const [orders, total] = await Promise.all([
   db.order.findMany({
     where: whereClause,
     // ✅ REMOVE any 'select' here if it exists. Use 'include' for relations.
-    include: {
-      shippingAddress: {
+   include: {
+  payment: {
+    select: {
+      status: true,
+      paymentMethod: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  shippingAddress: {
         select: {
           recipientName: true,
           phone: true,
@@ -106,14 +114,31 @@ const formattedOrders = orders.map((order) => {
     (item) => item.status === "DELIVERED" && !reviewedOrderIds.has(order.id)
   );
 
-  return {
+    return {
     id: order.id,
     status: order.status,
-    paidAt: order.paidAt, // ✅ Now available because we didn't restrict the top-level select
-    deliveredAt: order.deliveredAt,
-    cancelledAt: order.cancelledAt, // ✅ Now available
-    cancellationReason: order.cancellationReason, // ✅ Now available
-    paymentMethod: order.paymentMethod, // ✅ Now available
+
+    // Payment information is stored in the related Payment record.
+  paidAt:
+  order.payment?.status === "SUCCESSFUL"
+    ? order.payment.updatedAt
+    : null,
+
+deliveredAt:
+  order.items.length > 0 &&
+  order.items.every((item) => item.status === "DELIVERED")
+    ? order.items.reduce<Date | null>((latest, item) => {
+        if (!item.deliveredAt) return latest;
+        if (!latest || item.deliveredAt > latest) {
+          return item.deliveredAt;
+        }
+        return latest;
+      }, null)
+    : null,
+
+cancelledAt: null,
+cancellationReason: null,
+paymentMethod: order.payment?.paymentMethod ?? null,
     totalAmount: Number(order.totalAmount),
     deliveryFee: Number(order.deliveryFee),
     

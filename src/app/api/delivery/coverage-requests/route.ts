@@ -47,26 +47,60 @@ export async function POST(req: Request) {
     }
 
     // 🛡️ USE UPSERT to prevent Unique Constraint Violations during race conditions
-    const result = await db.deliveryCoverageRequest.upsert({
-      where: {
-        // This matches your @@unique([regionId, districtId, localityId]) constraint
-        regionId_districtId_localityId: {
-          regionId,
-          districtId,
-          localityId: localityId || null,
-        },
-      },
-      update: {
-        requestCount: { increment: 1 },
-        lastRequestedAt: new Date(),
-        userId: userId || undefined,
-        email: userEmail || undefined,
-        notes: notes || undefined,
-      },
-      create: {
+    let result;
+
+const requestData = {
+  requestCount: { increment: 1 },
+  lastRequestedAt: new Date(),
+  userId: userId || undefined,
+  email: userEmail || undefined,
+  notes: notes || undefined,
+};
+
+if (localityId) {
+  // A specific locality has a non-null ID, so use the compound unique key.
+  result = await db.deliveryCoverageRequest.upsert({
+    where: {
+      regionId_districtId_localityId: {
         regionId,
         districtId,
-        localityId: localityId || null,
+        localityId,
+      },
+    },
+    update: requestData,
+    create: {
+      regionId,
+      districtId,
+      localityId,
+      userId,
+      email: userEmail,
+      notes: notes || null,
+      status: "NEW",
+      requestCount: 1,
+      lastRequestedAt: new Date(),
+    },
+  });
+} else {
+  // NULL locality IDs cannot be used in Prisma's compound unique selector.
+  const existing = await db.deliveryCoverageRequest.findFirst({
+    where: {
+      regionId,
+      districtId,
+      localityId: null,
+    },
+  });
+
+  if (existing) {
+    result = await db.deliveryCoverageRequest.update({
+      where: { id: existing.id },
+      data: requestData,
+    });
+  } else {
+    result = await db.deliveryCoverageRequest.create({
+      data: {
+        regionId,
+        districtId,
+        localityId: null,
         userId,
         email: userEmail,
         notes: notes || null,
@@ -75,6 +109,8 @@ export async function POST(req: Request) {
         lastRequestedAt: new Date(),
       },
     });
+  }
+}
 
     return NextResponse.json({ 
       success: true, 

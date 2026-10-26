@@ -34,12 +34,12 @@ interface FinanceData {
   grossSales: number;
   marketplaceFees: number;
   netBalance: number;
+  availableBalance: number;
   totalPaidOut: number;
   currency: string;
   records: Transaction[];
   pendingPayouts: Payout[];
 }
-
 export default function SellerFinancesPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -228,13 +228,13 @@ export default function SellerFinancesPage() {
                 name="amount"
                 step="0.01"
                 min="0.01"
-                max={data.netBalance || 0}
+                max={data.availableBalance ?? data.netBalance ?? 0}
                 required
                 placeholder="Enter amount"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Available: GH₵ {(data.netBalance || 0).toFixed(2)}
+                Available: GH₵ {(data.availableBalance ?? data.netBalance ?? 0).toFixed(2)}
               </p>
             </div>
 

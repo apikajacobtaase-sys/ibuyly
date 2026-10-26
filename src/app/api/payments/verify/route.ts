@@ -1,36 +1,79 @@
  // src/app/api/payments/verify/route.ts
+
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type PaystackVerificationResponse = {
+  status?: boolean;
+  message?: string;
+  data?: {
+    reference?: string;
+    status?: string;
+    amount?: number;
+    currency?: string;
+    [key: string]: unknown;
+  };
+};
+
+type SellerTotal = {
+  grossCents: number;
+  commissionRate: number;
+};
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function toCents(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error("Invalid monetary value.");
+  }
+
+  return Math.round(value * 100);
+}
+
 export async function POST(req: Request) {
   try {
-    // 1. Validate the request
-    const body = await req.json();
-    const reference = body.reference;
+    // 1. Validate the request body.
+    let body: unknown;
 
-    if (typeof reference !== "string" || reference.trim().length === 0) {
-      return NextResponse.json({ error: "A valid payment reference is required." }, { status: 400 });
+    try {
+      body = await req.json();
+    } catch {
+      return jsonError("A valid JSON request body is required.", 400);
     }
 
-    const paymentReference = reference.trim();
-    console.log(`[PAYMENT VERIFY] Starting verification: ${paymentReference}`);
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("reference" in body) ||
+      typeof body.reference !== "string" ||
+      body.reference.trim().length === 0 ||
+      body.reference.length > 200
+    ) {
+      return jsonError(
+        "A valid payment reference is required.",
+        400
+      );
+    }
 
-    // 2. Find the existing order and payment
+    const paymentReference = body.reference.trim();
+
+    // 2. Find the order and its payment.
     const order = await db.order.findUnique({
-      where: { paymentReference },
+      where: {
+        paymentReference,
+      },
       include: {
         payment: true,
         items: {
           include: {
-            variant: {
+            offer: {
               include: {
-                product: {
-                  include: {
-                    seller: true,
-                  },
-                },
+                seller: true,
               },
             },
           },
@@ -39,16 +82,21 @@ export async function POST(req: Request) {
     });
 
     if (!order) {
-      return NextResponse.json({ error: "Order not found for this payment reference." }, { status: 404 });
+      return jsonError(
+        "Order not found for this payment reference.",
+        404
+      );
     }
 
     if (!order.payment) {
-      return NextResponse.json({ error: "No payment record exists for this order." }, { status: 409 });
+      return jsonError(
+        "No payment record exists for this order.",
+        409
+      );
     }
 
-    // 3. Idempotency Check: If already successful, return success immediately
+    // 3. Idempotency check.
     if (order.payment.status === "SUCCESSFUL") {
-      console.log(`[PAYMENT VERIFY] Already verified: ${order.id}`);
       return NextResponse.json({
         success: true,
         alreadyVerified: true,
@@ -58,124 +106,357 @@ export async function POST(req: Request) {
     }
 
     if (order.payment.status !== "PENDING") {
-      return NextResponse.json({ error: "This payment is no longer pending.", paymentStatus: order.payment.status }, { status: 409 });
+      return NextResponse.json(
+        {
+          error: "This payment is no longer pending.",
+          paymentStatus: order.payment.status,
+        },
+        { status: 409 }
+      );
     }
 
-    // 4. Verify with Paystack
+    if (order.status !== "PENDING") {
+      return jsonError(
+        "This order is no longer pending.",
+        409
+      );
+    }
+
+    // 4. Verify the transaction directly with Paystack.
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
     if (!secretKey) {
-      return NextResponse.json({ error: "Payment verification is temporarily unavailable." }, { status: 500 });
+      console.error(
+        "[PAYMENT VERIFY] PAYSTACK_SECRET_KEY is not configured."
+      );
+
+      return jsonError(
+        "Payment verification is temporarily unavailable.",
+        500
+      );
     }
 
-    const paystackResponse = await fetch(
-      `https://api.paystack.co/transaction/verify/${encodeURIComponent(paymentReference)}`,
-      {
-        method: "GET",
-        headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/json" },
-        cache: "no-store",
-        signal: AbortSignal.timeout(15000),
-      }
-    );
+    let paystackResponse: Response;
 
-    const paystackResult = await paystackResponse.json();
+    try {
+      paystackResponse = await fetch(
+        `https://api.paystack.co/transaction/verify/${encodeURIComponent(
+          paymentReference
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+    } catch {
+      // Do not change the payment state if Paystack cannot be reached.
+      return NextResponse.json(
+        {
+          error:
+            "Unable to reach Paystack. Please retry verification.",
+        },
+        { status: 503 }
+      );
+    }
 
-    if (!paystackResponse.ok || paystackResult.status !== true || !paystackResult.data) {
-      return NextResponse.json({ error: paystackResult.message || "Paystack could not verify this transaction." }, { status: 400 });
+    let paystackResult: PaystackVerificationResponse;
+
+    try {
+      paystackResult =
+        (await paystackResponse.json()) as PaystackVerificationResponse;
+    } catch {
+      return jsonError(
+        "Paystack returned an invalid verification response.",
+        502
+      );
+    }
+
+    if (
+      !paystackResponse.ok ||
+      paystackResult.status !== true ||
+      !paystackResult.data
+    ) {
+      // Do not mark the payment failed just because verification
+      // could not confirm it. The transaction may still be pending.
+      return NextResponse.json(
+        {
+          error:
+            "Paystack could not verify this transaction. Please retry.",
+        },
+        { status: 502 }
+      );
     }
 
     const transaction = paystackResult.data;
 
-    // 5. Validate Transaction Details
-    if (transaction.status !== "success") {
-      return NextResponse.json({ error: "Paystack has not marked this transaction successful." }, { status: 400 });
+    // 5. Validate every critical transaction field.
+    if (
+      transaction.status !== "success" ||
+      transaction.reference !== paymentReference
+    ) {
+      return jsonError(
+        "Paystack has not confirmed a successful matching transaction.",
+        400
+      );
     }
 
-    if (transaction.reference !== paymentReference) {
-      return NextResponse.json({ error: "The transaction reference does not match." }, { status: 400 });
+    if (
+      typeof transaction.amount !== "number" ||
+      !Number.isSafeInteger(transaction.amount) ||
+      transaction.amount <= 0
+    ) {
+      return jsonError(
+        "Paystack returned an invalid transaction amount.",
+        400
+      );
     }
 
-    // 6. Update Database in Transaction
-    await db.$transaction(async (tx) => {
-      // ✅ FIX: Use 'update' with specific ID instead of 'updateMany'
-      if (!order.payment?.id) throw new Error("Payment ID missing");
+    if (
+      typeof transaction.currency !== "string" ||
+      transaction.currency.trim().length === 0
+    ) {
+      return jsonError(
+        "Paystack returned an invalid transaction currency.",
+        400
+      );
+    }
 
-      await tx.payment.update({
-        where: { id: order.payment.id },
+    const expectedAmountCents = toCents(
+      order.payment.amount.toNumber()
+    );
+
+    if (transaction.amount !== expectedAmountCents) {
+      console.error(
+        `[PAYMENT VERIFY] Amount mismatch for order ${order.id}.`
+      );
+
+      return jsonError(
+        "The transaction amount does not match the order payment.",
+        400
+      );
+    }
+
+    if (
+      transaction.currency.toUpperCase() !==
+      order.payment.currency.toUpperCase()
+    ) {
+      console.error(
+        `[PAYMENT VERIFY] Currency mismatch for order ${order.id}.`
+      );
+
+      return jsonError(
+        "The transaction currency does not match the order payment.",
+        400
+      );
+    }
+
+    // Serialize the external response into a Prisma-compatible JSON value.
+    const responseJson = JSON.parse(
+      JSON.stringify(transaction)
+    ) as Prisma.InputJsonValue;
+
+    // 6. Atomically claim the pending payment and confirm the order.
+    //
+    // The webhook uses the same PENDING -> SUCCESSFUL transition.
+    // Only the request that successfully claims the payment may
+    // create seller financial records.
+    const result = await db.$transaction(async (tx) => {
+      const claim = await tx.payment.updateMany({
+        where: {
+          orderId: order.id,
+          status: "PENDING",
+        },
         data: {
           status: "SUCCESSFUL",
           providerTransactionId: paymentReference,
+          metadata: {
+            paystackResponse: responseJson,
+            verifiedAt: new Date().toISOString(),
+            verifiedVia: "verify",
+          },
         },
       });
 
-      await tx.order.update({
-        where: { id: order.id },
-        data: { status: "CONFIRMED" },
+      if (claim.count === 0) {
+        // The webhook or another verification request won the race.
+        return {
+          claimed: false,
+        };
+      }
+
+      const orderUpdate = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "CONFIRMED",
+        },
       });
 
-      // 7. Create Financial Records
-      const sellerTotals = new Map<string, { grossAmount: number; commissionRate: number }>();
+      if (orderUpdate.count !== 1) {
+        // Throwing rolls back the payment claim as well.
+        throw new Error(
+          `Could not confirm pending order ${order.id}.`
+        );
+      }
+
+      // 7. Aggregate sales by the actual seller offer.
+      const sellerTotals = new Map<string, SellerTotal>();
 
       for (const item of order.items) {
-        const seller = item.variant?.product?.seller;
-        if (!seller) continue;
-
-        const sellerId = seller.id;
-        const commissionRate = Number(seller.commissionRate.toString());
-        const lineTotal = Number(item.price.toString()) * item.quantity;
-
-        if (!sellerTotals.has(sellerId)) {
-          sellerTotals.set(sellerId, { grossAmount: 0, commissionRate });
+        if (!item.sellerId || !item.offerId || !item.offer) {
+          throw new Error(
+            `Order item ${item.id} is missing its seller offer.`
+          );
         }
-        const existing = sellerTotals.get(sellerId)!;
-        existing.grossAmount += lineTotal;
-      }
 
-      for (const [sellerId, data] of sellerTotals.entries()) {
-        const commissionAmount = (data.grossAmount * data.commissionRate) / 100;
-
-        // Check for existing records to prevent duplicates on retry
-        const existingSale = await tx.sellerFinancialRecord.findFirst({
-          where: { sellerId, orderId: order.id, type: "SALE" },
+        const offer = await tx.sellerOffer.findUnique({
+          where: {
+            id: item.offerId,
+          },
+          select: {
+            id: true,
+            sellerId: true,
+            seller: {
+              select: {
+                id: true,
+                commissionRate: true,
+              },
+            },
+          },
         });
 
-        if (!existingSale) {
-          await tx.sellerFinancialRecord.create({
-            data: {
-              sellerId,
-              orderId: order.id,
-              type: "SALE",
-              amount: Number(data.grossAmount.toFixed(2)),
-              currency: "GHS",
-              description: `Order #${order.id.slice(-8).toUpperCase()} - Gross sale`,
-            },
-          });
+        if (
+          !offer ||
+          offer.sellerId !== item.sellerId ||
+          offer.seller.id !== item.sellerId
+        ) {
+          throw new Error(
+            `Seller ownership validation failed for order item ${item.id}.`
+          );
         }
 
-        const existingFee = await tx.sellerFinancialRecord.findFirst({
-          where: { sellerId, orderId: order.id, type: "FEE" },
-        });
+        const unitPriceCents = toCents(item.price.toNumber());
+        const lineCents = unitPriceCents * item.quantity;
 
-        if (!existingFee) {
-          await tx.sellerFinancialRecord.create({
-            data: {
-              sellerId,
-              orderId: order.id,
-              type: "FEE",
-              amount: -Number(commissionAmount.toFixed(2)),
-              currency: "GHS",
-              description: `Platform commission (${data.commissionRate}%)`,
-            },
+        if (
+          !Number.isSafeInteger(lineCents) ||
+          lineCents < 0
+        ) {
+          throw new Error(
+            `Invalid line total for order item ${item.id}.`
+          );
+        }
+
+        const commissionRate = offer.seller.commissionRate.toNumber();
+        const existing = sellerTotals.get(item.sellerId);
+
+        if (existing) {
+          existing.grossCents += lineCents;
+
+          if (!Number.isSafeInteger(existing.grossCents)) {
+            throw new Error(
+              `Invalid aggregated seller total for ${item.sellerId}.`
+            );
+          }
+        } else {
+          sellerTotals.set(item.sellerId, {
+            grossCents: lineCents,
+            commissionRate,
           });
         }
       }
+
+      // 8. Create financial records within the same transaction.
+      for (const [sellerId, sellerData] of sellerTotals) {
+        const commissionCents = Math.round(
+          (sellerData.grossCents * sellerData.commissionRate) /
+            100
+        );
+
+        await tx.sellerFinancialRecord.create({
+          data: {
+            sellerId,
+            orderId: order.id,
+            type: "SALE",
+            amount: sellerData.grossCents / 100,
+            currency: order.payment!.currency,
+            description: `Order #${order.id
+              .slice(-8)
+              .toUpperCase()} - Gross sale`,
+          },
+        });
+
+        await tx.sellerFinancialRecord.create({
+          data: {
+            sellerId,
+            orderId: order.id,
+            type: "FEE",
+            amount: -commissionCents / 100,
+            currency: order.payment!.currency,
+            description: `Platform commission (${sellerData.commissionRate}%)`,
+          },
+        });
+      }
+
+      return {
+        claimed: true,
+      };
     });
 
-    console.log(`[PAYMENT VERIFY] Payment confirmed successfully: ${order.id}`);
-    return NextResponse.json({ success: true, orderId: order.id, message: "Payment verified and order confirmed." });
+    // 9. Handle a concurrent request safely.
+    if (!result.claimed) {
+      const latestPayment = await db.payment.findUnique({
+        where: {
+          orderId: order.id,
+        },
+        select: {
+          status: true,
+        },
+      });
 
+      if (latestPayment?.status === "SUCCESSFUL") {
+        return NextResponse.json({
+          success: true,
+          alreadyVerified: true,
+          orderId: order.id,
+          message: "Payment has already been verified.",
+        });
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            "The payment state changed during verification. Please check the order and retry if necessary.",
+          paymentStatus: latestPayment?.status ?? "UNKNOWN",
+        },
+        { status: 409 }
+      );
+    }
+
+    console.info(
+      `[PAYMENT VERIFY] Payment confirmed successfully for order ${order.id}.`
+    );
+
+    return NextResponse.json({
+      success: true,
+      alreadyVerified: false,
+      orderId: order.id,
+      message: "Payment verified and order confirmed.",
+    });
   } catch (error: unknown) {
+    // Log server-side details without exposing internal errors to clients.
     console.error("[PAYMENT VERIFY] Verification error:", error);
-    const message = error instanceof Error ? error.message : "An unexpected error occurred.";
-    return NextResponse.json({ error: "Payment verification failed.", details: process.env.NODE_ENV === "development" ? message : undefined }, { status: 500 });
+
+    return jsonError(
+      "Payment verification failed. Please retry or contact support.",
+      500
+    );
   }
 }

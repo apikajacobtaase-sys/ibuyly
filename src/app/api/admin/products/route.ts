@@ -35,7 +35,7 @@ export async function GET(req: Request) {
       id: p.id,
       title: p.title,
       status: p.status,
-      sellerName: item.offer?.seller?.businessName || "Seller information unavailable",
+      sellerName: p.seller?.businessName || "Seller information unavailable",
       categoryName: p.category?.name || "Uncategorized",
       price: p.variants[0]?.price ? Number(p.variants[0].price) : 0,
       imageUrl: p.images[0]?.url || null,

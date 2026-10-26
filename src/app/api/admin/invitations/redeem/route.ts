@@ -11,7 +11,12 @@ export async function POST(req: Request) {
     if (!session || !session.user) {
       return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
     }
-
+if (!session.user.email) {
+  return NextResponse.json(
+    { error: "Your account must have an email address to redeem this invitation." },
+    { status: 400 }
+  );
+}
     const { invitationId, rawToken } = await req.json();
 
     if (!invitationId || !rawToken) {
@@ -38,7 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "This invitation has already been used" }, { status: 403 });
     }
 
-    if (invitation.email.toLowerCase() !== session.user.email.toLowerCase()) {
+  if (invitation.email.toLowerCase() !== session.user.email.trim().toLowerCase()) {
       return NextResponse.json({ error: "This invitation was sent to a different email address" }, { status: 403 });
     }
 
@@ -51,12 +56,14 @@ export async function POST(req: Request) {
     // Redeem: Update user role and mark invitation as used
     await db.$transaction(async (tx) => {
       await tx.user.update({
-        where: { id: session.user.id },
-        data: { 
-          role: invitation.role as any,
-          redeemedInvitationId: invitation.id,
-        },
-      });
+  where: { id: session.user.id },
+  data: {
+    role: invitation.role as any,
+    redeemedInvitation: {
+      connect: { id: invitation.id },
+    },
+  },
+});
 
       await tx.adminInvitation.update({
         where: { id: invitationId },

@@ -42,13 +42,13 @@ export async function POST(req: Request) {
           return NextResponse.json({ reply: intent.clarificationQuestion, products: [], intent });
         }
       } catch (aiError) {
-        console.warn("⚠️ OpenAI failed, falling back to Smart Offline Mode:", aiError);
+        console.warn("âš ï¸ OpenAI failed, falling back to Smart Offline Mode:", aiError);
       }
     }
 
     // 2. SMART OFFLINE MODE: Extract intent using Regex/Keywords if OpenAI is unavailable
     if (!intent) {
-      console.log("🧠 Using Smart Offline Mode (Keyword & Budget Extraction)");
+      console.log("ðŸ§  Using Smart Offline Mode (Keyword & Budget Extraction)");
       
       const lowerMsg = message.toLowerCase();
       
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       const keywords = lowerMsg
         .replace(/[^\w\s]/gi, '')
         .split(' ')
-        .filter(word => word.length > 2 && !stopWords.includes(word) && !/^\d+$/.test(word));
+        .filter((word: string) => word.length > 2 && !stopWords.includes(word) && !/^\d+$/.test(word));
 
       intent = { category: null, maxPrice, keywords: keywords.length > 0 ? keywords : null, isOfflineMode: true };
     }
@@ -73,9 +73,18 @@ export async function POST(req: Request) {
       whereClause.category = { name: { contains: intent.category, mode: "insensitive" } };
     }
 
-    if (intent.maxPrice) {
-      whereClause.variants = { some: { price: { lte: intent.maxPrice } } };
-    }
+    whereClause.variants = {
+      some: {
+        isActive: true,
+        sellerOffers: {
+          some: {
+            status: "ACTIVE",
+            stockQuantity: { gt: 0 },
+            ...(intent.maxPrice ? { price: { lte: intent.maxPrice } } : {}),
+          },
+        },
+      },
+    };
 
     if (intent.keywords && intent.keywords.length > 0) {
       whereClause.OR = intent.keywords.map((keyword: string) => ({
@@ -91,37 +100,81 @@ export async function POST(req: Request) {
     const products = await db.product.findMany({
       where: whereClause,
       include: {
-        variants: { take: 1 },
+        variants: {
+          where: {
+            isActive: true,
+            sellerOffers: {
+              some: {
+                status: "ACTIVE",
+                stockQuantity: { gt: 0 },
+                ...(intent.maxPrice ? { price: { lte: intent.maxPrice } } : {}),
+              },
+            },
+          },
+          take: 1,
+          include: {
+            sellerOffers: {
+              where: {
+                status: "ACTIVE",
+                stockQuantity: { gt: 0 },
+                ...(intent.maxPrice ? { price: { lte: intent.maxPrice } } : {}),
+              },
+              take: 1,
+              orderBy: { price: "asc" },
+              include: {
+                seller: {
+                  select: {
+                    id: true,
+                    businessName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         images: { where: { isPrimary: true }, take: 1 },
         category: { select: { name: true } },
-        seller: { select: { businessName: true } }
+        seller: { select: { businessName: true } },
       },
       take: 6,
       orderBy: { createdAt: "desc" },
     });
 
-    const formattedProducts = products.map((p) => {
+    const formattedProducts = products.flatMap((p) => {
       const variant = p.variants[0];
-      return {
+      const offer = variant?.sellerOffers[0];
+
+      if (!variant || !offer || offer.stockQuantity < 1) {
+        return [];
+      }
+
+      return [{
         id: p.id,
         title: p.title,
         slug: p.slug,
         description: p.description,
-        price: variant?.price ? parseFloat(variant.price.toString()) : 0,
+        variantId: variant.id,
+        offerId: offer.id,
+        sellerId: offer.seller.id,
+        price: Number(offer.price),
         imageUrl: p.images[0]?.url || null,
         categoryName: p.category.name,
-        sellerName: p.seller.businessName,
-        stockQuantity: variant?.stockQuantity || 0,
-        variants: p.variants, // Keep for frontend compatibility
+        sellerName: offer.seller.businessName || "Independent Seller",
+        stockQuantity: offer.stockQuantity,
+        variants: [{
+          id: variant.id,
+          price: Number(offer.price),
+          stockQuantity: offer.stockQuantity,
+        }],
         images: p.images,
-        seller: p.seller
-      };
+        seller: offer.seller,
+      }];
     });
 
     // 5. Generate Reply
     let reply = "";
     if (formattedProducts.length > 0) {
-      const budgetText = intent.maxPrice ? ` under GH₵ ${intent.maxPrice}` : "";
+      const budgetText = intent.maxPrice ? ` under GHâ‚µ ${intent.maxPrice}` : "";
       reply = `I found ${formattedProducts.length} great option${formattedProducts.length > 1 ? 's' : ''} for you${budgetText}! Here are my top recommendations.`;
     } else {
       reply = `I couldn't find exact matches for that right now. Try broadening your search or adjusting your budget!`;
@@ -133,12 +186,16 @@ export async function POST(req: Request) {
       intent,
     });
 
-  } catch (error: any) {
-    console.error("❌ Concierge API Fatal Error:", error);
-    return NextResponse.json({
-      reply: "I'm having a little trouble searching the catalog right now. Please try again in a moment!",
-      products: [],
-      isFallback: true,
-    }, { status: 500 });
+  } catch (error: unknown) {
+    console.error("Concierge API Fatal Error:", error);
+
+    return NextResponse.json(
+      {
+        reply: "I'm having trouble searching the catalog right now. Please try again in a moment!",
+        products: [],
+        isFallback: true,
+      },
+      { status: 500 }
+    );
   }
 }

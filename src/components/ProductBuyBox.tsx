@@ -1,58 +1,93 @@
-"use client";
-
+﻿"use client";
 import { useState } from "react";
 import { ShoppingCart, Zap } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-
 interface ProductBuyBoxProps {
   productId: string;
   title: string;
+  slug?: string;
+  imageUrl?: string | null;
   variants: Array<{
     id: string;
     price: number | string;
     stockQuantity: number;
+    offerId?: string | null;
+    sellerId?: string | null;
+    sellerName?: string | null;
     attributes?: any;
   }>;
   sellerName: string;
 }
-
-export default function ProductBuyBox({ productId, title, variants, sellerName }: ProductBuyBoxProps) {
+export default function ProductBuyBox({
+  productId,
+  title,
+  slug,
+  imageUrl,
+  variants,
+  sellerName,
+}: ProductBuyBoxProps) {
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
-
-  const variant = variants[selectedVariantIndex] || variants[0];
-  const price = typeof variant.price === "string" ? parseFloat(variant.price) : variant.price;
-  const stock = variant.stockQuantity;
-
+  const variant = variants[selectedVariantIndex];
   const addItem = useCartStore((state) => state.addItem);
-
-  const handleAddToCart = () => {
-    if (stock <= 0) return;
-    addItem({
+  const price = variant
+    ? typeof variant.price === "string"
+      ? Number.parseFloat(variant.price)
+      : variant.price
+    : 0;
+  const stock = variant?.stockQuantity ?? 0;
+  const handleAddToCart = async () => {
+    if (!variant?.id || !variant.offerId || !variant.sellerId) {
+      alert(
+        "This product does not have a valid seller offer. Please try another product."
+      );
+      return;
+    }
+    if (stock < 1) {
+      alert("This item is out of stock.");
+      return;
+    }
+    if (quantity < 1 || quantity > stock) {
+      alert("Please select a valid quantity.");
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      alert("This product has an invalid price.");
+      return;
+    }
+    await addItem({
       productId,
+      variantId: variant.id,
+      offerId: variant.offerId,
       title,
       price,
       quantity,
-      sellerName,
+      imageUrl,
+      slug,
+      stockQuantity: stock,
+      sellerId: variant.sellerId,
+      sellerName: variant.sellerName?.trim() || sellerName,
     });
-    alert(`✅ Added ${quantity}x "${title}" to cart!`);
   };
-
   return (
     <div className="bg-ibuy-card border border-ibuy-border rounded-xl p-4 md:p-6 sticky top-24">
       <div className="mb-4">
         <p className="text-sm text-ibuy-text-secondary mb-1">Price</p>
         <div className="flex items-baseline gap-3 flex-wrap">
-          <span className="text-3xl font-bold text-ibuy-orange">GH₵ {price.toFixed(2)}</span>
+          <span className="text-3xl font-bold text-ibuy-orange">
+            GH₵ {price.toFixed(2)}
+          </span>
           {stock > 0 ? (
-            <span className="text-sm text-ibuy-success font-medium">In Stock ({stock} available)</span>
+            <span className="text-sm text-ibuy-success font-medium">
+              In Stock ({stock} available)
+            </span>
           ) : (
-            <span className="text-sm text-ibuy-error font-medium">Out of Stock</span>
+            <span className="text-sm text-ibuy-error font-medium">
+              Out of Stock
+            </span>
           )}
         </div>
       </div>
-
-      {/* Variant Selector */}
       {variants.length > 1 && (
         <div className="mb-4">
           <p className="text-sm font-medium text-ibuy-text mb-2">Options</p>
@@ -60,9 +95,10 @@ export default function ProductBuyBox({ productId, title, variants, sellerName }
             {variants.map((v, idx) => (
               <button
                 key={v.id}
+                type="button"
                 onClick={() => {
                   setSelectedVariantIndex(idx);
-                  setQuantity(1); // Reset quantity on variant change
+                  setQuantity(1);
                 }}
                 className={`px-4 py-2 rounded-lg border text-sm font-medium transition ${
                   selectedVariantIndex === idx
@@ -70,18 +106,19 @@ export default function ProductBuyBox({ productId, title, variants, sellerName }
                     : "border-ibuy-border text-ibuy-text hover:border-ibuy-orange"
                 }`}
               >
-                {v.attributes ? Object.values(v.attributes).join(" / ") : `Option ${idx + 1}`}
+                {v.attributes
+                  ? Object.values(v.attributes).join(" / ")
+                  : `Option ${idx + 1}`}
               </button>
             ))}
           </div>
         </div>
       )}
-
-      {/* Quantity Selector */}
       <div className="mb-6">
         <p className="text-sm font-medium text-ibuy-text mb-2">Quantity</p>
         <div className="flex items-center border border-ibuy-border rounded-lg w-fit">
           <button
+            type="button"
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
             className="px-4 py-2 text-ibuy-text hover:bg-ibuy-bg transition disabled:opacity-50"
             disabled={quantity <= 1}
@@ -92,6 +129,7 @@ export default function ProductBuyBox({ productId, title, variants, sellerName }
             {quantity}
           </span>
           <button
+            type="button"
             onClick={() => setQuantity(Math.min(stock, quantity + 1))}
             className="px-4 py-2 text-ibuy-text hover:bg-ibuy-bg transition disabled:opacity-50"
             disabled={quantity >= stock || stock <= 0}
@@ -100,18 +138,24 @@ export default function ProductBuyBox({ productId, title, variants, sellerName }
           </button>
         </div>
       </div>
-
-      {/* Actions */}
       <div className="space-y-3">
         <button
+          type="button"
           onClick={handleAddToCart}
-          disabled={stock <= 0}
+          disabled={
+            !variant?.id ||
+            !variant.offerId ||
+            !variant.sellerId ||
+            stock <= 0 ||
+            quantity > stock
+          }
           className="w-full flex items-center justify-center gap-2 bg-ibuy-orange text-white py-3.5 rounded-lg font-bold text-lg hover:bg-ibuy-orange-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ShoppingCart className="w-5 h-5" />
           Add to Cart
         </button>
         <button
+          type="button"
           disabled={stock <= 0}
           className="w-full flex items-center justify-center gap-2 bg-ibuy-intelligence text-white py-3.5 rounded-lg font-bold text-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -119,10 +163,11 @@ export default function ProductBuyBox({ productId, title, variants, sellerName }
           Buy Now
         </button>
       </div>
-
       <div className="mt-6 pt-6 border-t border-ibuy-border">
         <p className="text-sm text-ibuy-text-secondary mb-1">Sold by</p>
-        <p className="font-semibold text-ibuy-text">{sellerName}</p>
+        <p className="font-semibold text-ibuy-text">
+          {variant?.sellerName || sellerName}
+        </p>
       </div>
     </div>
   );

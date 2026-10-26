@@ -1,4 +1,4 @@
-// src/app/admin/orders/[id]/page.tsx
+﻿// src/app/admin/orders/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -45,13 +45,13 @@ export default function AdminOrderDetailPage() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
-        alert("✅ Order status updated");
+        alert("âœ… Order status updated");
         fetchOrder();
       } else {
-        alert("❌ Failed to update");
+        alert("âŒ Failed to update");
       }
     } catch (error) {
-      alert("❌ Network error");
+      alert("âŒ Network error");
     } finally {
       setIsUpdating(false);
     }
@@ -145,7 +145,7 @@ export default function AdminOrderDetailPage() {
                       <p className="font-semibold text-gray-900 text-sm">{group.sellerName}</p>
                     </div>
                     <p className="font-semibold text-indigo-600 text-sm">
-                      GH₵ {group.subtotal.toFixed(2)}
+                      GHâ‚µ {group.subtotal.toFixed(2)}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -154,11 +154,11 @@ export default function AdminOrderDetailPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-gray-900 truncate">{item.title}</p>
                           <p className="text-xs text-gray-500">
-                            SKU: {item.sku} • Qty: {item.quantity} × GH₵ {item.price.toFixed(2)}
+                            SKU: {item.sku} â€¢ Qty: {item.quantity} Ã— GHâ‚µ {item.price.toFixed(2)}
                           </p>
                         </div>
                         <p className="font-medium text-gray-900 ml-3">
-                          GH₵ {(item.price * item.quantity).toFixed(2)}
+                          GHâ‚µ {(item.price * item.quantity).toFixed(2)}
                         </p>
                       </div>
                     ))}
@@ -169,7 +169,7 @@ export default function AdminOrderDetailPage() {
             <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
               <span className="font-semibold text-gray-900">Order Total</span>
               <span className="text-xl font-bold text-indigo-600">
-                GH₵ {order.totalAmount.toFixed(2)}
+                GHâ‚µ {order.totalAmount.toFixed(2)}
               </span>
             </div>
           </div>
@@ -191,7 +191,7 @@ export default function AdminOrderDetailPage() {
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Amount</p>
-                  <p className="font-medium text-gray-900">GH₵ {order.payment.amount.toFixed(2)}</p>
+                  <p className="font-medium text-gray-900">GHâ‚µ {order.payment.amount.toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Status</p>
@@ -266,7 +266,7 @@ export default function AdminOrderDetailPage() {
                     {/* Refund Section */}
           {order.payment?.status === "SUCCESSFUL" && order.status !== "REFUNDED" && (
             <div className="bg-white rounded-xl border border-red-200 p-6">
-              <h3 className="font-semibold text-red-900 mb-4">💸 Refund Order</h3>
+              <h3 className="font-semibold text-red-900 mb-4">ðŸ’¸ Refund Order</h3>
               <p className="text-xs text-gray-600 mb-3">
                 This will attempt a Paystack refund and record the action in the financial ledger.
               </p>
@@ -275,20 +275,20 @@ export default function AdminOrderDetailPage() {
                   if (!confirm("Are you sure you want to refund this order? This action is logged.")) return;
                   const reason = prompt("Reason for refund:") || "Admin-initiated refund";
                   try {
-                    const res = await fetch(`/api/orders/${order.id}/refund`, {
+                    const res = await fetch(`/api/admin/orders/${order.id}/refund`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ reason }),
                     });
                     const data = await res.json();
                     if (res.ok) {
-                      alert(`✅ ${data.message}`);
+                      alert(`âœ… ${data.message}`);
                       fetchOrder();
                     } else {
-                      alert(`❌ ${data.error}`);
+                      alert(`âŒ ${data.error}`);
                     }
                   } catch (error) {
-                    alert("❌ Network error");
+                    alert("âŒ Network error");
                   }
                 }}
                 className="w-full bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition"

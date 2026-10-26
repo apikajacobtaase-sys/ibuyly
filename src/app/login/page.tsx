@@ -18,20 +18,22 @@ function LoginFormContent() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
+ useEffect(() => {
+  if (status !== "authenticated" || isLoading) return;
 
-    const requestedCallback = searchParams.get("callbackUrl");
-    let callbackUrl = "/account";
+  const requestedCallback = searchParams.get("callbackUrl");
 
-    // Only allow internal redirects.
-    if (requestedCallback?.startsWith("/") &&
-        !requestedCallback.startsWith("//")) {
-      callbackUrl = requestedCallback;
-    }
+  let callbackUrl = "/account";
 
-    router.replace(callbackUrl);
-  }, [status, router, searchParams]);
+  if (
+    requestedCallback?.startsWith("/") &&
+    !requestedCallback.startsWith("//")
+  ) {
+    callbackUrl = requestedCallback;
+  }
+
+  router.replace(callbackUrl);
+}, [status, isLoading, router, searchParams]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -214,12 +216,11 @@ function LoginFormContent() {
         <div className="mt-6 text-center space-y-2">
           <p className="text-sm text-gray-600">
             Don&apos;t have an account?{" "}
-            <Link
-              href="/register"
-              className="text-green-600 hover:text-green-700 font-semibold"
-            >
-              Create one
-            </Link>
+          <Link
+  href={`/register?callbackUrl=${encodeURIComponent(
+    searchParams.get("callbackUrl") || "/account"
+  )}`}
+></Link>
           </p>
 
           <Link

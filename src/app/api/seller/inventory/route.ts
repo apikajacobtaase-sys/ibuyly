@@ -26,32 +26,33 @@ import { authOptions } from "@/lib/auth";
     });
 
      // Inside src/app/api/seller/inventory/route.ts (GET function)
-
     const inventory = offers.map((offer) => {
-      // 👇 CRITICAL: Use the SELLER OFFER stock, NOT the global variant stock
-      const displayStock = offer.stockQuantity; 
+  // Seller-specific stock, not global product stock.
+  const displayStock = offer.stockQuantity;
 
-      const threshold = offer.lowStockThreshold || 5;
-      const stockStatus = displayStock === 0 ? "OUT_OF_STOCK" : displayStock <= threshold ? "LOW_STOCK" : "IN_STOCK";
+  const threshold = offer.variant.lowStockThreshold ?? 5;
 
-      return {
-        offerId: offer.id,
-        variantId: offer.variantId,
-        productTitle: offer.variant.product.title,
-        productSlug: offer.variant.product.slug,
-        imageUrl: offer.variant.product.images[0]?.url || null,
-        sku: offer.variant.sku,
-        sellerSku: offer.sellerSku,
-        price: parseFloat(offer.price.toString()),
-        
-        // 👇 Strictly the seller's own stock
-        stockQuantity: displayStock,       
-        
-        lowStockThreshold: threshold,
-        stockStatus,
-        status: offer.status,
-      };
-    });
+  const stockStatus =
+    displayStock === 0
+      ? "OUT_OF_STOCK"
+      : displayStock <= threshold
+        ? "LOW_STOCK"
+        : "IN_STOCK";
+
+  return {
+    offerId: offer.id,
+    variantId: offer.variantId,
+    productTitle: offer.variant.product.title,
+    productSlug: offer.variant.product.slug,
+    imageUrl: offer.variant.product.images[0]?.url || null,
+    sku: offer.variant.sku,
+    sellerSku: offer.sellerSku,
+    price: parseFloat(offer.price.toString()),
+    stockQuantity: displayStock,
+    lowStockThreshold: threshold,
+    stockStatus,
+  };
+});
     return NextResponse.json({ inventory });
   } catch (error) {
     console.error("Fetch inventory error:", error);

@@ -137,11 +137,11 @@ export default async function MyOrdersPage() {
                 </div>
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>Delivery Fee:</span>
-                  <span>{formatCurrency(order.deliveryFee)}</span>
+                  <span>{formatCurrency(Number(order.deliveryFee))}</span>
                 </div>
                 <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-200">
                   <span>Total</span>
-                  <span>{formatCurrency(order.totalAmount)}</span>
+                  <span>{formatCurrency(Number(order.totalAmount))}</span>
                 </div>
               </div>
             </div>

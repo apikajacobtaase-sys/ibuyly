@@ -1,8 +1,21 @@
-// src/app/api/admin/orders/[id]/route.ts
-import { db } from "@/lib/db";
+﻿import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
+
+type GroupedOrderItem = {
+  id: string;
+  title: string;
+  quantity: number;
+  price: number;
+  sku: string;
+};
+
+type SellerOrderGroup = {
+  sellerId: string;
+  items: GroupedOrderItem[];
+  subtotal: number;
+};
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -34,37 +47,54 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Group items by seller
-    const sellerGroups = new Map<string, {
-      sellerId: string;
-      items: any[];
-      subtotal: number;
-    }>();
+       // Group items by seller
+    const sellerGroups = new Map<string, SellerOrderGroup>();
 
     for (const item of order.items) {
-      const existing = sellerGroups.get(item.sellerId) || {
-        sellerId: item.sellerId,
-        items: [],
-        subtotal: 0,
-      };
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+      // Some legacy or marketplace order items may not have a seller assigned.
+      // Keep those items out of seller-specific groups.
+      if (!item.sellerId) {
+        continue;
+      }
+
+      const sellerId = item.sellerId;
+
+      let existing = sellerGroups.get(sellerId);
+
+      if (!existing) {
+        existing = {
+          sellerId,
+          items: [],
+          subtotal: 0,
+        };
+
+        sellerGroups.set(sellerId, existing);
+      }
+
+      // Prisma Decimal must be converted before arithmetic.
+      const price = Number(item.price.toString());
+      const itemTotal = price * item.quantity;
+
       existing.items.push({
         id: item.id,
         title: item.title,
         quantity: item.quantity,
         price,
-        sku: item.variant?.sku || "N/A",
+        sku: item.variant?.sku ?? "N/A",
       });
-      existing.subtotal += price * item.quantity;
-      sellerGroups.set(item.sellerId, existing);
+
+      existing.subtotal += itemTotal;
     }
 
     // Fetch seller names
     const sellerIds = Array.from(sellerGroups.keys());
     const sellers = await db.sellerProfile.findMany({
-      where: { id: { in: sellerIds } },
-      select: { id: true, businessName: true },
-    });
+  where: { id: { in: sellerIds } },
+  select: {
+    id: true,
+    businessName: true,
+  },
+});
     const sellerMap = new Map(sellers.map((s) => [s.id, s.businessName]));
 
     const groupedItems = Array.from(sellerGroups.values()).map((group) => ({
@@ -121,7 +151,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const { status } = await req.json();
 
-    const validStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"];
+    if (status === "REFUNDED") {
+      return NextResponse.json(
+        { error: "Use the dedicated refund process to refund an order." },
+        { status: 400 }
+      );
+    }
+
+    const validStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }

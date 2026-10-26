@@ -75,9 +75,9 @@ export async function GET() {
 
     // 3. Calculate total sales (sum of price * quantity)
     const totalSales = allOrderItems.reduce((sum, item) => {
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
-      return sum + price * item.quantity;
-    }, 0);
+  const price = Number(item.price.toString());
+  return sum + price * item.quantity;
+}, 0);
 
     // 4. Count pending orders
     const pendingOrderCount = await db.order.count({
@@ -101,7 +101,7 @@ export async function GET() {
         quantity: 0,
         revenue: 0,
       };
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
+      const price = Number(item.price.toString());
       existing.quantity += item.quantity;
       existing.revenue += price * item.quantity;
       productSales.set(item.variantId, existing);
@@ -128,7 +128,7 @@ export async function GET() {
       recentOrders: recentOrders.map((o) => {
         const sellerItems = o.items.filter((i) => i.sellerId === sellerId);
         const subtotal = sellerItems.reduce((sum, i) => {
-          const p = typeof i.price === "string" ? parseFloat(i.price) : i.price;
+          const p = Number(i.price.toString());
           return sum + p * i.quantity;
         }, 0);
         return {

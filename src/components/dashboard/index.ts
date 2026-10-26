@@ -1,4 +1,4 @@
-export { default as DashboardLayout } from "./DashboardLayout";
+﻿export { default as DashboardLayout } from "./DashboardPageLayout";
 export { default as Sidebar } from "./Sidebar";
 export type { SidebarItem } from "./Sidebar";
 export { default as TopBar } from "./TopBar";

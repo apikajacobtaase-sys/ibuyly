@@ -1,116 +1,446 @@
- // src/app/api/checkout/route.ts
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { z } from "zod";
 
-const checkoutSchema = z.object({
-  cartItemIds: z.array(z.string()).min(1, "At least one item is required"),
-  localityId: z.string().min(1, "Locality ID is required"),
-  discountId: z.string().optional(),
-  discountAmount: z.number().optional(),
-  address: z.object({
-    recipientName: z.string().min(1, "Recipient name is required"),
-    phone: z.string().min(1, "Phone number is required"),
-    country: z.string().optional().default("Ghana"),
-    landmark: z.string().optional(),
-    street: z.string().min(1, "Street details are required"),
-    instructions: z.string().optional(),
-  }),
-});
+class CheckoutError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "CheckoutError";
+    this.status = status;
+  }
+}
+
+const checkoutSchema = z
+  .object({
+    cartItemIds: z
+      .array(z.string().min(1))
+      .min(1, "Select at least one item.")
+      .max(50, "Too many items were selected.")
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Duplicate cart items are not allowed."
+      ),
+    localityId: z.string().min(1, "Delivery locality is required."),
+    discountCode: z.string().trim().min(1).max(80).optional(),
+    address: z
+      .object({
+        recipientName: z.string().trim().min(1).max(150),
+        phone: z.string().trim().min(1).max(40),
+        country: z.string().trim().min(1).max(80).optional().default("Ghana"),
+        landmark: z.string().trim().max(300).optional(),
+        street: z.string().trim().min(1).max(500),
+        instructions: z.string().trim().max(1000).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+
+function toCents(value: unknown): number {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new CheckoutError("An invalid price was found. Please refresh your cart.", 400);
+  }
+
+  return Math.round(amount * 100);
+}
+
+function centsToAmount(cents: number): number {
+  return Number((cents / 100).toFixed(2));
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
 
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Please sign in before checking out." },
+        { status: 401 }
+      );
     }
 
-    const body = await req.json();
-    const validated = checkoutSchema.parse(body);
+    if (!session.user.email) {
+      return NextResponse.json(
+        { error: "Your account needs a valid email address to make a payment." },
+        { status: 400 }
+      );
+    }
 
-    // 1. Fetch cart items
+    const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
+    const appUrl = process.env.NEXTAUTH_URL;
+
+    if (!paystackSecret || !appUrl) {
+      console.error("Checkout configuration is incomplete.");
+
+      return NextResponse.json(
+        { error: "Checkout is temporarily unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
+
+    let rawBody: unknown;
+
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 }
+      );
+    }
+
+    const parsed = checkoutSchema.safeParse(rawBody);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Invalid checkout details." },
+        { status: 400 }
+      );
+    }
+
+    const input = parsed.data;
+    const userId = session.user.id;
+
+    // 1. Load only the signed-in user's submitted cart items.
     const cartItems = await db.cartItem.findMany({
       where: {
-        id: { in: validated.cartItemIds },
-        cart: { userId: session.user.id },
+        id: { in: input.cartItemIds },
+        cart: { userId },
       },
       include: {
         offer: {
           include: {
-            variant: { include: { product: { select: { title: true } } } },
-            seller: { select: { id: true } },
+            variant: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                  },
+                },
+              },
+            },
+            seller: {
+              select: { id: true },
+            },
           },
         },
       },
     });
 
-    const validItems: typeof cartItems = [];
+    // Reject the entire checkout if any submitted ID is missing or not owned
+    // by this user. Do not silently remove items from the order.
+    if (cartItems.length !== input.cartItemIds.length) {
+      throw new CheckoutError(
+        "Your cart has changed. Refresh your cart and try again.",
+        400
+      );
+    }
+
     for (const item of cartItems) {
-      if (item.offer && item.offer.status === "ACTIVE") {
-        validItems.push(item);
+      const offer = item.offer;
+
+      if (!offer || offer.status !== "ACTIVE") {
+        throw new CheckoutError(
+          "One or more items are no longer available. Refresh your cart.",
+          400
+        );
+      }
+
+      if (
+        !offer.variant ||
+        !offer.variant.isActive ||
+        offer.variant.product.status !== "ACTIVE"
+      ) {
+        throw new CheckoutError(
+          "One or more products are no longer available. Refresh your cart.",
+          400
+        );
+      }
+
+      if (!Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+        throw new CheckoutError(
+          "An invalid item quantity was found in your cart.",
+          400
+        );
+      }
+
+      if (toCents(offer.price) <= 0) {
+        throw new CheckoutError(
+          "One or more items have an invalid price. Please contact support.",
+          400
+        );
       }
     }
 
-    if (validItems.length === 0) {
-      return NextResponse.json({ error: "No valid items in cart." }, { status: 400 });
-    }
-
-    // 2. Validate Delivery Zone
+    // 2. Validate the selected delivery locality and its active zone.
     const zoneLocality = await db.deliveryZoneLocality.findFirst({
       where: {
-        localityId: validated.localityId,
+        localityId: input.localityId,
         deliveryZone: { status: "ACTIVE" },
       },
       include: {
         deliveryZone: true,
-        locality: { include: { district: { include: { region: true } } } },
+        locality: {
+          include: {
+            district: {
+              include: { region: true },
+            },
+          },
+        },
       },
     });
 
     if (!zoneLocality) {
-      return NextResponse.json({ error: "Delivery unavailable to this location." }, { status: 400 });
+      throw new CheckoutError(
+        "Delivery is unavailable at the selected location.",
+        400
+      );
     }
 
-    const zone = zoneLocality.deliveryZone;
-    const deliveryFee = parseFloat(zone.baseDeliveryFee.toString());
+    const deliveryFeeCents = toCents(zoneLocality.deliveryZone.baseDeliveryFee);
 
-    // 3. Calculate Total
-    let serverSubtotal = 0;
-    for (const item of validItems) {
-      serverSubtotal += parseFloat(item.offer!.price.toString()) * item.quantity;
+    // 3. Calculate all merchandise totals using database prices.
+    let subtotalCents = 0;
+
+    for (const item of cartItems) {
+      const itemTotal = toCents(item.offer!.price) * item.quantity;
+
+      if (!Number.isSafeInteger(itemTotal)) {
+        throw new CheckoutError("The order total is too large.", 400);
+      }
+
+      subtotalCents += itemTotal;
     }
 
-    const discountAmount = validated.discountAmount || 0;
-    const finalTotal = Math.max(0, serverSubtotal + deliveryFee - discountAmount);
+    if (!Number.isSafeInteger(subtotalCents)) {
+      throw new CheckoutError("The order total is too large.", 400);
+    }
 
-    // 4. Atomic Transaction
+    // 4. Revalidate a discount on the server.
+    // Discount codes belong to a seller, so only that seller's merchandise
+    // contributes to the discount and its minimum-order requirement.
+    let discount: {
+      id: string;
+      sellerId: string;
+      type: "PERCENTAGE" | "FIXED_AMOUNT";
+      value: number;
+      minOrderAmount: number | null;
+      maxDiscount: number | null;
+      usageLimit: number | null;
+      usedCount: number;
+    } | null = null;
+
+    let discountCents = 0;
+    const now = new Date();
+
+    if (input.discountCode) {
+      const discountRecord = await db.discountCode.findUnique({
+        where: {
+          code: input.discountCode.toUpperCase(),
+        },
+      });
+
+      if (!discountRecord || !discountRecord.isActive) {
+        throw new CheckoutError("This discount code is invalid or inactive.");
+      }
+
+      if (discountRecord.startsAt > now) {
+        throw new CheckoutError("This discount code is not active yet.");
+      }
+
+      if (discountRecord.expiresAt && discountRecord.expiresAt <= now) {
+        throw new CheckoutError("This discount code has expired.");
+      }
+
+      if (
+        discountRecord.usageLimit !== null &&
+        discountRecord.usedCount >= discountRecord.usageLimit
+      ) {
+        throw new CheckoutError("This discount code has reached its usage limit.");
+      }
+
+      const eligibleItems = cartItems.filter(
+        (item) => item.offer!.sellerId === discountRecord.sellerId
+      );
+
+      if (eligibleItems.length === 0) {
+        throw new CheckoutError(
+          "This discount code does not apply to the items in your cart."
+        );
+      }
+
+      const eligibleSubtotalCents = eligibleItems.reduce(
+        (total, item) =>
+          total + toCents(item.offer!.price) * item.quantity,
+        0
+      );
+
+      if (
+        discountRecord.minOrderAmount !== null &&
+        eligibleSubtotalCents < toCents(discountRecord.minOrderAmount)
+      ) {
+        throw new CheckoutError(
+          "Your eligible items do not meet the minimum order amount for this code."
+        );
+      }
+
+      const discountValue = Number(discountRecord.value);
+
+      if (!Number.isFinite(discountValue) || discountValue < 0) {
+        throw new CheckoutError(
+          "This discount code is incorrectly configured. Please contact support.",
+          400
+        );
+      }
+
+      if (discountRecord.type === "PERCENTAGE") {
+        if (discountValue > 100) {
+          throw new CheckoutError(
+            "This discount code is incorrectly configured. Please contact support.",
+            400
+          );
+        }
+
+        discountCents = Math.round(
+          (eligibleSubtotalCents * discountValue) / 100
+        );
+      } else {
+        discountCents = Math.min(
+          eligibleSubtotalCents,
+          toCents(discountRecord.value)
+        );
+      }
+
+      if (discountRecord.maxDiscount !== null) {
+        discountCents = Math.min(
+          discountCents,
+          toCents(discountRecord.maxDiscount)
+        );
+      }
+
+      discountCents = Math.min(
+        discountCents,
+        eligibleSubtotalCents
+      );
+
+      discount = {
+        id: discountRecord.id,
+        sellerId: discountRecord.sellerId,
+        type: discountRecord.type,
+        value: discountValue,
+        minOrderAmount:
+          discountRecord.minOrderAmount === null
+            ? null
+            : Number(discountRecord.minOrderAmount),
+        maxDiscount:
+          discountRecord.maxDiscount === null
+            ? null
+            : Number(discountRecord.maxDiscount),
+        usageLimit: discountRecord.usageLimit,
+        usedCount: discountRecord.usedCount,
+      };
+    }
+
+    // Delivery is not discounted by a seller merchandise discount.
+    const finalTotalCents =
+      subtotalCents + deliveryFeeCents - discountCents;
+
+    if (
+      !Number.isSafeInteger(finalTotalCents) ||
+      finalTotalCents <= 0
+    ) {
+      throw new CheckoutError(
+        "The final order total must be greater than zero."
+      );
+    }
+
+    const finalTotal = centsToAmount(finalTotalCents);
+    const discountAmount = centsToAmount(discountCents);
+    const deliveryFee = centsToAmount(deliveryFeeCents);
+
+    // 5. Reserve stock and discount usage, then create the pending order
+    // in a single database transaction.
     const order = await db.$transaction(async (tx) => {
-      // A. Validate Stock
-      for (const item of validItems) {
-        const offer = item.offer!; 
-        if (offer.stockQuantity < item.quantity) {
-          throw new Error(`Insufficient stock for "${offer.variant.product.title}".`);
+      // Conditional stock updates prevent two concurrent checkouts from
+      // both deducting the same available units.
+      for (const item of cartItems) {
+        const offer = item.offer!;
+
+        const stockUpdate = await tx.sellerOffer.updateMany({
+          where: {
+            id: offer.id,
+            status: "ACTIVE",
+            stockQuantity: { gte: item.quantity },
+          },
+          data: {
+            stockQuantity: { decrement: item.quantity },
+          },
+        });
+
+        if (stockUpdate.count !== 1) {
+          throw new CheckoutError(
+            `There is insufficient stock for "${offer.variant.product.title}". Refresh your cart.`,
+            409
+          );
         }
       }
 
-      // B. Create Order
-      const newOrder = await tx.order.create({
+      // Atomically claim one use of the discount code.
+      if (discount) {
+        const usageWhere = {
+          id: discount.id,
+          isActive: true,
+          startsAt: { lte: now },
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: now } },
+          ],
+          ...(discount.usageLimit !== null
+            ? { usedCount: { lt: discount.usageLimit } }
+            : {}),
+        };
+
+        const usageUpdate = await tx.discountCode.updateMany({
+          where: usageWhere,
+          data: {
+            usedCount: { increment: 1 },
+          },
+        });
+
+        if (usageUpdate.count !== 1) {
+          throw new CheckoutError(
+            "This discount code is no longer available. Please try again.",
+            409
+          );
+        }
+      }
+
+      return tx.order.create({
         data: {
-          userId: session.user.id,
+          userId,
           totalAmount: finalTotal,
           status: "PENDING",
-          discountCodeId: validated.discountId || null,
-          discountAmount: discountAmount,
-          deliveryRecipient: validated.address.recipientName,
-          deliveryPhone: validated.address.phone,
-          deliveryFee: deliveryFee,
+          discountCodeId: discount?.id ?? null,
+          discountAmount,
+          deliveryRecipient: input.address.recipientName,
+          deliveryPhone: input.address.phone,
+          deliveryFee,
           deliveryRegion: zoneLocality.locality.district.region.name,
           deliveryDistrict: zoneLocality.locality.district.name,
           deliveryLocality: zoneLocality.locality.name,
-          deliveryLandmark: validated.address.landmark || null,
-          deliveryStreet: validated.address.street,
+          deliveryLandmark: input.address.landmark || null,
+          deliveryStreet: input.address.street,
           payment: {
             create: {
               provider: "PAYSTACK",
@@ -120,12 +450,13 @@ export async function POST(req: Request) {
             },
           },
           items: {
-            create: validItems.map((item) => {
+            create: cartItems.map((item) => {
               const offer = item.offer!;
+
               return {
                 variant: { connect: { id: offer.variantId } },
                 title: offer.variant.product.title,
-                price: parseFloat(offer.price.toString()),
+                price: Number(offer.price),
                 quantity: item.quantity,
                 sellerId: offer.sellerId,
                 offer: { connect: { id: offer.id } },
@@ -135,74 +466,266 @@ export async function POST(req: Request) {
           },
         },
       });
-
-      // C. Deduct Stock
-      for (const item of validItems) {
-        await tx.sellerOffer.update({
-          where: { id: item.offer!.id },
-          data: { stockQuantity: { decrement: item.quantity } },
-        });
-      }
-
-      // D. Clear Cart
-      await tx.cartItem.deleteMany({
-        where: { id: { in: validated.cartItemIds } },
-      });
-      
-      return newOrder;
     });
 
-    // 5. Initialize Paystack
-    // ✅ Use a simple, unique reference based on Order ID
     const localReference = `ORD-${order.id}`;
 
-    const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-  email: session.user.email,
-  amount: Math.round(finalTotal * 100),
-  reference: localReference,
-  callback_url: `${process.env.NEXTAUTH_URL}/payment/success`,
-  channels: ["card", "mobile_money", "apple_pay"], // ✅ Added apple_pay
-  metadata: { 
-    custom_fields: [
-      { display_name: "Order ID", variable_name: "order_id", value: order.id }
-    ] 
-  },
-}),
-    });
+    // Persist the expected reference before contacting Paystack so that
+    // an early webhook can locate this order.
+    try {
+      await db.order.update({
+        where: { id: order.id },
+        data: { paymentReference: localReference },
+      });
+    } catch (referenceError) {
+      console.error(
+        "Could not persist the Paystack reference before initialization:",
+        getErrorMessage(referenceError)
+      );
 
-    const paystackData = await paystackResponse.json();
-    
-    if (!paystackData.status) {
-      throw new Error(paystackData.message || "Paystack initialization failed");
+      // Do not initialize a payment without a persisted reconciliation key.
+      // Keep the pending order and its reservations for reconciliation.
+      return NextResponse.json(
+        {
+          error:
+            "We could not prepare your payment securely. Please contact support before trying again.",
+          orderId: order.id,
+        },
+        { status: 503 }
+      );
     }
 
-    // ✅ IMPORTANT: Save the reference returned by Paystack, not just our local one
-    // Paystack sometimes modifies or validates the reference. We must use theirs for verification.
-    const paystackRef = paystackData.data.reference;
+    let paystackResponse: Response;
 
-    await db.order.update({
-      where: { id: order.id },
-      data: { paymentReference: paystackRef },
-    });
+    // 6. Initialize payment.
+    // If the network fails or Paystack returns a server error, its outcome
+    // may be uncertain. Keep the order and stock reservation pending instead
+    // of risking a duplicate payment or releasing stock incorrectly.
+    try {
+      paystackResponse = await fetch(
+        "https://api.paystack.co/transaction/initialize",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${paystackSecret}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: session.user.email,
+            amount: finalTotalCents,
+            reference: localReference,
+            callback_url: `${appUrl.replace(/\/+$/, "")}/payment/success`,
+            channels: ["card", "mobile_money", "apple_pay"],
+            metadata: {
+              custom_fields: [
+                {
+                  display_name: "Order ID",
+                  variable_name: "order_id",
+                  value: order.id,
+                },
+              ],
+            },
+          }),
+          signal: AbortSignal.timeout(20000),
+        }
+      );
+    } catch (error) {
+      console.error("Paystack initialization outcome is uncertain:", getErrorMessage(error));
+
+      return NextResponse.json(
+        {
+          error:
+            "We could not confirm payment initialization. Your order may still be pending. Please contact support before retrying.",
+          orderId: order.id,
+        },
+        { status: 502 }
+      );
+    }
+
+    let paystackData: {
+      status?: boolean;
+      message?: string;
+      data?: {
+        reference?: string;
+        authorization_url?: string;
+      };
+    };
+
+    try {
+      paystackData = await paystackResponse.json();
+    } catch {
+      console.error("Paystack returned an unreadable initialization response.");
+
+      return NextResponse.json(
+        {
+          error:
+            "We could not confirm payment initialization. Your order may still be pending. Please contact support before retrying.",
+          orderId: order.id,
+        },
+        { status: 502 }
+      );
+    }
+
+    // A server-side Paystack failure may be transient, so do not release
+    // stock or discount usage for HTTP 5xx responses.
+    if (paystackResponse.status >= 500) {
+      console.error("Paystack initialization returned a server error.");
+
+      return NextResponse.json(
+        {
+          error:
+            "Payment initialization is temporarily unavailable. Your order may still be pending. Please contact support before retrying.",
+          orderId: order.id,
+        },
+        { status: 502 }
+      );
+    }
+
+    // For a definitive rejection, cancel the pending order and compensate
+    if (
+      !paystackResponse.ok ||
+      paystackData.status !== true ||
+      !paystackData.data?.reference ||
+      paystackData.data.reference !== localReference ||
+      !paystackData.data?.authorization_url
+    ) {
+
+      try {
+        await db.$transaction(async (tx) => {
+          const cancelled = await tx.order.updateMany({
+            where: {
+              id: order.id,
+              status: "PENDING",
+            },
+            data: {
+              status: "CANCELLED",
+            },
+          });
+
+          // Only compensate if this request successfully cancelled the
+          // still-pending order. This prevents double stock restoration.
+          if (cancelled.count === 1) {
+            await tx.payment.updateMany({
+              where: {
+                orderId: order.id,
+                status: "PENDING",
+              },
+              data: {
+                status: "FAILED",
+                metadata: {
+                  reason: "Paystack rejected transaction initialization.",
+                },
+              },
+            });
+
+            for (const item of cartItems) {
+              await tx.sellerOffer.updateMany({
+                where: { id: item.offer!.id },
+                data: {
+                  stockQuantity: { increment: item.quantity },
+                },
+              });
+            }
+
+            if (discount) {
+              await tx.discountCode.updateMany({
+                where: {
+                  id: discount.id,
+                  usedCount: { gt: 0 },
+                },
+                data: {
+                  usedCount: { decrement: 1 },
+                },
+              });
+            }
+          }
+        });
+      } catch (compensationError) {
+        console.error(
+          "Checkout compensation failed; manual reconciliation may be required:",
+          getErrorMessage(compensationError)
+        );
+      }
+
+      console.error(
+        "Paystack rejected checkout initialization:",
+        paystackData.message ?? `HTTP ${paystackResponse.status}`
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "We could not start your payment. Your cart has been retained where possible. Please try again or contact support.",
+        },
+        { status: 502 }
+      );
+    }
+
+    const paystackReference = paystackData.data.reference;
+
+    // Save the payment reference and remove only this user's submitted
+    // cart items in one transaction. If either operation fails, both roll
+    // back and the order remains available for reconciliation.
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { paymentReference: paystackReference },
+        });
+
+        await tx.cartItem.deleteMany({
+          where: {
+            id: { in: input.cartItemIds },
+            cart: { userId },
+          },
+        });
+      });
+    } catch (saveError) {
+      console.error(
+        "Paystack initialized, but checkout finalization failed:",
+        getErrorMessage(saveError)
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Your payment session was created, but we could not finish updating your order. Please contact support before trying again.",
+          orderId: order.id,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       orderId: order.id,
       authorizationUrl: paystackData.data.authorization_url,
-      reference: paystackRef,
+      reference: paystackReference,
+      subtotal: centsToAmount(subtotalCents),
+      deliveryFee,
+      discountAmount,
+      total: finalTotal,
     });
-
-  } catch (error: any) {
-    console.error("🚨 Checkout error:", error);
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues?.[0]?.message }, { status: 400 });
+      return NextResponse.json(
+        { error: error.issues[0]?.message ?? "Invalid checkout details." },
+        { status: 400 }
+      );
     }
-    return NextResponse.json({ error: "Checkout failed", details: error.message }, { status: 500 });
+
+    if (error instanceof CheckoutError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
+    }
+
+    console.error("Checkout error:", getErrorMessage(error));
+
+    return NextResponse.json(
+      { error: "Checkout failed. Please try again later." },
+      { status: 500 }
+    );
   }
 }

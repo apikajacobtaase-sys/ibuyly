@@ -175,7 +175,7 @@ export default function HomePage() {
                             id: product.id,
                             title: product.title,
                             price: product.price,
-                            imageUrl: product.imageUrl,
+                            imageUrl: product.imageUrl ?? null,
                             slug: product.slug,
                             sellerName: product.sellerName || "iBUY",
                           });
@@ -269,7 +269,7 @@ export default function HomePage() {
                               offerId: product.bestOfferId,
                               title: product.title,
                               price: product.price,
-                              imageUrl: product.imageUrl,
+                              imageUrl: product.imageUrl ?? null,
                               stockQuantity: product.stockQuantity,
                               sellerId: product.sellerId || "unknown",
                               sellerName: product.sellerName || "iBUY Marketplace",

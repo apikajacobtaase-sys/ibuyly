@@ -1,4 +1,4 @@
- // src/app/api/seller/products/route.ts
+﻿ // src/app/api/seller/products/route.ts
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -510,7 +510,7 @@ export async function POST(req: Request) {
           variantId: variant.id,
           price: new Prisma.Decimal(String(price)),
           stockQuantity: parsedStock,
-          status: productStatus === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+          status: productStatus === "ACTIVE" ? "ACTIVE" : "PAUSED",
         },
       });
 

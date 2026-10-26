@@ -89,42 +89,34 @@ export default function ProductCard({
       console.error("Network error adding to cart", error);
     }
   };
-  const handleWishlistToggle = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+   const handleWishlistToggle = async (e: React.MouseEvent) => {
+e.preventDefault();
+e.stopPropagation();
 
-    if (session) {
-      try {
-        if (isWishlisted) {
-          await fetch("/api/wishlist", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId: id }),
-          });
-          removeWishlistItem(id);
-          setIsWishlisted(false);
-        } else {
-          await fetch("/api/wishlist", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId: id }),
-          });
-          addWishlistItem(id);
-          setIsWishlisted(true);
-        }
-      } catch (error) {
-        console.error("Wishlist toggle failed", error);
-      }
-    } else {
-      if (isWishlisted) {
-        removeWishlistItem(id);
-        setIsWishlisted(false);
-      } else {
-        addWishlistItem(id);
-        setIsWishlisted(true);
-      }
-    }
-  };
+const wishlistItem = {
+  id,
+  title,
+  price: numericPrice,
+  imageUrl: imageUrl ?? null,
+  slug,
+  sellerName: sellerName ?? "Unknown",
+};
+
+try {
+  if (isWishlisted) {
+    await removeWishlistItem(id);
+    setIsWishlisted(false);
+  } else {
+    await addWishlistItem(wishlistItem);
+    setIsWishlisted(true);
+  }
+} catch (error) {
+  console.error("Wishlist toggle failed:", error);
+}
+
+
+};
+
 
   const handleCompareToggle = (e: React.MouseEvent) => {
     e.preventDefault();

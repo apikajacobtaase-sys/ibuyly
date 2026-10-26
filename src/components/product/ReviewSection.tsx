@@ -1,4 +1,4 @@
- // src/components/product/ReviewSection.tsx
+﻿ // src/components/product/ReviewSection.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,8 +14,8 @@ interface Review {
   isVerified: boolean;
   createdAt: string;
   user: {
-    firstName: string;
-    lastName: string;
+    firstName: string | null;
+lastName: string | null;
     image?: string | null;
   };
 }
@@ -23,7 +23,7 @@ interface Review {
 export default function ReviewSection({ productSlug, orderId }: { productSlug: string, orderId?: string }) {
   const { data: session } = useSession();
   
-  // ✅ FIX: Initialize as empty array [] instead of undefined
+  // âœ… FIX: Initialize as empty array [] instead of undefined
   const [reviews, setReviews] = useState<Review[]>([]);
   const [avgRating, setAvgRating] = useState(0);
   const [rating, setRating] = useState(5);
@@ -35,7 +35,7 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
     fetch(`/api/products/${productSlug}/reviews`)
       .then(res => res.json())
       .then(data => {
-        // ✅ Safety check: ensure data.reviews is an array
+        // âœ… Safety check: ensure data.reviews is an array
         setReviews(Array.isArray(data.reviews) ? data.reviews : []);
         setAvgRating(data.avgRating || 0);
       })
@@ -83,14 +83,16 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
               ))}
             </div>
             <span className="text-sm font-medium text-gray-900">{avgRating} out of 5</span>
-            {/* ✅ FIX: Use optional chaining or safe access */}
+            {/* âœ… FIX: Use optional chaining or safe access */}
             <span className="text-sm text-gray-500">({reviews?.length || 0} reviews)</span>
           </div>
         </div>
       </div>
 
       {/* Review Form */}
-      {session && !reviews.find(r => r.user.firstName === session.user?.firstName) && (
+      {session && !reviews.some(
+  (review) => review.user.firstName + " " + review.user.lastName === session.user?.name
+) && (
         <form onSubmit={handleSubmit} className="bg-gray-50 p-6 rounded-xl mb-10 border border-gray-100">
           <h4 className="font-semibold text-gray-900 mb-4">Share your thoughts</h4>
           
@@ -140,11 +142,11 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
             <div key={review.id} className="border-b border-gray-100 pb-8 last:border-0">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-3">
-                  {review.user.avatarUrl? (
-                    <Image src={review.user.avatarUrl} alt="" width={40} height={40} className="rounded-full object-cover" />
+                 {review.user.image ? (
+  <Image src={review.user.image} alt="" width={40} height={40} className="rounded-full object-cover" />
                   ) : (
                     <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 font-bold">
-                      {review.user.firstName[0]}
+                      {review.user.firstName?.[0] || review.user.lastName?.[0] || '?'}
                     </div>
                   )}
                   <div>
@@ -174,3 +176,4 @@ export default function ReviewSection({ productSlug, orderId }: { productSlug: s
     </div>
   );
 }
+

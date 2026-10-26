@@ -44,8 +44,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const price = bestOffer ? Number(bestOffer.price) : 0;
   const stock = bestOffer?.stockQuantity || 0;
 
-  let conversationId = null;
-  let initialMessages = [];
+  let conversationId: string | null = null;
+let initialMessages: {
+  id: string;
+  content: string;
+  senderId: string;
+  createdAt: Date;
+  sender: {
+    firstName: string | null;
+    lastName: string | null;
+  };
+}[] = [];
   
   if (session && seller) {
     const conv = await db.conversation.findFirst({

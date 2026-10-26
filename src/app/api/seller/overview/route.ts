@@ -52,7 +52,14 @@ export async function GET() {
     let totalRevenue = 0;
     let totalOrdersCount = 0;
     let pendingOrdersCount = 0;
-    const recentOrders = [];
+    const recentOrders: {
+  id: string;
+  customerName: string;
+  totalAmount: number;
+  status: string;
+  createdAt: Date;
+  itemCount: number;
+}[] = [];
 
     // We need to fetch ALL orders to get accurate totals, but only return 5 for the UI
     // For performance in production, you might want separate queries for counts vs lists

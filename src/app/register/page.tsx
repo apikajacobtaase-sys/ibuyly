@@ -1,13 +1,21 @@
 // src/app/register/page.tsx
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
-
-export default function RegisterPage() {
+import { useRouter, useSearchParams } from "next/navigation";
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+const callbackUrl = (() => {
+  const requested = searchParams.get("callbackUrl");
+
+  return requested?.startsWith("/") && !requested.startsWith("//")
+    ? requested
+    : "/account";
+})();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,42 +47,17 @@ export default function RegisterPage() {
 
       const data = await res.json();
 
-      if (res.ok) {
-        setSuccess("Account created! Redirecting to login...");
-                  // ✅ Merge guest cart with new account cart
-          try {
-            const guestCartData = localStorage.getItem("cart-storage");
-            if (guestCartData) {
-              const parsed = JSON.parse(guestCartData);
-              const guestCart = parsed?.state?.items || [];
-              
-              if (guestCart.length > 0) {
-                const mergeRes = await fetch("/api/cart/merge", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    guestCart: guestCart.map((item: any) => ({
-                      productId: item.productId,
-                      variantId: item.variantId,
-                      quantity: item.quantity,
-                    })),
-                  }),
-                });
+     if (res.ok) {
+  setSuccess("Account created! Redirecting to login...");
 
-                if (mergeRes.ok) {
-                  // Clear the guest cart from localStorage after successful merge
-                  const { useCartStore } = await import("@/store/cartStore");
-                  useCartStore.getState().clearGuestCart();
-                }
-              }
-            }
-          } catch (error) {
-            console.error("Cart merge failed:", error);
-          }
-        setTimeout(() => router.push("/login"), 2000);
-      } else {
-        setError(data.error || "Registration failed");
-      }
+  setTimeout(() => {
+    router.replace(
+      `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+    );
+  }, 1500);
+} else {
+  setError(data.error || "Registration failed");
+}
     } catch (err) {
       setError("Network error. Please try again.");
     } finally {
@@ -250,9 +233,9 @@ export default function RegisterPage() {
           {/* Login Link */}
           <p className="text-center text-sm text-ibuy-text-secondary mt-6">
             Already have an account?{" "}
-            <Link href="/login" className="text-ibuy-orange hover:underline font-medium">
-              Log In
-            </Link>
+           <Link
+  href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+></Link>
           </p>
         </div>
 
@@ -262,5 +245,21 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-ibuy-bg flex items-center justify-center p-4">
+          <p className="text-ibuy-text-secondary">
+            Loading registration...
+          </p>
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

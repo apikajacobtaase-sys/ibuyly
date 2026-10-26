@@ -44,20 +44,34 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Invalid request", details: validation.error.flatten() }, { status: 400 });
     }
 
-    const { id, type, status } = validation.data;
+const { id, type, status } = validation.data;
 
-    if (type === "REGION") {
-      await db.region.update({
-        where: { id },
-        data: { status },
-      });
-    } else {
-      await db.district.update({
-        where: { id },
-        data: { status },
-      });
-    }
+// The database stores activation as a Boolean.
+const isActive = status === "ACTIVE";
 
+if (status === "TEMPORARILY_UNAVAILABLE") {
+  return NextResponse.json(
+    {
+      error:
+        "TEMPORARILY_UNAVAILABLE cannot be represented by the current Boolean isActive field.",
+      message:
+        "The location schema needs a separate status field to support this state correctly.",
+    },
+    { status: 400 }
+  );
+}
+
+if (type === "REGION") {
+  await db.region.update({
+    where: { id },
+    data: { isActive },
+  });
+} else {
+  await db.district.update({
+    where: { id },
+    data: { isActive },
+  });
+}
     return NextResponse.json({ success: true, message: "Status updated successfully" });
   } catch (error: any) {
     console.error("🚨 Admin locations PATCH error:", error);

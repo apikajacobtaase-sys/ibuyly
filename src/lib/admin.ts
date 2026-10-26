@@ -1,4 +1,4 @@
-// src/lib/admin.ts
+﻿// src/lib/admin.ts
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
@@ -15,50 +15,70 @@ type AdminResult =
   | { user: null; error: NextResponse };
 
 export async function requireAdmin(): Promise<AdminResult> {
-  const session = await getServerSession(authOptions);
-  
-  console.log("🔍 requireAdmin - Session:", JSON.stringify(session, null, 2));
+  try {
+    const session = await getServerSession(authOptions);
 
-  if (!session?.user?.id) {
-    console.error("❌ requireAdmin failed: No session.user.id");
+    if (!session?.user?.email) {
+      return {
+        user: null,
+        error: NextResponse.json(
+          { error: "Authentication required" },
+          { status: 401 }
+        ),
+      };
+    }
+
+    // Verify the user's current permissions against the database.
+    const dbUser = await db.user.findUnique({
+      where: { email: session.user.email },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!dbUser || !dbUser.isActive) {
+      return {
+        user: null,
+        error: NextResponse.json(
+          { error: "Account is inactive or unavailable" },
+          { status: 403 }
+        ),
+      };
+    }
+
+    if (
+      dbUser.role !== "ADMIN" &&
+      dbUser.role !== "SUPER_ADMIN"
+    ) {
+      return {
+        user: null,
+        error: NextResponse.json(
+          { error: "Administrator access required" },
+          { status: 403 }
+        ),
+      };
+    }
+
     return {
-      user: null,
-      error: NextResponse.json({ error: "Unauthorized: No session ID" }, { status: 401 }),
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        role: dbUser.role,
+      },
+      error: null,
     };
-  }
+  } catch (error) {
+    console.error("Admin authorization failed:", error);
 
-  const dbUser = await db.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, email: true, role: true },
-  });
-
-  console.log("🔍 requireAdmin - DB User:", dbUser);
-
-  if (!dbUser) {
-    console.error("❌ requireAdmin failed: User not found in database");
-    return {
-      user: null,
-      error: NextResponse.json({ error: "Unauthorized: User not found" }, { status: 401 }),
-    };
-  }
-
-  if (dbUser.role !== "ADMIN" && dbUser.role !== "SUPER_ADMIN") {
-    console.error(`❌ requireAdmin failed: Invalid role '${dbUser.role}'. Expected ADMIN or SUPER_ADMIN`);
     return {
       user: null,
       error: NextResponse.json(
-        { error: `Forbidden: Admin access required (your role is ${dbUser.role})` },
-        { status: 403 }
+        { error: "Unable to verify administrator permissions" },
+        { status: 500 }
       ),
     };
   }
-
-  return {
-    user: {
-      id: dbUser.id,
-      email: dbUser.email,
-      role: dbUser.role as "ADMIN" | "SUPER_ADMIN",
-    },
-    error: null,
-  };
 }

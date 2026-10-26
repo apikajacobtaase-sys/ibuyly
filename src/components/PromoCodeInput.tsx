@@ -1,18 +1,17 @@
-// src/components/PromoCodeInput.tsx
 "use client";
 
 import { useState } from "react";
 import { Tag, Loader2, CheckCircle, XCircle, X } from "lucide-react";
 
 interface PromoCodeInputProps {
-  subtotal: number;
+  cartItemIds: string[];
   onDiscountApplied: (discountAmount: number, code: string) => void;
   onDiscountRemoved: () => void;
   currentDiscount?: { code: string; amount: number } | null;
 }
 
 export default function PromoCodeInput({
-  subtotal,
+  cartItemIds,
   onDiscountApplied,
   onDiscountRemoved,
   currentDiscount,
@@ -23,7 +22,10 @@ export default function PromoCodeInput({
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim()) return;
+
+    if (!code.trim() || cartItemIds.length === 0 || isApplying) {
+      return;
+    }
 
     setIsApplying(true);
     setError("");
@@ -32,46 +34,59 @@ export default function PromoCodeInput({
       const res = await fetch("/api/checkout/validate-discount", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify({
           code: code.trim(),
-          orderTotal: subtotal,
+          cartItemIds,
         }),
       });
 
       const data = await res.json();
 
-      if (res.ok && data.valid) {
+      if (
+        res.ok &&
+        data.valid === true &&
+        typeof data.discountAmount === "number" &&
+        Number.isFinite(data.discountAmount) &&
+        data.discountAmount > 0 &&
+        typeof data.code === "string"
+      ) {
         onDiscountApplied(data.discountAmount, data.code);
-        setCode(""); // Clear input on success
+        setCode("");
+        setError("");
       } else {
-        setError(data.error || "Invalid discount code");
+        setError(data.error || "Invalid discount code.");
       }
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
     } finally {
       setIsApplying(false);
     }
   };
 
-  // If a discount is already applied, show the success state
   if (currentDiscount) {
     return (
-      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-emerald-600" />
-          <div>
-            <p className="text-sm font-semibold text-emerald-900">
+      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-emerald-900 break-words">
               {currentDiscount.code} Applied
             </p>
+
             <p className="text-xs text-emerald-700">
-              You saved GH₵ {currentDiscount.amount.toFixed(2)}
+              You saved GH{"\u20B5"} {currentDiscount.amount.toFixed(2)}
             </p>
           </div>
         </div>
+
         <button
+          type="button"
           onClick={onDiscountRemoved}
-          className="p-1 text-emerald-700 hover:bg-emerald-100 rounded-full transition-colors"
+          className="p-1 text-emerald-700 hover:bg-emerald-100 rounded-full transition-colors flex-shrink-0"
           title="Remove discount"
+          aria-label="Remove discount code"
         >
           <X className="w-4 h-4" />
         </button>
@@ -79,12 +94,12 @@ export default function PromoCodeInput({
     );
   }
 
-  // Otherwise, show the input form
   return (
     <form onSubmit={handleApply} className="space-y-2">
       <div className="flex gap-2">
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
           <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+
           <input
             type="text"
             value={code}
@@ -93,27 +108,36 @@ export default function PromoCodeInput({
               setError("");
             }}
             placeholder="Promo code"
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            autoComplete="off"
+            maxLength={80}
+            className="w-full min-w-0 pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             disabled={isApplying}
           />
         </div>
+
         <button
           type="submit"
-          disabled={isApplying || !code.trim()}
-          className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          disabled={isApplying || !code.trim() || cartItemIds.length === 0}
+          className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
         >
           {isApplying ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Applying</span>
+            </>
           ) : (
             "Apply"
           )}
         </button>
       </div>
-      
+
       {error && (
-        <div className="flex items-center gap-1.5 text-xs text-rose-600">
-          <XCircle className="w-3.5 h-3.5" />
-          {error}
+        <div
+          role="alert"
+          className="flex items-start gap-1.5 text-xs text-rose-600"
+        >
+          <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
         </div>
       )}
     </form>

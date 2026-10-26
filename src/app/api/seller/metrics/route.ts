@@ -51,7 +51,14 @@ export async function GET() {
     let totalOrders = 0;
     let pendingOrders = 0;
     let completedOrders = 0;
-    const recentOrders = [];
+    const recentOrders: {
+  id: string;
+  customerName: string;
+  totalAmount: number;
+  status: string;
+  createdAt: Date;
+  itemCount: number;
+}[] = [];
 
     allOrders.forEach(order => {
       const sellerSubtotal = order.items.reduce((sum, item) => {
@@ -61,7 +68,7 @@ export async function GET() {
       totalRevenue += sellerSubtotal;
       totalOrders++;
       if (order.status === "PENDING") pendingOrders++;
-      if (order.status === "COMPLETED" || order.status === "DELIVERED") completedOrders++;
+      if (order.status === "DELIVERED") completedOrders++;
 
       recentOrders.push({
         id: order.id,

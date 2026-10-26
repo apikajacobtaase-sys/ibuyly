@@ -4,7 +4,10 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
-import { sendSellerNotificationEmail } from "@/lib/email";
+import {
+  sendSellerNotificationEmail,
+  sendSellerApplicationEmail,
+} from "@/lib/email";
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -141,11 +144,11 @@ export async function POST(req: Request) {
       });
 
       // ✅ Send APPROVAL email notification
-      await sendSellerNotificationEmail({
-        to: application.user.email,
-        businessName: application.businessName,
-        status: "APPROVED",
-      });
+      await sendSellerApplicationEmail({
+  to: application.user.email,
+  businessName: application.businessName,
+  status: "APPROVED",
+});
 
     } else if (action === "REJECT") {
       if (!reason) {
@@ -196,12 +199,12 @@ export async function POST(req: Request) {
       });
 
       // ✅ Send NEEDS INFO email notification
-      await sendSellerApplicationEmail({
-        to: application.user.email,
-        businessName: application.businessName,
-        status: "MORE_INFORMATION_REQUIRED",
-        reason: notes || "Please provide additional documentation.",
-      });
+     await sendSellerApplicationEmail({
+  to: application.user.email,
+  businessName: application.businessName,
+  status: "MORE_INFORMATION_REQUIRED",
+  reason: notes || "Please provide additional documentation.",
+});
 
     } else {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });

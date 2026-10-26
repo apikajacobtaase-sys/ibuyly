@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-
+import { UserRole } from "@prisma/client";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -43,12 +43,12 @@ export async function POST(req: Request) {
     }
 
     // 3. 👇 FIX: Smart Role Mapping (Converts "SELLER" to "SELLER_OWNER" automatically)
-    let assignedRole = "CUSTOMER";
-    if (role === "SELLER" || role === "SELLER_OWNER") {
-      assignedRole = "SELLER_OWNER";
-    } else if (role === "SELLER_STAFF") {
-      assignedRole = "SELLER_STAFF";
-    }
+    const assignedRole: UserRole =
+  role === "SELLER" || role === "SELLER_OWNER"
+    ? UserRole.SELLER_OWNER
+    : role === "SELLER_STAFF"
+      ? UserRole.SELLER_STAFF
+      : UserRole.CUSTOMER;
     
     console.log("✅ Assigned Role:", assignedRole);
 

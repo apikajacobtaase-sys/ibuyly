@@ -1,168 +1,108 @@
-// src/app/api/webhooks/paystack/route.ts
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { Prisma } from "@prisma/client";
 
-export async function POST(req: Request) {
-  try {
-    // 1. Verify webhook signature (Paystack sends this in the header)
-    const signature = req.headers.get("x-paystack-signature");
-    if (!signature) {
-      console.error("⚠️ Webhook received without signature");
-      return NextResponse.json({ error: "Missing signature" }, { status: 401 });
-    }
+export const runtime = "nodejs";
 
-    const body = await req.text();
-    const hash = crypto
-      .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY || "")
-      .update(body)
-      .digest("hex");
+type PaystackEventData = {
+  reference?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+  gateway_response?: string;
+  [key: string]: unknown;
+};
 
-    if (hash !== signature) {
-      console.error("⚠️ Webhook signature mismatch");
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
+type SellerTotal = {
+  grossCents: number;
+  commissionRate: number;
+};
 
-    // 2. Parse the event
-    const event = JSON.parse(body);
-    const eventType = event.event;
-    const data = event.data;
-
-    console.log(`📥 Webhook received: ${eventType} (Reference: ${data.reference})`);
-
-    // 3. Handle different event types
-    if (eventType === "charge.success") {
-      await handleChargeSuccess(data);
-    } else if (eventType === "charge.failed") {
-      await handleChargeFailed(data);
-    } else {
-      console.log(`ℹ️ Ignoring event type: ${eventType}`);
-    }
-
-    // 4. Always return 200 to acknowledge receipt (Paystack will retry if we don't)
-    return NextResponse.json({ received: true });
-  } catch (error: any) {
-    console.error("Webhook processing error:", error);
-    // Still return 200 to prevent Paystack from retrying on our errors
-    return NextResponse.json({ received: true });
-  }
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
 }
 
- // Handle successful payment
-async function handleChargeSuccess(data: any) {
-  const reference = data.reference;
-  if (!reference) return;
-
-  const order = await db.order.findFirst({
-    where: { paymentReference: reference },
-    include: {
-      payment: true,
-      items: {
-        include: {
-          variant: {
-            include: {
-              product: {
-                include: {
-                  seller: { select: { id: true, commissionRate: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!order) {
-    console.error(`⚠️ Order not found for reference: ${reference}`);
-    return;
+/**
+ * Verify Paystack's HMAC-SHA512 signature against the exact raw request body.
+ */
+function verifySignature(
+  body: string,
+  signature: string,
+  secret: string
+): boolean {
+  if (!/^[a-f0-9]{128}$/i.test(signature)) {
+    return false;
   }
 
-  // IDEMPOTENCY CHECK
-  if (order.payment?.status === "SUCCESSFUL" || order.payment?.status === "SUCCESS") {
-    console.log(`ℹ️ Payment already verified for order ${order.id}. Skipping.`);
-    return;
-  }
+  const expected = crypto
+    .createHmac("sha512", secret)
+    .update(body)
+    .digest();
 
-  try {
-    await db.$transaction(async (tx) => {
-      // 👇 1. ATOMIC UPDATE: Only update if status is currently PENDING.
-      // This prevents race conditions. If a duplicate webhook hits, count will be 0.
-      const paymentUpdate = await tx.payment.updateMany({
-        where: { 
-          orderId: order.id,
-          status: "PENDING" 
-        },
-        data: {
-          status: "SUCCESSFUL",
-          providerTransactionId: data.reference,
-          metadata: {
-            ...((order.payment?.metadata as any) || {}),
-            paystackResponse: data,
-            verifiedAt: new Date().toISOString(),
-            verifiedVia: "webhook",
-          },
-        },
-      });
+  const supplied = Buffer.from(signature, "hex");
 
-      // 👇 2. If count is 0, another process already updated it. Exit safely.
-      if (paymentUpdate.count === 0) {
-        console.log(`⚠️ Concurrent update detected. Payment already processed. Aborting safely.`);
-        return; 
-      }
-
-      // 3. Update Order status
-      await tx.order.update({
-        where: { id: order.id },
-        data: { status: "CONFIRMED" },
-      });
-
-      // 4. MARKETPLACE FINANCE ENGINE
-      const sellerTotals = new Map<string, { grossAmount: number; commissionRate: number }>();
-
-      for (const item of order.items) {
-        const sellerId = item.variant.product.seller.id;
-        const commissionRate = item.variant.product.seller.commissionRate.toNumber();
-        const lineTotal = item.price.toNumber() * item.quantity;
-
-        if (!sellerTotals.has(sellerId)) {
-          sellerTotals.set(sellerId, { grossAmount: 0, commissionRate });
-        }
-        const existing = sellerTotals.get(sellerId)!;
-        existing.grossAmount += lineTotal;
-      }
-
-      for (const [sellerId, sellerData] of sellerTotals.entries()) {
-        const commissionAmount = (sellerData.grossAmount * sellerData.commissionRate) / 100;
-
-        await tx.sellerFinancialRecord.create({
-          data: {
-            sellerId, orderId: order.id, type: "SALE", amount: sellerData.grossAmount,
-            currency: "GHS", description: `Order #${order.id.slice(-8).toUpperCase()} - Gross sale`,
-          },
-        });
-
-        await tx.sellerFinancialRecord.create({
-          data: {
-            sellerId, orderId: order.id, type: "FEE", amount: -commissionAmount,
-            currency: "GHS", description: `Platform commission (${sellerData.commissionRate}%)`,
-          },
-        });
-      }
-    }); // Removed Serializable isolation level, as updateMany handles concurrency natively and safer
-
-    console.log(`✅ Order ${order.id} confirmed and finances recorded via webhook.`);
-  } catch (error) {
-    console.error(`🚨 Transaction failed for order ${order.id}:`, error);
-  }
+  return (
+    supplied.length === expected.length &&
+    crypto.timingSafeEqual(supplied, expected)
+  );
 }
-// Handle failed payment
-async function handleChargeFailed(data: any) {
-  const reference = data.reference;
-  if (!reference) return;
 
-  const order = await db.order.findFirst({
+/**
+ * Validate the Paystack transaction against the persisted payment.
+ * Paystack reports amounts in the currency's minor unit (pesewas for GHS).
+ */
+function validateSuccessfulTransaction(
+  data: PaystackEventData,
+  payment: {
+    amount: { toNumber(): number };
+    currency: string;
+  },
+  reference: string
+): boolean {
+  if (data.reference !== reference) {
+    return false;
+  }
+
+  if (data.status !== "success") {
+    return false;
+  }
+
+  if (
+    typeof data.amount !== "number" ||
+    !Number.isSafeInteger(data.amount) ||
+    data.amount <= 0
+  ) {
+    return false;
+  }
+
+  if (
+    typeof data.currency !== "string" ||
+    data.currency.toUpperCase() !== payment.currency.toUpperCase()
+  ) {
+    return false;
+  }
+
+  const expectedCents = Math.round(payment.amount.toNumber() * 100);
+
+  return data.amount === expectedCents;
+}
+
+/**
+ * Confirm a successful transaction.
+ *
+ * The conditional payment update is the idempotency gate shared with
+ * the payment verification endpoint. Order confirmation and financial
+ * records are committed in the same transaction.
+ */
+async function handleChargeSuccess(data: PaystackEventData) {
+  const reference = data.reference;
+
+  if (!reference || typeof reference !== "string") {
+    throw new Error("Successful Paystack event has no reference.");
+  }
+
+  const order = await db.order.findUnique({
     where: { paymentReference: reference },
     include: {
       payment: true,
@@ -170,53 +110,459 @@ async function handleChargeFailed(data: any) {
     },
   });
 
-  if (!order) return;
+  if (!order || !order.payment) {
+    // The checkout may not have saved the reference yet.
+    // Return an error so Paystack can retry.
+    throw new Error(`Order or payment not found for reference ${reference}.`);
+  }
 
-  // If already cancelled or confirmed, skip
-  if (order.status === "CANCELLED" || order.status === "CONFIRMED") {
-    console.log(`ℹ️ Order ${order.id} already in final state: ${order.status}. Skipping.`);
+  if (order.payment.status === "SUCCESSFUL") {
     return;
   }
 
-  // ATOMIC TRANSACTION: Restore stock + Update Order + Update Payment
-  await db.$transaction(
-    async (tx) => {
-      // 1. Restore stock for each item
-      for (const item of order.items) {
-        await tx.productVariant.update({
-          where: { id: item.variantId },
-          data: {
-            stockQuantity: { increment: item.quantity },
-          },
-        });
+  if (order.payment.status !== "PENDING") {
+    console.warn(
+      `Ignoring successful event for non-pending payment ${reference}: ${order.payment.status}`
+    );
+    return;
+  }
+ const paymentCurrency = order.payment.currency;
+  if (
+    !validateSuccessfulTransaction(data, order.payment, reference)
+  ) {
+    console.error(
+      `Paystack transaction validation failed for order ${order.id}.`
+    );
+    throw new Error("Paystack transaction details did not match the order.");
+  }
+
+  await db.$transaction(async (tx) => {
+    // Only one confirmation path can claim a pending payment.
+    const claim = await tx.payment.updateMany({
+      where: {
+        orderId: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "SUCCESSFUL",
+        providerTransactionId: reference,
+       metadata: {
+paystackResponse: JSON.parse(JSON.stringify(data)) as Prisma.InputJsonValue,
+verifiedAt: new Date().toISOString(),
+verifiedVia: "webhook",
+},
+
+      },
+    });
+
+    if (claim.count === 0) {
+      // Another request already changed the payment state.
+      return;
+    }
+
+    const orderUpdate = await tx.order.updateMany({
+      where: {
+        id: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CONFIRMED",
+      },
+    });
+
+    if (orderUpdate.count !== 1) {
+      // Throwing rolls back the payment claim as well.
+      throw new Error(
+        `Order ${order.id} was not pending when payment confirmation was attempted.`
+      );
+    }
+
+    const sellerTotals = new Map<string, SellerTotal>();
+
+    for (const item of order.items) {
+      if (!item.sellerId) {
+        throw new Error(
+          `Order item ${item.id} has no sellerId; financial allocation cannot proceed.`
+        );
       }
 
-      // 2. Update Order status to CANCELLED
-      await tx.order.update({
-        where: { id: order.id },
-        data: { status: "CANCELLED" },
-      });
+      if (!item.offerId) {
+        throw new Error(
+          `Order item ${item.id} has no offerId; seller allocation cannot proceed.`
+        );
+      }
 
-      // 3. Update Payment status to FAILED
-      if (order.payment) {
-        await tx.payment.update({
-          where: { orderId: order.id },
-          data: {
-            status: "FAILED",
-            metadata: {
-              ...((order.payment.metadata as any) || {}),
-              paystackResponse: data,
-              failedAt: new Date().toISOString(),
-              failureReason: data.gateway_response || "Payment failed",
+      const offer = await tx.sellerOffer.findUnique({
+        where: { id: item.offerId },
+        select: {
+          id: true,
+          sellerId: true,
+          seller: {
+            select: {
+              id: true,
+              commissionRate: true,
             },
           },
+        },
+      });
+
+      if (!offer || offer.sellerId !== item.sellerId) {
+        throw new Error(
+          `Seller offer mismatch for order item ${item.id}.`
+        );
+      }
+
+      const sellerId = offer.seller.id;
+      const commissionRate = offer.seller.commissionRate.toNumber();
+      const lineCents = Math.round(item.price.toNumber() * 100) * item.quantity;
+
+      if (!Number.isSafeInteger(lineCents) || lineCents < 0) {
+        throw new Error(`Invalid line amount for order item ${item.id}.`);
+      }
+
+      const existing = sellerTotals.get(sellerId);
+
+      if (existing) {
+        existing.grossCents += lineCents;
+      } else {
+        sellerTotals.set(sellerId, {
+          grossCents: lineCents,
+          commissionRate,
         });
       }
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     }
-  );
 
-  console.log(`❌ Order ${order.id} cancelled and stock restored via webhook.`);
+    for (const [sellerId, sellerData] of sellerTotals) {
+      const commissionCents = Math.round(
+        (sellerData.grossCents * sellerData.commissionRate) / 100
+      );
+
+      await tx.sellerFinancialRecord.create({
+        data: {
+          sellerId,
+          orderId: order.id,
+          type: "SALE",
+          amount: sellerData.grossCents / 100,
+         currency: paymentCurrency,
+          description: `Order #${order.id.slice(-8).toUpperCase()} - Gross sale`,
+        },
+      });
+
+      await tx.sellerFinancialRecord.create({
+        data: {
+          sellerId,
+          orderId: order.id,
+          type: "FEE",
+          amount: -commissionCents / 100,
+          currency: paymentCurrency,
+          description: `Platform commission (${sellerData.commissionRate}%)`,
+        },
+      });
+    }
+  });
+
+  console.info(`Paystack success event processed for order ${order.id}.`);
+}
+
+/**
+ * Handle a failed charge.
+ *
+ * Inventory is restored only if this transaction successfully claims
+ * a payment that is still pending. Repeated failure events cannot restore
+ * the same inventory twice.
+ */
+async function handleChargeFailed(data: PaystackEventData) {
+  const reference = data.reference;
+
+  if (!reference || typeof reference !== "string") {
+    throw new Error("Failed Paystack event has no reference.");
+  }
+
+  const order = await db.order.findUnique({
+    where: { paymentReference: reference },
+    include: {
+      payment: true,
+      items: true,
+    },
+  });
+
+  if (!order || !order.payment) {
+    throw new Error(`Order or payment not found for reference ${reference}.`);
+  }
+
+  if (
+    order.payment.status !== "PENDING" ||
+    order.status !== "PENDING"
+  ) {
+    // Do not release inventory for a payment already handled elsewhere.
+    return;
+  }
+
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+  if (!secretKey) {
+    throw new Error("PAYSTACK_SECRET_KEY is not configured.");
+  }
+
+  // A signed webhook proves that Paystack sent the event, but checking
+  // the current transaction state protects against conflicting events.
+  let verificationResponse: Response;
+
+  try {
+    verificationResponse = await fetch(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+  } catch (error) {
+    throw new Error(
+      `Could not verify failed transaction ${reference} with Paystack: ${
+        error instanceof Error ? error.message : "Unknown network error"
+      }`
+    );
+  }
+
+  if (!verificationResponse.ok) {
+    throw new Error(
+      `Paystack verification returned HTTP ${verificationResponse.status} for ${reference}.`
+    );
+  }
+
+  let verificationResult: {
+    status?: boolean;
+    message?: string;
+    data?: PaystackEventData;
+  };
+
+  try {
+    verificationResult = await verificationResponse.json();
+  } catch {
+    throw new Error(
+      `Paystack returned invalid verification JSON for ${reference}.`
+    );
+  }
+
+  if (
+    verificationResult.status !== true ||
+    !verificationResult.data ||
+    typeof verificationResult.data !== "object"
+  ) {
+    throw new Error(
+      `Paystack could not verify the current state of transaction ${reference}.`
+    );
+  }
+
+  const transaction = verificationResult.data;
+
+  if (transaction.reference !== reference) {
+    throw new Error(
+      `Paystack verification reference mismatch for ${reference}.`
+    );
+  }
+
+  // A success event may have been delivered after a failure event.
+  // Always let the existing success handler perform its full validation
+  // and use its established idempotent confirmation transaction.
+  if (transaction.status === "success") {
+    await handleChargeSuccess(transaction);
+    return;
+  }
+
+  // Do not release reservations for pending, abandoned, or unknown states.
+  if (transaction.status !== "failed") {
+    throw new Error(
+      `Paystack transaction ${reference} is not confirmed failed; current status: ${
+        transaction.status ?? "unknown"
+      }.`
+    );
+  }
+
+  // Even a confirmed failure must match the order's expected amount/currency.
+  if (
+    typeof transaction.amount !== "number" ||
+    !Number.isSafeInteger(transaction.amount) ||
+    transaction.amount <= 0
+  ) {
+    throw new Error(
+      `Paystack returned an invalid amount for failed transaction ${reference}.`
+    );
+  }
+
+  if (
+    typeof transaction.currency !== "string" ||
+    transaction.currency.toUpperCase() !==
+      order.payment.currency.toUpperCase()
+  ) {
+    throw new Error(
+      `Paystack returned an unexpected currency for failed transaction ${reference}.`
+    );
+  }
+
+  const expectedCents = Math.round(order.payment.amount.toNumber() * 100);
+
+  if (transaction.amount !== expectedCents) {
+    throw new Error(
+      `Paystack returned an unexpected amount for failed transaction ${reference}.`
+    );
+  }
+
+  await db.$transaction(async (tx) => {
+    // Only one failure handler can claim the pending payment.
+    const claim = await tx.payment.updateMany({
+      where: {
+        orderId: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "FAILED",
+        metadata: {
+          paystackResponse: JSON.parse(
+            JSON.stringify(transaction)
+          ) as Prisma.InputJsonValue,
+          failedAt: new Date().toISOString(),
+          failureReason:
+            typeof transaction.gateway_response === "string"
+              ? transaction.gateway_response
+              : typeof data.gateway_response === "string"
+                ? data.gateway_response
+                : "Payment failed",
+          verifiedVia: "webhook-and-api",
+        },
+      },
+    });
+
+    if (claim.count === 0) {
+      return;
+    }
+
+    const orderUpdate = await tx.order.updateMany({
+      where: {
+        id: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CANCELLED",
+      },
+    });
+
+    if (orderUpdate.count !== 1) {
+      throw new Error(
+        `Order ${order.id} could not be cancelled after payment failure.`
+      );
+    }
+
+    for (const item of order.items) {
+      if (!item.offerId) {
+        throw new Error(
+          `Order item ${item.id} has no offerId; inventory restoration needs reconciliation.`
+        );
+      }
+
+      const restored = await tx.sellerOffer.updateMany({
+        where: {
+          id: item.offerId,
+          sellerId: item.sellerId ?? undefined,
+        },
+        data: {
+          stockQuantity: {
+            increment: item.quantity,
+          },
+        },
+      });
+
+      if (restored.count !== 1) {
+        throw new Error(
+          `Could not restore seller-offer inventory for order item ${item.id}.`
+        );
+      }
+    }
+
+    // Release the discount reservation made during checkout.
+    // This happens only when this transaction successfully cancels the order.
+    if (order.discountCodeId) {
+      await tx.discountCode.updateMany({
+        where: {
+          id: order.discountCodeId,
+          usedCount: { gt: 0 },
+        },
+        data: {
+          usedCount: { decrement: 1 },
+        },
+      });
+    }
+  });
+
+  console.info(
+    `Paystack failure event verified and processed for order ${order.id}.`
+  );
+}
+export async function POST(req: Request) {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+
+  if (!secret) {
+    console.error("PAYSTACK_SECRET_KEY is not configured.");
+    return jsonError("Webhook processing is unavailable.", 500);
+  }
+
+  const signature = req.headers.get("x-paystack-signature");
+
+  if (!signature) {
+    return jsonError("Missing signature.", 401);
+  }
+
+  try {
+    const body = await req.text();
+
+    if (!verifySignature(body, signature, secret)) {
+      return jsonError("Invalid signature.", 401);
+    }
+
+    let event: {
+      event?: string;
+      data?: PaystackEventData;
+    };
+
+    try {
+      event = JSON.parse(body);
+    } catch {
+      return jsonError("Invalid JSON payload.", 400);
+    }
+
+    if (
+      !event ||
+      typeof event.event !== "string" ||
+      !event.data ||
+      typeof event.data !== "object"
+    ) {
+      return jsonError("Invalid webhook payload.", 400);
+    }
+
+    switch (event.event) {
+      case "charge.success":
+        await handleChargeSuccess(event.data);
+        break;
+
+      case "charge.failed":
+        await handleChargeFailed(event.data);
+        break;
+
+      default:
+        // Unhandled events are acknowledged to avoid pointless retries.
+        return NextResponse.json({ received: true });
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error("Paystack webhook processing failed:", error);
+
+    // A 5xx response allows Paystack to retry transient processing errors.
+    return jsonError("Webhook processing failed.", 500);
+  }
 }

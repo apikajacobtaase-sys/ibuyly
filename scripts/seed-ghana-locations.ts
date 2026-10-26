@@ -62,31 +62,39 @@ async function main() {
       },
     }).catch(() => null); // Ignore if it already exists
 
-    if (region) {
-      console.log(`✅ Created Region: ${region.name}`);
+  
+if (region) {
+  console.log(`Created Region: ${region.name}`);
 
-      // Create Districts
-      for (const distData of regData.districts) {
-        const district = await prisma.district.create({
+  // Create Districts
+  for (const distData of regData.districts) {
+    const districtCode = `${regData.code}-${distData.name}`
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, "-");
+
+    const district = await prisma.district.create({
+      data: {
+        name: distData.name,
+        code: districtCode,
+        regionId: region.id,
+      },
+    }).catch(() => null);
+
+    if (district) {
+      // Create Localities
+      for (const locName of distData.localities) {
+        await prisma.locality.create({
           data: {
-            name: distData.name,
-            regionId: region.id,
+            name: locName,
+            districtId: district.id,
           },
         }).catch(() => null);
-
-        if (district) {
-          // Create Localities
-          for (const locName of distData.localities) {
-            await prisma.locality.create({
-              data: {
-                name: locName,
-                districtId: district.id,
-              },
-            }).catch(() => null);
-          }
-        }
       }
     }
+  }
+}
+
+
   }
 
   console.log("🎉 Seeded 16 Regions and major Districts/Localities successfully!");

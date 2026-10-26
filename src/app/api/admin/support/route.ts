@@ -18,9 +18,15 @@ export async function GET() {
     if (error) return error;
 
     const tickets = await db.supportTicket.findMany({
-      include: {
-        user: { select: { email: true, firstName: true, lastName: true } },
-      },
+include: {
+  user: {
+    select: {
+      email: true,
+      firstName: true,
+      lastName: true,
+    },
+  },
+},
       orderBy: { createdAt: "desc" },
     });
 
@@ -43,11 +49,18 @@ export async function PATCH(req: Request) {
     }
 
     const { ticketId, resolution, status, assignedTo } = validation.data;
-
     const ticket = await db.supportTicket.findUnique({
-      where: { id: ticketId },
-      include: { user: { select: { email: true, firstName: true } } },
-    });
+  where: { id: ticketId },
+  include: {
+    user: {
+      select: {
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    },
+  },
+});
 
     if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
 

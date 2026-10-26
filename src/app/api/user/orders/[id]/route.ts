@@ -6,8 +6,9 @@ import { NextResponse } from "next/server";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -18,7 +19,7 @@ export async function GET(
 
 const order = await db.order.findFirst({
   where: {
-    id: params.id,
+    id,
     userId: session.user.id,
   },
   include: {
@@ -41,6 +42,7 @@ const order = await db.order.findFirst({
             product: {
               select: {
                 slug: true,
+                id: true,
                 images: { where: { isPrimary: true }, take: 1, select: { url: true } },
               },
             },
@@ -60,7 +62,7 @@ const formattedItems = order.items.map((item) => ({
   id: item.id,
   title: item.title,
   slug: item.variant?.product?.slug || null,
-  productId: item.variant?.productId || null,
+  productId: item.variant?.product?.id || null,
   variantId: item.variantId,
   quantity: item.quantity,
   price: item.price.toNumber(),

@@ -214,7 +214,11 @@ export default function ComparePage() {
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-ibuy-text">{product.sellerName}</span>
                     {product.sellerVerified && (
-                      <ShieldCheck className="w-3 h-3 text-ibuy-intelligence" title="Verified Seller" />
+                      <ShieldCheck
+  className="w-3 h-3 text-ibuy-intelligence"
+  aria-label="Verified Seller"
+  role="img"
+/>
                     )}
                   </div>
                   {product.sellerTrustScore && (
@@ -280,7 +284,11 @@ export default function ComparePage() {
               <span>Key difference</span>
             </div>
             <div className="flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-ibuy-intelligence" />
+             <ShieldCheck
+  className="w-3 h-3 text-ibuy-intelligence"
+  aria-label="Verified Seller"
+  role="img"
+/>
               <span>Verified</span>
             </div>
           </div>

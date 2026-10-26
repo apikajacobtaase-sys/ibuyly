@@ -1,0 +1,155 @@
+ // src/app/api/cart/merge/route.ts
+
+import { db } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { NextResponse } from "next/server";
+import { authOptions } from "@/lib/auth";
+import { z } from "zod";
+
+const MergeCartSchema = z.object({
+  guestCart: z.array(
+    z.object({
+      productId: z.string().cuid(),
+      variantId: z.string().cuid(),
+      offerId: z.string().cuid(),
+      quantity: z.number().int().positive().max(100),
+    })
+  ),
+});
+
+export async function POST(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const validation = MergeCartSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid cart data",
+          details: validation.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+
+    const { guestCart } = validation.data;
+
+    if (guestCart.length === 0) {
+      return NextResponse.json({
+        success: true,
+        merged: false,
+        itemCount: 0,
+        message: "Guest cart is empty",
+      });
+    }
+
+    const result = await db.$transaction(async (tx) => {
+      let userCart = await tx.cart.findUnique({
+        where: { userId: session.user.id },
+      });
+
+      if (!userCart) {
+        userCart = await tx.cart.create({
+          data: { userId: session.user.id },
+        });
+      }
+
+      let mergedCount = 0;
+      let skippedCount = 0;
+
+      for (const guestItem of guestCart) {
+        const offer = await tx.sellerOffer.findUnique({
+          where: { id: guestItem.offerId },
+          include: {
+            variant: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        });
+
+        // Verify that the exact seller offer is still available.
+        if (
+          !offer ||
+          offer.variantId !== guestItem.variantId ||
+          offer.variant.productId !== guestItem.productId ||
+          offer.status !== "ACTIVE" ||
+          !offer.variant.isActive ||
+          offer.variant.product.status !== "ACTIVE" ||
+          offer.stockQuantity <= 0
+        ) {
+          skippedCount++;
+          continue;
+        }
+
+        const existingItem = await tx.cartItem.findFirst({
+          where: {
+            cartId: userCart.id,
+            variantId: guestItem.variantId,
+            offerId: guestItem.offerId,
+          },
+        });
+
+        const requestedQuantity =
+          (existingItem?.quantity ?? 0) + guestItem.quantity;
+
+        const finalQuantity = Math.min(
+          requestedQuantity,
+          offer.stockQuantity
+        );
+
+        if (existingItem) {
+          await tx.cartItem.update({
+            where: { id: existingItem.id },
+            data: {
+              quantity: finalQuantity,
+              isSelected: true,
+            },
+          });
+        } else {
+          await tx.cartItem.create({
+            data: {
+              cartId: userCart.id,
+              variantId: guestItem.variantId,
+              offerId: guestItem.offerId,
+              quantity: finalQuantity,
+              isSelected: true,
+            },
+          });
+        }
+
+        mergedCount++;
+      }
+
+      return {
+        mergedCount,
+        skippedCount,
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      merged: result.mergedCount > 0,
+      itemCount: result.mergedCount,
+      skippedCount: result.skippedCount,
+      message: "Cart merge completed.",
+    });
+  } catch (error) {
+    console.error("Cart merge error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to merge cart" },
+      { status: 500 }
+    );
+  }
+}

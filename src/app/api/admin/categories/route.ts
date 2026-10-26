@@ -25,6 +25,15 @@ const UpdateCategorySchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const DeleteCategorySchema = z.object({
+  categoryId: z.string().cuid("Invalid category ID"),
+  reassignToCategoryId: z
+    .string()
+    .cuid("Invalid destination category ID")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
+});
 
 // 2. Update the POST function
 export async function POST(req: Request) {

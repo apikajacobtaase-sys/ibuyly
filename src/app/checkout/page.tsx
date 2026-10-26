@@ -7,18 +7,28 @@ import Link from "next/link";
 import { ArrowLeft, Store, Loader2, CheckCircle, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import DeliveryAddressForm from "@/components/checkout/DeliveryAddressForm";
+import PromoCodeInput from "@/components/PromoCodeInput";
 import { useSession } from "next-auth/react";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   
-  const { selectedItems, selectedTotalAmount, clearCart } = useCartStore();
+  const {
+  selectedItems,
+  selectedTotalAmount,
+  clearCart,
+  syncFromDB,
+} = useCartStore();
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [orderId, setOrderId] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    code: string;
+    amount: number;
+  } | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   const [addressData, setAddressData] = useState<any>(null);
@@ -28,12 +38,68 @@ export default function CheckoutPage() {
     setIsHydrated(true);
   }, []);
 
+  useEffect(() => {
+  if (status !== "authenticated") return;
+
+  let cancelled = false;
+
+  async function loadCartFromDatabase() {
+    try {
+      const response = await fetch("/api/cart", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load cart: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!cancelled && Array.isArray(data.items)) {
+        syncFromDB(data.items);
+        setIsHydrated(true);
+      }
+    } catch (error) {
+      console.error("Failed to synchronize checkout cart:", error);
+
+      if (!cancelled) {
+        setError(
+          "We couldn't load your cart. Please refresh the page and try again."
+        );
+      }
+    }
+  }
+
+  void loadCartFromDatabase();
+
+  return () => {
+    cancelled = true;
+  };
+}, [status, syncFromDB]);
+
   const selectedCartItems = isHydrated ? selectedItems() : [];
   const selectedTotal = isHydrated ? selectedTotalAmount() : 0;
-  
-  const deliveryFee = (quote?.isServiceable && quote?.minOrderMet) ? quote.deliveryFee : 0;
-  const finalTotal = selectedTotal + deliveryFee;
+  const selectedItemsKey = selectedCartItems
+  .map((item) => `${item.id}:${item.quantity}:${item.price}`)
+  .sort()
+  .join("|");
 
+useEffect(() => {
+  setAppliedDiscount(null);
+}, [selectedItemsKey]);
+  
+ const deliveryFee =
+  quote?.isServiceable && quote?.minOrderMet
+    ? quote.deliveryFee
+    : 0;
+
+const discountAmount = appliedDiscount?.amount ?? 0;
+
+const finalTotal = Math.max(
+  0,
+  selectedTotal + deliveryFee - discountAmount
+);
   const handleAddressChange = (data: any, newQuote: any) => {
     setAddressData(data);
     setQuote(newQuote);
@@ -64,10 +130,11 @@ export default function CheckoutPage() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cartItemIds: cartItemIds,
-          localityId: addressData.localityId,
-          address: {
+          body: JSON.stringify({
+  cartItemIds,
+  discountCode: appliedDiscount?.code,
+  localityId: addressData.localityId,
+  address: {
             recipientName: addressData.recipientName,
             phone: addressData.phone,
             landmark: addressData.landmark,
@@ -189,20 +256,44 @@ export default function CheckoutPage() {
         <div className="md:col-span-1">
           <div className="bg-white rounded-lg border border-gray-200 p-5 sticky top-24 shadow-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Payment Summary</h2>
+            <div className="mb-5">
+  <PromoCodeInput
+    cartItemIds={selectedCartItems.map((item) => item.id)}
+    currentDiscount={appliedDiscount}
+    onDiscountApplied={(amount, code) => {
+      setAppliedDiscount({ amount, code });
+      setError("");
+    }}
+    onDiscountRemoved={() => {
+      setAppliedDiscount(null);
+      setError("");
+    }}
+  />
+</div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium text-gray-900">GH₵ {selectedTotal.toFixed(2)}</span>
+                <span className="font-medium text-gray-900">GH{"\u20B5"} {selectedTotal.toFixed(2)}</span>
               </div>
+              {appliedDiscount && (
+  <div className="flex justify-between gap-3">
+    <span className="text-emerald-700">
+      Discount ({appliedDiscount.code})
+    </span>
+    <span className="font-medium text-emerald-700">
+      - GH{"\u20B5"} {discountAmount.toFixed(2)}
+    </span>
+  </div>
+)}
               <div className="flex justify-between">
                 <span className="text-gray-600">Delivery Fee</span>
                 <span className="font-medium text-gray-900">
-                  {quote?.isServiceable ? `GH₵ ${deliveryFee.toFixed(2)}` : "Calculated after location"}
+                  {quote?.isServiceable ? <>GH{"\u20B5"} {deliveryFee.toFixed(2)}</> : "Calculated after location"}
                 </span>
               </div>
               <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
                 <span className="text-base font-bold text-gray-900">Total</span>
-                <span className="text-xl font-bold text-green-600">GH₵ {finalTotal.toFixed(2)}</span>
+                <span className="text-xl font-bold text-green-600">GH{"\u20B5"} {finalTotal.toFixed(2)}</span>
               </div>
             </div>
 
@@ -234,3 +325,6 @@ export default function CheckoutPage() {
     </div>
   );
 }
+
+
+

@@ -29,7 +29,7 @@ export default function AccountPage() {
     );
   }
 
-  const userName = session?.user?.name || session?.user?.firstName || "Customer";
+  const userName = session?.user?.name || "Customer";
   const userEmail = session?.user?.email || "";
   const userInitial = userName.charAt(0).toUpperCase();
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { 
   LayoutDashboard, 
@@ -13,12 +13,12 @@ import {
 import { DashboardLayout, StatCard, StatusBadge, DataTable, SidebarItem } from "@/components/dashboard";
 
 const sellerItems: SidebarItem[] = [
-  { label: "Overview", href: "/dashboard-test", icon: LayoutDashboard },
-  { label: "Products", href: "/dashboard-test/products", icon: Package, badge: 12 },
-  { label: "Orders", href: "/dashboard-test/orders", icon: ShoppingCart, badge: 3 },
-  { label: "Finances", href: "/dashboard-test/finances", icon: DollarSign },
-  { label: "Analytics", href: "/dashboard-test/analytics", icon: TrendingUp },
-  { label: "Settings", href: "/dashboard-test/settings", icon: Settings },
+  { label: "Overview", href: "/dashboard-test", iconName: "LayoutDashboard" },
+  { label: "Products", href: "/dashboard-test/products", iconName: "Package", badge: 12 },
+  { label: "Orders", href: "/dashboard-test/orders", iconName: "ShoppingCart", badge: 3 },
+  { label: "Finances", href: "/dashboard-test/finances", iconName: "DollarSign" },
+  { label: "Analytics", href: "/dashboard-test/analytics", iconName: "TrendingUp" },
+  { label: "Settings", href: "/dashboard-test/settings", iconName: "Settings" },
 ];
 
 const sampleOrders = [
@@ -41,7 +41,7 @@ export default function DashboardTestPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           title="Total Sales"
-          value="GH₵ 12,450.00"
+          value="GHâ‚µ 12,450.00"
           icon={DollarSign}
           color="text-green-600"
           bg="bg-green-100"
@@ -98,7 +98,7 @@ export default function DashboardTestPage() {
             {
               key: "total",
               header: "Total",
-              render: (item) => `GH₵ ${item.total.toFixed(2)}`,
+              render: (item) => `GHâ‚µ ${item.total.toFixed(2)}`,
             },
             {
               key: "status",

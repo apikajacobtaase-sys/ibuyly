@@ -62,7 +62,11 @@ export async function GET() {
         sellerResponse: r.sellerResponse,
         respondedAt: r.respondedAt,
         createdAt: r.createdAt,
-        buyerName: r.buyer.name || "Anonymous",
+        buyerName:
+  [r.buyer.firstName, r.buyer.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || "Anonymous",
       })),
       totalReviews,
       averageRating: Math.round(averageRating * 10) / 10,

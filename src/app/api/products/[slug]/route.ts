@@ -55,7 +55,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
         title: product.title,
         slug: product.slug,
         description: product.description,
-        images: product.images.map((img) => img.url || img.imageUrl),
+        images: product.images.map((img) => img.url),
         variants: formattedVariants,
         category: product.category,
       },

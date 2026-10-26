@@ -51,13 +51,18 @@ export async function GET(req: Request) {
     const [orders, total] = await Promise.all([
       db.order.findMany({
         where: whereClause,
-        include: {
-          // ✅ User only has: id, email, emailVerified, hashedPassword, role, createdAt, updatedAt
-          user: {
-            select: { id: true, email: true },
-          },
-          // ✅ Address has: recipientName, phone, neighbourhood, + relations
-          shippingAddress: {
+           include: {
+  user: {
+    select: { id: true, email: true },
+  },
+
+  payment: {
+    select: {
+      paymentMethod: true,
+    },
+  },
+
+  shippingAddress: {
             select: {
               recipientName: true,
               phone: true,
@@ -116,7 +121,7 @@ export async function GET(req: Request) {
         id: order.id,
         status: order.status,
         createdAt: order.createdAt,
-        paymentMethod: order.paymentMethod || "Online",
+        paymentMethod: order.payment?.paymentMethod || "Online",
         customerName: recipient,
         customerEmail: order.user?.email || "N/A",
         customerPhone: phone,

@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       deliveryFee,
       minOrderValue,
       minOrderMet,
-      estimatedDays: activeZone.estimatedDeliveryDays || null,
+      estimatedDays: activeZone.estimatedDays ?? null,
       codEnabled: activeZone.codEnabled || false,
     });
 

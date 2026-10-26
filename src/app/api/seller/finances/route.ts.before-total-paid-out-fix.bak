@@ -1,0 +1,233 @@
+import { db } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { NextResponse } from "next/server";
+import { authOptions } from "@/lib/auth";
+import { z } from "zod";
+
+export const dynamic = "force-dynamic";
+
+const PayoutRequestSchema = z.object({
+amount: z.number().positive("Amount must be greater than 0"),
+paymentMethod: z.enum(["BANK_TRANSFER", "MOBILE_MONEY"]),
+paymentDetails: z.object({
+accountName: z.string().min(2),
+accountNumber: z.string().min(5),
+bankName: z.string().min(2).optional(),
+network: z.string().min(2).optional(),
+}),
+});
+
+async function getSellerFinanceData(sellerId: string) {
+const [records, payouts] = await Promise.all([
+db.sellerFinancialRecord.findMany({
+where: { sellerId },
+orderBy: { createdAt: "desc" },
+}),
+db.payout.findMany({
+where: { sellerId },
+orderBy: { createdAt: "desc" },
+}),
+]);
+
+const amountOf = (value: { toNumber(): number } | number) =>
+typeof value === "number" ? value : value.toNumber();
+
+const grossSales = records
+.filter((record) => record.type === "SALE")
+.reduce((sum, record) => sum + amountOf(record.amount), 0);
+
+const marketplaceFees = Math.abs(
+records
+.filter((record) => record.type === "FEE")
+.reduce((sum, record) => sum + amountOf(record.amount), 0)
+);
+
+const refunds = Math.abs(
+records
+.filter((record) => record.type === "REFUND")
+.reduce((sum, record) => sum + amountOf(record.amount), 0)
+);
+
+const totalPaidOut = payouts
+.filter((payout) => payout.status === "COMPLETED")
+.reduce((sum, payout) => sum + amountOf(payout.amount), 0);
+
+// Include recorded ledger payouts in the balance calculation.
+// The admin payout routes may create a PAYOUT ledger record at approval,
+// so subtracting both that record and the payout table amount would double-count.
+const ledgerEarnings = records.reduce((sum, record) => {
+if (record.type === "SALE" || record.type === "FEE" ||
+record.type === "REFUND") {
+return sum + amountOf(record.amount);
+}
+return sum;
+}, 0);
+
+const ledgerPayouts = Math.abs(
+records
+.filter((record) => record.type === "PAYOUT")
+.reduce((sum, record) => sum + amountOf(record.amount), 0)
+);
+
+const pendingPayoutAmount = payouts
+.filter((payout) =>
+payout.status === "PENDING" || payout.status === "APPROVED"
+)
+.reduce((sum, payout) => sum + amountOf(payout.amount), 0);
+
+// The available balance must not subtract the same payout twice.
+const netEarnings = Math.max(0, ledgerEarnings - ledgerPayouts);
+
+const availableBalance = Math.max(
+0,
+netEarnings - pendingPayoutAmount
+);
+
+return {
+grossSales: Number(grossSales.toFixed(2)),
+marketplaceFees: Number(marketplaceFees.toFixed(2)),
+netBalance: Number(netEarnings.toFixed(2)),
+totalPaidOut: Number(totalPaidOut.toFixed(2)),
+availableBalance: Number(availableBalance.toFixed(2)),
+currency: "GHS",
+records: records.slice(0, 100).map((record) => ({
+id: record.id,
+type: record.type,
+amount: amountOf(record.amount),
+description: record.description || record.type,
+createdAt: record.createdAt.toISOString(),
+})),
+pendingPayouts: payouts
+.filter((payout) =>
+payout.status === "PENDING" || payout.status === "APPROVED"
+)
+.map((payout) => ({
+id: payout.id,
+amount: amountOf(payout.amount),
+paymentMethod: payout.paymentMethod || "UNKNOWN",
+status: payout.status,
+createdAt: payout.createdAt.toISOString(),
+})),
+};
+}
+
+export async function GET() {
+try {
+const session = await getServerSession(authOptions);
+
+if (!session?.user?.id) {
+  return NextResponse.json(
+    { error: "Unauthorized" },
+    { status: 401 }
+  );
+}
+
+const seller = await db.sellerProfile.findUnique({
+  where: { userId: session.user.id },
+  select: { id: true },
+});
+
+if (!seller) {
+  return NextResponse.json(
+    { error: "Seller profile not found" },
+    { status: 403 }
+  );
+}
+
+const finances = await getSellerFinanceData(seller.id);
+
+return NextResponse.json(finances);
+
+} catch (error) {
+console.error("[SELLER FINANCES] GET error:", error);
+
+return NextResponse.json(
+  { error: "Failed to fetch seller finances" },
+  { status: 500 }
+);
+
+}
+}
+
+export async function POST(req: Request) {
+try {
+const session = await getServerSession(authOptions);
+
+if (!session?.user?.id) {
+  return NextResponse.json(
+    { error: "Unauthorized" },
+    { status: 401 }
+  );
+}
+
+const seller = await db.sellerProfile.findUnique({
+  where: { userId: session.user.id },
+  select: { id: true },
+});
+
+if (!seller) {
+  return NextResponse.json(
+    { error: "Seller profile not found" },
+    { status: 403 }
+  );
+}
+
+const parsed = PayoutRequestSchema.safeParse(await req.json());
+
+if (!parsed.success) {
+  return NextResponse.json(
+    {
+      error: "Invalid payout request",
+      details: parsed.error.flatten(),
+    },
+    { status: 400 }
+  );
+}
+
+const { amount, paymentMethod, paymentDetails } = parsed.data;
+
+// Recalculate the seller's balance on the server.
+const finances = await getSellerFinanceData(seller.id);
+
+if (amount > finances.availableBalance + 0.000001) {
+  return NextResponse.json(
+    {
+      error: "Insufficient available balance",
+      availableBalance: finances.availableBalance,
+      currency: "GHS",
+    },
+    { status: 400 }
+  );
+}
+
+const payout = await db.payout.create({
+  data: {
+    sellerId: seller.id,
+    amount,
+    currency: "GHS",
+    status: "PENDING",
+    paymentMethod,
+    paymentDetails,
+  },
+});
+
+return NextResponse.json(
+  {
+    success: true,
+    payoutId: payout.id,
+    message: "Payout request submitted successfully",
+  },
+  { status: 201 }
+);
+
+} catch (error) {
+console.error("[SELLER FINANCES] POST error:", error);
+
+return NextResponse.json(
+  { error: "Failed to request payout" },
+  { status: 500 }
+);
+
+
+}
+}

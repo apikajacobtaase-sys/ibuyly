@@ -1,4 +1,4 @@
-// src/app/api/seller/payouts/route.ts
+﻿// src/app/api/seller/payouts/route.ts
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
@@ -41,7 +41,7 @@ export async function GET() {
     const processedPayouts = await db.payout.aggregate({
       where: {
         sellerId: seller.id,
-        status: { in: ["APPROVED", "PROCESSING", "PAID"] },
+        status: { in: ["PENDING", "APPROVED", "PROCESSING", "PAID"] },
       },
       _sum: { amount: true },
     });
@@ -52,7 +52,7 @@ export async function GET() {
     // 4. Fetch Payout History
     const payouts = await db.payout.findMany({
       where: { sellerId: seller.id },
-      orderBy: { requestedAt: "desc" },
+      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({
@@ -60,19 +60,20 @@ export async function GET() {
       grossRevenue,
       netEarnings,
       payouts: payouts.map((p) => ({
-        id: p.id,
-        amount: Number(p.amount),
-        currency: p.currency,
-        status: p.status,
-        paymentMethod: p.paymentMethod,
-        paymentReference: p.paymentReference,
-        rejectionReason: p.rejectionReason,
-        requestedAt: p.requestedAt,
-        paidAt: p.paidAt,
-      })),
+  id: p.id,
+  amount: Number(p.amount),
+  currency: p.currency,
+  status: p.status,
+  paymentMethod: p.paymentMethod,
+  paymentDetails: p.paymentDetails,
+  notes: p.notes,
+  requestedAt: p.createdAt,
+  processedAt: p.processedAt,
+  paidAt: p.status === "PAID" ? p.processedAt : null,
+})),
     });
   } catch (error: any) {
-    console.error("🚨 Seller payouts GET error:", error);
+    console.error("ðŸš¨ Seller payouts GET error:", error);
     return NextResponse.json({ error: error.message || "Failed to fetch payouts" }, { status: 500 });
   }
 }
@@ -109,14 +110,14 @@ export async function POST(req: Request) {
     const netEarnings = grossRevenue * (1 - Number(seller.commissionRate) / 100);
 
     const processedPayouts = await db.payout.aggregate({
-      where: { sellerId: seller.id, status: { in: ["APPROVED", "PROCESSING", "PAID"] } },
+      where: { sellerId: seller.id, status: { in: ["PENDING", "APPROVED", "PROCESSING", "PAID"] } },
       _sum: { amount: true },
     });
     const availableBalance = Math.max(0, netEarnings - Number(processedPayouts._sum.amount || 0));
 
     if (amount > availableBalance) {
       return NextResponse.json(
-        { error: `Requested amount exceeds available balance of GH₵ ${availableBalance.toFixed(2)}` },
+        { error: `Requested amount exceeds available balance of GHâ‚µ ${availableBalance.toFixed(2)}` },
         { status: 400 }
       );
     }
@@ -132,7 +133,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, payoutId: payout.id }, { status: 201 });
   } catch (error: any) {
-    console.error("🚨 Seller payouts POST error:", error);
+    console.error("ðŸš¨ Seller payouts POST error:", error);
     return NextResponse.json({ error: error.message || "Failed to request payout" }, { status: 500 });
   }
 }

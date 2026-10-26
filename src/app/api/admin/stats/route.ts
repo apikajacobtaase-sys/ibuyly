@@ -60,14 +60,21 @@ if (!session || !isAdmin(session.user.role)) {
       }),
     ]);
 
-    // Calculate actual revenue from commissions
-    let totalRevenue = 0;
-    for (const item of revenueData) {
-      const price = typeof item.price === "string" ? parseFloat(item.price) : item.price;
-      const itemTotal = price * item.quantity;
-      const commissionRate = parseFloat(item.variant.product.seller.commissionRate.toString()) / 100;
-      totalRevenue += itemTotal * commissionRate;
-    }
+   // Calculate marketplace revenue from seller commissions.
+let totalRevenue = 0;
+
+for (const item of revenueData) {
+  const seller = item.variant.product.seller;
+
+  // Some products may not have an associated seller.
+  if (!seller) continue;
+
+  const price = Number(item.price.toString());
+  const itemTotal = price * item.quantity;
+  const commissionRate = Number(seller.commissionRate.toString()) / 100;
+
+  totalRevenue += itemTotal * commissionRate;
+}
 
     return NextResponse.json({
       gmv: gmvData._sum.totalAmount ? parseFloat(gmvData._sum.totalAmount.toString()) : 0,

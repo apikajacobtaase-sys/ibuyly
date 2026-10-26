@@ -136,33 +136,56 @@ export default function ConciergePage() {
                           <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold text-gray-900 text-sm line-clamp-2">{product.title}</h3>
                             <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap ml-2">
-                              GHS {product.variants[0]?.price || "0.00"}
+                              GHS {Number(product.price).toFixed(2)}
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 mb-3 line-clamp-2">{product.description}</p>
                           <div className="flex justify-between items-center text-xs text-gray-600 mb-3">
-                            <span>🏪 {product.seller?.businessName || "iBUY Store"}</span>
-                            <span>📦 {product.variants[0]?.stockQuantity || 0} in stock</span>
+                            <span>🏪 {product.sellerName || "iBUY Store"}</span>
+                            <span>📦 {product.stockQuantity} in stock</span>
                           </div>
-                          <button 
-                            onClick={() => {
-                              const price = typeof product.variants[0]?.price === 'string' 
-                                ? parseFloat(product.variants[0].price) 
-                                : (product.variants[0]?.price || 0);
-                              
-                              addItem({
-                                productId: product.id,
-                                title: product.title,
-                                price: price,
-                                quantity: 1,
-                                sellerName: product.seller?.businessName || "iBUY Store",
-                              });
-                              alert(`✅ Added "${product.title}" to cart!`);
-                            }}
-                            className="w-full bg-indigo-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-indigo-700 transition active:scale-95"
-                          >
-                            Add to Cart
-                          </button>
+                         <button
+  onClick={async () => {
+  if (
+    !product.variantId ||
+    !product.offerId ||
+    !product.sellerId ||
+    product.stockQuantity < 1
+  ) {
+    alert("This offer is unavailable. Please refresh your search.");
+    return;
+  }
+
+  try {
+    const success = await addItem({
+      productId: product.id,
+      variantId: product.variantId,
+      offerId: product.offerId,
+      sellerId: product.sellerId,
+      title: product.title,
+      price: Number(product.price),
+      quantity: 1,
+      imageUrl: product.imageUrl ?? undefined,
+      slug: product.slug,
+      stockQuantity: product.stockQuantity,
+      sellerName: product.sellerName,
+    });
+
+    if (success) {
+      alert(`Added "${product.title}" to your cart.`);
+    } else {
+      alert("Unable to add this item. Please check availability and try again.");
+    }
+  } catch (error) {
+    console.error("Concierge add-to-cart failed:", error);
+    alert("Unable to add this item. Please try again.");
+  }
+}}
+  
+  className="w-full bg-indigo-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-indigo-700 transition active:scale-95"
+>
+  Add to Cart
+</button>
                         </div>
                       </div>
                     );

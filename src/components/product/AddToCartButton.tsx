@@ -34,11 +34,13 @@ export default function AddToCartButton({
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAdd = async (e: React.MouseEvent) => {
-    if (!bestOfferId || !bestVariantId) return;
+    if (!bestOfferId || !bestVariantId || !sellerId || stock <= 0) {
+  return;
+}
     
     setIsLoading(true);
     
-    // Fly animation logic
+    // Fly animfation logic
     const btn = e.currentTarget;
     const rect = btn.getBoundingClientRect();
     triggerFlyToCart({
@@ -56,8 +58,8 @@ export default function AddToCartButton({
       price: price,
       imageUrl: product.images[0]?.url,
       stockQuantity: stock,
-      sellerId: sellerId || "unknown",   // ✅ Use prop directly
-      sellerName: sellerName || "iBUY",  // ✅ Use prop directly
+       sellerId,
+sellerName: sellerName || "Independent Seller",
       quantity: 1,
     });
 
