@@ -112,29 +112,47 @@ async function getFormattedItems(cartId: string) {
     },
   });
 
-  return items.map((item) => ({
-    id: item.id,
-    productId: item.variant.productId,
-    variantId: item.variantId,
-    offerId: item.offerId,
-    title: item.variant.product.title,
-    slug: item.variant.product.slug,
-    imageUrl: item.variant.product.images[0]?.url ?? null,
-    price: Number(item.offer?.price ?? item.variant.price),
-    stockQuantity: item.offer
-      ? item.offer.stockQuantity
-      : item.variant.stockQuantity,
-    sellerId: item.offer?.sellerId ?? "unknown",
-    sellerName: item.offer?.seller?.businessName ?? "Seller",
-    quantity: item.quantity,
-    isSelected: item.isSelected,
-  }));
+  // ✅ Filter out items where the variant or product is missing (clean up stale cart items)
+  const validItems = items.filter(item => item.variant && item.variant.product);
+
+  return validItems.map((item) => {
+    // ✅ Safe access to price
+    const price = item.offer 
+      ? Number(item.offer.price) 
+      : (item.variant ? Number(item.variant.price) : 0);
+
+    // ✅ Safe access to stock
+    const stock = item.offer 
+      ? item.offer.stockQuantity 
+      : (item.variant ? item.variant.stockQuantity : 0);
+
+    return {
+      id: item.id,
+      productId: item.variant.productId,
+      variantId: item.variantId,
+      offerId: item.offerId,
+      title: item.variant.product.title,
+      slug: item.variant.product.slug,
+      imageUrl: item.variant.product.images[0]?.url ?? null,
+      price: price,
+      stockQuantity: stock,
+      sellerId: item.offer?.sellerId ?? "unknown",
+      sellerName: item.offer?.seller?.businessName ?? "Seller",
+      quantity: item.quantity,
+      isSelected: true, 
+    };
+  });
 }
 
-// GET /api/cart
+// ✅ SINGLE GET EXPORT
 export async function GET() {
   try {
     const identity = await getCartIdentity();
+    
+    if (!identity.cartId) {
+      return NextResponse.json({ authenticated: false, items: [] });
+    }
+
     const items = await getFormattedItems(identity.cartId);
 
     return attachGuestCookie(
@@ -146,7 +164,6 @@ export async function GET() {
     );
   } catch (error) {
     console.error("GET Cart Error:", error);
-
     return NextResponse.json(
       { error: "Failed to fetch cart" },
       { status: 500 },

@@ -7,19 +7,27 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q") || "";
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50); // ✅ Cap limit to prevent overload
     const skip = (page - 1) * limit;
+
+    // ✅ Define where clause safely
+    // If query is empty, we just fetch active products. 
+    // If query exists, we search title and description.
+    const whereClause = {
+      status: "ACTIVE",
+      ...(query && {
+        OR: [
+          { title: { contains: query, mode: 'insensitive' as const } },
+          // ⚠️ Description search is heavy. Only include if query is long enough or remove if still slow.
+          { description: { contains: query, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
 
     // 1. Fetch Products with Variants and their Seller Offers
     const [products, total] = await Promise.all([
       db.product.findMany({
-        where: {
-          status: "ACTIVE",
-          OR: [
-            { title: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } },
-          ],
-        },
+        where: whereClause,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -45,13 +53,7 @@ export async function GET(request: Request) {
         },
       }),
       db.product.count({
-        where: {
-          status: "ACTIVE",
-          OR: [
-            { title: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } },
-          ],
-        },
+        where: whereClause,
       }),
     ]);
 
@@ -67,7 +69,6 @@ export async function GET(request: Request) {
             if (!bestOffer || parseFloat(offer.price.toString()) < parseFloat(bestOffer.price.toString())) {
               bestOffer = offer;
               bestVariantId = variant.id;
-              // ✅ Get the compare-at price from the variant for discount calculation
               compareAtPrice = variant.compareAtPrice ? parseFloat(variant.compareAtPrice.toString()) : null;
             }
           }
@@ -77,7 +78,6 @@ export async function GET(request: Request) {
       const currentPrice = bestOffer ? parseFloat(bestOffer.price.toString()) : 0;
       let discountPercent = 0;
 
-      // ✅ Calculate Discount Percentage
       if (compareAtPrice && compareAtPrice > currentPrice) {
         discountPercent = Math.round(((compareAtPrice - currentPrice) / compareAtPrice) * 100);
       }
@@ -86,18 +86,13 @@ export async function GET(request: Request) {
         id: product.id,
         title: product.title || "Untitled Product",
         slug: product.slug || "",
-        
         price: currentPrice,
-        originalPrice: compareAtPrice, // ✅ Added for frontend display
-        discountPercent: discountPercent, // ✅ Added for frontend badge
-        
+        originalPrice: compareAtPrice,
+        discountPercent: discountPercent,
         stockQuantity: bestOffer ? bestOffer.stockQuantity : 0,
-        
         bestOfferId: bestOffer?.id || null,
         bestVariantId: bestVariantId,
-        
         imageUrl: (product.images && product.images.length > 0) ? product.images[0].url : null,
-        
         sellerName: bestOffer?.seller?.businessName || product.seller?.businessName || "iBUY Marketplace",
         sellerId: bestOffer?.seller?.id || product.sellerId || "unknown",
         inStock: !!bestOffer,
@@ -114,7 +109,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Search API Error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch products", details: String(error) },
+      { error: "Failed to fetch products" },
       { status: 500 }
     );
   }

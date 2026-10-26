@@ -47,7 +47,8 @@ model User {
   supportTickets          SupportTicket[]
   preferences             UserPreference?
   profile                 UserProfile?
-  wishlists Wishlist[]
+  wishlists               Wishlist[]
+
   @@map("users")
 }
 
@@ -193,10 +194,13 @@ model Product {
   category        Category               @relation(fields: [categoryId], references: [id])
   seller          SellerProfile?         @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   reviews         Review[]
-  wishlists Wishlist[]
+  wishlists       Wishlist[]
+
   @@index([sellerId])
   @@index([categoryId])
   @@index([status])
+  @@index([title])
+  @@index([createdAt(sort: Desc)])
   @@map("products")
 }
 
@@ -874,6 +878,19 @@ model Message {
   sender         User         @relation(fields: [senderId], references: [id])
 }
 
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@map("wishlists")
+}
+
 enum UserRole {
   CUSTOMER
   SELLER_OWNER
@@ -961,18 +978,4 @@ enum OfferStatus {
   ACTIVE
   PAUSED
   OUT_OF_STOCK
-}
-
-model Wishlist {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  productId String   @map("product_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, productId])
-  @@index([productId])
-  @@map("wishlists")
 }
