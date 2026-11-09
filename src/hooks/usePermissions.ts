@@ -14,42 +14,106 @@ interface SellerPermissions {
   isOwner: boolean;
 }
 
+interface SellerPermissionsResponse {
+  permissions: SellerPermissions | null;
+  sellerId?: string;
+  requiresStoreSelection?: boolean;
+  sellerIds?: string[];
+  error?: string;
+}
+
 export function useSellerPermissions() {
-  const { data: session } = useSession();
-  const [permissions, setPermissions] = useState<SellerPermissions | null>(null);
+  const { data: session, status } = useSession();
+
+  const [permissions, setPermissions] =
+    useState<SellerPermissions | null>(null);
+  const [sellerId, setSellerId] = useState<string | null>(null);
+  const [requiresStoreSelection, setRequiresStoreSelection] =
+    useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (status === "loading") {
+      setIsLoading(true);
+      return;
+    }
+
     if (!session?.user) {
+      setPermissions(null);
+      setSellerId(null);
+      setRequiresStoreSelection(false);
+      setError(null);
       setIsLoading(false);
       return;
     }
 
     async function fetchPermissions() {
+      setIsLoading(true);
+      setError(null);
+
       try {
-        const res = await fetch("/api/seller/permissions");
-        const data = await res.json();
-        if (res.ok) {
-          setPermissions(data.permissions);
+        const response = await fetch("/api/seller/permissions", {
+          cache: "no-store",
+        });
+
+        const data =
+          (await response.json()) as SellerPermissionsResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Failed to fetch seller permissions."
+          );
         }
-      } catch (error) {
-        console.error("Failed to fetch permissions", error);
+
+        if (cancelled) return;
+
+        setPermissions(data.permissions);
+        setSellerId(data.sellerId ?? null);
+        setRequiresStoreSelection(
+          data.requiresStoreSelection === true
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setPermissions(null);
+          setSellerId(null);
+          setRequiresStoreSelection(false);
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to fetch seller permissions."
+          );
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
 
     fetchPermissions();
-  }, [session]);
 
-  return { permissions, isLoading };
+    return () => {
+      cancelled = true;
+    };
+  }, [session, status]);
+
+  return {
+    permissions,
+    sellerId,
+    requiresStoreSelection,
+    isLoading,
+    error,
+  };
 }
 
 export function useAdminRole() {
   const { data: session } = useSession();
-  
+
   return {
-    isAdmin: session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN",
+    isAdmin:
+      session?.user?.role === "ADMIN" ||
+      session?.user?.role === "SUPER_ADMIN",
     isSuperAdmin: session?.user?.role === "SUPER_ADMIN",
     role: session?.user?.role,
   };

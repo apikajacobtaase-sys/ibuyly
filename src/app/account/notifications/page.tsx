@@ -1,13 +1,19 @@
- // src/app/account/notifications/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import Link from "next/link";
-import { 
-  Bell, Package, Star, Wallet, AlertTriangle, 
-  Info, Check, CheckCheck, Loader2 
+import {
+  Bell,
+  Package,
+  Star,
+  Wallet,
+  AlertTriangle,
+  Info,
+  Check,
+  CheckCheck,
+  Loader2,
+  ArrowRight,
 } from "lucide-react";
 
 interface Notification {
@@ -22,7 +28,8 @@ interface Notification {
 
 export default function CustomerNotificationsPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { status } = useSession();
+
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -32,8 +39,9 @@ export default function CustomerNotificationsPage() {
     if (status === "unauthenticated") {
       router.push("/login?callbackUrl=/account/notifications");
     }
+
     if (status === "authenticated") {
-      fetchNotifications();
+      void fetchNotifications();
     }
   }, [status, router]);
 
@@ -41,6 +49,7 @@ export default function CustomerNotificationsPage() {
     try {
       const res = await fetch("/api/notifications");
       const data = await res.json();
+
       if (res.ok) {
         setNotifications(data.notifications);
         setUnreadCount(data.unreadCount);
@@ -53,33 +62,53 @@ export default function CustomerNotificationsPage() {
   };
 
   const markAsRead = async (id: string, link?: string) => {
+    const notification = notifications.find((item) => item.id === id);
+
     try {
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationId: id }),
-      });
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-      
+      if (notification && !notification.isRead) {
+        const response = await fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId: id }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Could not update notification.");
+        }
+
+        setNotifications((prev) =>
+          prev.map((item) =>
+            item.id === id ? { ...item, isRead: true } : item
+          )
+        );
+
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+
       if (link) {
         router.push(link);
       }
     } catch (error) {
-      console.error("Failed to mark as read", error);
+      console.error("Failed to mark notification as read", error);
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      await fetch("/api/notifications", {
+      const response = await fetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markAllRead: true }),
+        body: JSON.stringify({ markAllAsRead: true }),
       });
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+
+      if (!response.ok) {
+        throw new Error("Could not update notifications.");
+      }
+
+      setNotifications((prev) =>
+        prev.map((item) => ({ ...item, isRead: true }))
+      );
+
       setUnreadCount(0);
     } catch (error) {
       console.error("Failed to mark all as read", error);
@@ -89,17 +118,17 @@ export default function CustomerNotificationsPage() {
   const getIcon = (type: string) => {
     switch (type) {
       case "ORDER":
-        return <Package className="w-5 h-5 text-blue-600" />;
+        return <Package className="h-5 w-5 text-blue-600" />;
       case "REVIEW":
-        return <Star className="w-5 h-5 text-yellow-600" />;
+        return <Star className="h-5 w-5 text-yellow-600" />;
       case "PAYOUT":
-        return <Wallet className="w-5 h-5 text-green-600" />;
+        return <Wallet className="h-5 w-5 text-green-600" />;
       case "SYSTEM":
-        return <Info className="w-5 h-5 text-gray-600" />;
+        return <Info className="h-5 w-5 text-gray-600" />;
       case "ALERT":
-        return <AlertTriangle className="w-5 h-5 text-orange-600" />;
+        return <AlertTriangle className="h-5 w-5 text-orange-600" />;
       default:
-        return <Bell className="w-5 h-5 text-green-600" />; // ✅ Changed to Green
+        return <Bell className="h-5 w-5 text-green-600" />;
     }
   };
 
@@ -116,58 +145,62 @@ export default function CustomerNotificationsPage() {
       case "ALERT":
         return "bg-orange-100";
       default:
-        return "bg-green-100"; // ✅ Changed to Green
+        return "bg-green-100";
     }
   };
 
-  const filteredNotifications = filter === "unread" 
-    ? notifications.filter((n) => !n.isRead)
-    : notifications;
+  const isApplicationNotification = (notification: Notification) =>
+    notification.link?.includes("/account/seller-application") ?? false;
+
+  const filteredNotifications =
+    filter === "unread"
+      ? notifications.filter((notification) => !notification.isRead)
+      : notifications;
 
   if (loading) {
     return (
-      // ✅ White Background
-      <div className="flex justify-center items-center min-h-[400px] bg-white">
-        <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+      <div className="flex min-h-[400px] items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-green-600" />
       </div>
     );
   }
 
   return (
-    // ✅ White Background
-    <div className="space-y-6 bg-white min-h-screen p-4 md:p-0">
-      {/* Header */}
-      <div className="flex items-center justify-between pt-4">
+    <div className="min-h-screen space-y-6 bg-white p-4 md:p-0">
+      <div className="flex flex-col justify-between gap-3 pt-4 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Bell className="w-6 h-6 text-gray-900" />
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+            <Bell className="h-6 w-6" />
             Notifications
             {unreadCount > 0 && (
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-sm font-semibold rounded-full">
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-sm font-semibold text-green-700">
                 {unreadCount}
               </span>
             )}
           </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Stay updated on your orders and account activity
+
+          <p className="mt-1 text-sm text-gray-500">
+            Stay updated on your orders and account activity.
           </p>
         </div>
+
         {unreadCount > 0 && (
           <button
-            onClick={markAllAsRead}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            type="button"
+            onClick={() => void markAllAsRead()}
+            className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-lg px-4 py-2 text-sm font-semibold text-green-700 transition-colors hover:bg-green-50"
           >
-            <CheckCheck className="w-4 h-4" />
+            <CheckCheck className="h-4 w-4" />
             Mark all as read
           </button>
         )}
       </div>
 
-      {/* Filter Tabs */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
+          type="button"
           onClick={() => setFilter("all")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             filter === "all"
               ? "border-green-600 text-green-600"
               : "border-transparent text-gray-500 hover:text-gray-700"
@@ -175,9 +208,11 @@ export default function CustomerNotificationsPage() {
         >
           All ({notifications.length})
         </button>
+
         <button
+          type="button"
           onClick={() => setFilter("unread")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             filter === "unread"
               ? "border-green-600 text-green-600"
               : "border-transparent text-gray-500 hover:text-gray-700"
@@ -187,85 +222,123 @@ export default function CustomerNotificationsPage() {
         </button>
       </div>
 
-      {/* Notifications List */}
       {filteredNotifications.length === 0 ? (
-        // ✅ White Background Empty State
-        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
-          <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white py-16 text-center">
+          <Bell className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+
           <h3 className="text-lg font-medium text-gray-900">
-            {filter === "unread" ? "No unread notifications" : "No notifications yet"}
+            {filter === "unread"
+              ? "No unread notifications"
+              : "No notifications yet"}
           </h3>
-          <p className="text-gray-500 mt-1">
-            {filter === "unread" 
-              ? "You're all caught up!" 
-              : "Notifications about your orders will appear here."}
+
+          <p className="mt-1 text-sm text-gray-500">
+            {filter === "unread"
+              ? "You're all caught up!"
+              : "Notifications about your orders and account will appear here."}
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 shadow-sm">
+        <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm">
           {filteredNotifications.map((notification) => {
-            const Wrapper = notification.link ? "button" : "div";
-            const wrapperProps = notification.link
-              ? {
-                  onClick: () => markAsRead(notification.id, notification.link),
-                  className: "w-full text-left",
-                }
-              : {
-                  onClick: () => markAsRead(notification.id),
-                };
+            const applicationNotification =
+              isApplicationNotification(notification);
 
             return (
               <div
                 key={notification.id}
-                className={`p-4 hover:bg-gray-50 transition-colors ${
+                className={`p-4 transition-colors hover:bg-gray-50 sm:p-5 ${
                   !notification.isRead ? "bg-green-50/30" : ""
                 }`}
               >
-                <div className="flex items-start gap-4">
-                  {/* Icon */}
-                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${getIconBg(notification.type)}`}>
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${getIconBg(notification.type)}`}
+                  >
                     {getIcon(notification.type)}
                   </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className={`text-sm ${!notification.isRead ? "font-semibold text-gray-900" : "font-medium text-gray-700"}`}>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`text-sm ${
+                            !notification.isRead
+                              ? "font-semibold text-gray-900"
+                              : "font-medium text-gray-700"
+                          }`}
+                        >
                           {notification.title}
                         </p>
-                        <p className="text-sm text-gray-600 mt-0.5">
+
+                        <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-600">
                           {notification.message}
                         </p>
                       </div>
+
                       {!notification.isRead && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            markAsRead(notification.id);
-                          }}
-                          className="flex-shrink-0 p-1 text-gray-400 hover:text-green-600 rounded transition-colors"
+                          type="button"
+                          onClick={() => void markAsRead(notification.id)}
+                          className="shrink-0 rounded-full p-2 text-gray-400 transition-colors hover:bg-green-100 hover:text-green-700"
                           title="Mark as read"
+                          aria-label="Mark notification as read"
                         >
-                          <Check className="w-4 h-4" />
+                          <Check className="h-4 w-4" />
                         </button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
+
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
                       <p className="text-xs text-gray-500">
-                        {new Date(notification.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {new Date(notification.createdAt).toLocaleDateString(
+                          "en-GH",
+                          {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }
+                        )}
                       </p>
+
                       {notification.link && (
-                        <span className="text-xs text-green-600 font-medium">
-                          View details →
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            notification.isRead
+                              ? "bg-gray-100 text-gray-600"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {applicationNotification
+                            ? "Action required"
+                            : "Action available"}
                         </span>
                       )}
                     </div>
+
+                    {notification.link && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void markAsRead(
+                            notification.id,
+                            notification.link
+                          )
+                        }
+                        className={`mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 sm:w-auto ${
+                          applicationNotification
+                            ? "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
+                            : "bg-green-600 hover:bg-green-700 focus:ring-green-500"
+                        }`}
+                      >
+                        {applicationNotification
+                          ? "View Application"
+                          : "View Details"}
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

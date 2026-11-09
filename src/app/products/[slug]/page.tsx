@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Star, Truck, ShieldCheck, MessageCircle, Check } from "lucide-react";
 import ReviewSection from "@/components/product/ReviewSection";
 import AddToCartButton from "@/components/product/AddToCartButton";
+import ProductSellerOffers from "@/components/product/ProductSellerOffers";
 import ChatBox from "@/components/chat/ChatBox";
 import StartChatButton from "@/components/chat/StartChatButton";
 
@@ -18,17 +19,31 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!slug) notFound();
 
   const session = await getServerSession(authOptions);
-  
+
   const product = await db.product.findUnique({
     where: { slug: slug },
     include: {
       images: true,
       category: true,
       variants: {
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
         include: {
           sellerOffers: {
+            where: {
+              status: "ACTIVE",
+              stockQuantity: { gt: 0 }
+            },
+            orderBy: { price: "asc" },
             include: {
-              seller: { select: { businessName: true, id: true, userId: true } }
+              seller: {
+                select: {
+                  businessName: true,
+                  id: true,
+                  userId: true,
+                  logoUrl: true
+                }
+              }
             }
           }
         }
@@ -38,9 +53,40 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   if (!product) notFound();
 
-  const bestOffer = product.variants[0]?.sellerOffers[0];
+  const bestVariant = product.variants.find(
+    (variant) => variant.sellerOffers.length > 0
+  );
+
+  const bestOffer = bestVariant?.sellerOffers[0];
   const seller = bestOffer?.seller;
-  
+
+  const sellerOfferVariants = product.variants
+    .filter((variant) => variant.sellerOffers.length > 0)
+    .map((variant) => {
+      const attributes =
+        variant.attributes &&
+        typeof variant.attributes === "object" &&
+        !Array.isArray(variant.attributes)
+          ? Object.entries(variant.attributes as Record<string, unknown>)
+              .filter(([, value]) => value !== null && value !== undefined)
+              .map(([key, value]) => `${key}: ${String(value)}`)
+              .join(" | ")
+          : "";
+
+      return {
+        id: variant.id,
+        label: attributes || variant.sku || "Standard variant",
+        offers: variant.sellerOffers.map((offer) => ({
+          offerId: offer.id,
+          sellerId: offer.seller.id,
+          sellerName: offer.seller.businessName,
+          sellerLogoUrl: offer.seller.logoUrl,
+          price: Number(offer.price),
+          stockQuantity: offer.stockQuantity,
+        })),
+      };
+    });
+
   const price = bestOffer ? Number(bestOffer.price) : 0;
   const stock = bestOffer?.stockQuantity || 0;
 
@@ -55,7 +101,7 @@ let initialMessages: {
     lastName: string | null;
   };
 }[] = [];
-  
+
   if (session && seller) {
     const conv = await db.conversation.findFirst({
       where: {
@@ -80,35 +126,35 @@ let initialMessages: {
   return (
     <div className="bg-white min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+
         {/* Breadcrumbs */}
         <nav className="flex text-sm text-gray-500 mb-8 overflow-x-auto whitespace-nowrap pb-2">
-          <Link href="/" className="hover:text-green-600 transition-colors">Home</Link> 
+          <Link href="/" className="hover:text-green-600 transition-colors">Home</Link>
           <span className="mx-2 text-gray-300">/</span>
-          <Link href="/categories" className="hover:text-green-600 transition-colors">Categories</Link> 
+          <Link href="/categories" className="hover:text-green-600 transition-colors">Categories</Link>
           <span className="mx-2 text-gray-300">/</span>
           <span className="text-gray-900 font-medium">{product.category?.name}</span>
         </nav>
 
         <div className="lg:grid lg:grid-cols-12 lg:gap-12">
-          
+
           {/* LEFT COLUMN: Images (Span 7) */}
           <div className="lg:col-span-7 mb-10 lg:mb-0">
-            <div className="aspect-[4/3] md:aspect-square bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-100 shadow-sm group">
+            <div className="main-product-image aspect-[4/3] md:aspect-square bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-100 shadow-sm group">
               {product.images[0] ? (
-                <Image 
-                  src={product.images[0].url} 
-                  alt={product.title} 
-                  fill 
+                <Image
+                  src={product.images[0].url}
+                  alt={product.title}
+                  fill
                   className="object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-in-out"
-                  priority 
+                  priority
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 60vw"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">No Image</div>
               )}
             </div>
-            
+
             {/* Thumbnail Grid (Optional: Map through product.images if you have more than 1) */}
             {product.images.length > 1 && (
               <div className="grid grid-cols-4 gap-4 mt-4">
@@ -123,10 +169,10 @@ let initialMessages: {
 
           {/* RIGHT COLUMN: Details (Span 5) */}
           <div className="lg:col-span-5 flex flex-col">
-            
+
             {/* Title & Rating */}
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-3">{product.title}</h1>
-            
+
             <div className="flex items-center gap-4 mb-6 border-b border-gray-100 pb-6">
               <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md">
                 <Star className="w-4 h-4 text-green-600 fill-current" />
@@ -174,7 +220,7 @@ let initialMessages: {
 
             {/* Actions */}
             <div className="space-y-4">
-              <AddToCartButton 
+              <AddToCartButton
                 product={{
                   id: product.id,
                   title: product.title,
@@ -182,13 +228,13 @@ let initialMessages: {
                   images: product.images.map(img => ({ url: img.url }))
                 }}
                 bestOfferId={bestOffer?.id}
-                bestVariantId={product.variants[0]?.id}
+                bestVariantId={bestVariant?.id}
                 price={price}
                 stock={stock}
                 sellerId={seller?.id}
                 sellerName={seller?.businessName}
               />
-              
+
               <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                 <Check className="w-4 h-4 text-green-600" />
                 <span>Free return within 7 days</span>
@@ -197,6 +243,15 @@ let initialMessages: {
 
           </div>
         </div>
+
+        {/* MULTIPLE SELLER OFFERS */}
+        <ProductSellerOffers
+          productId={product.id}
+          title={product.title}
+          slug={product.slug}
+          imageUrl={product.images[0]?.url ?? null}
+          variants={sellerOfferVariants}
+        />
 
         {/* SELLER & CHAT SECTION (Full Width Below) */}
         {seller && (
@@ -207,7 +262,7 @@ let initialMessages: {
                   <h3 className="text-lg font-bold text-gray-900">Sold by {seller.businessName}</h3>
                   <p className="text-sm text-gray-500 mt-1">Verified Seller • 98% Positive Ratings</p>
                 </div>
-                
+
                 {session ? (
                   <div className="w-full md:w-96">
                     {conversationId ? (
@@ -215,7 +270,7 @@ let initialMessages: {
                          <ChatBox conversationId={conversationId} initialMessages={initialMessages} />
                       </div>
                     ) : (
-                      <StartChatButton 
+                      <StartChatButton
                         receiverId={seller.userId}
                         productId={product.id}
                         productName={product.title}

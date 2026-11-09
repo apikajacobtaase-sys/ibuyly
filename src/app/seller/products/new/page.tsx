@@ -1,552 +1,564 @@
-// src/app/seller/products/new/page.tsx
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Search,
+  Package,
+  ChevronRight,
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
+  Store,
+} from "lucide-react";
 
-interface Category {
+interface CatalogueVariant {
   id: string;
-  name: string;
+  sku: string | null;
+  price: number | string;
+  compareAtPrice: number | string | null;
+  attributes: unknown;
 }
 
-interface Attribute {
-  key: string;
-  value: string;
+interface CatalogueProduct {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  category: { name: string } | null;
+  variants: CatalogueVariant[];
+  images: { url: string; altText?: string | null }[];
+}
+
+interface CatalogueResponse {
+  products: CatalogueProduct[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+function formatAttributes(attributes: unknown): string {
+  if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
+    return "";
+  }
+
+  return Object.entries(attributes as Record<string, unknown>)
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join("  ");
 }
 
 export default function NewProductPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
+
+  const [products, setProducts] = useState<CatalogueProduct[]>([]);
+  const [query, setQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchError, setSearchError] = useState("");
+
+  const [selectedProduct, setSelectedProduct] =
+    useState<CatalogueProduct | null>(null);
+  const [selectedVariant, setSelectedVariant] =
+    useState<CatalogueVariant | null>(null);
+
+  const [price, setPrice] = useState("");
+  const [stockQuantity, setStockQuantity] = useState("");
+  const [sellerSku, setSellerSku] = useState("");
+  const [condition, setCondition] = useState("NEW");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // AI Analyzer State
-  const [aiScore, setAiScore] = useState<number | null>(null);
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    categoryId: "",
-    price: "",
-    compareAtPrice: "",
-    costPrice: "",
-    sku: "",
-    stock: "",
-  });
+  useEffect(() => {
+    const controller = new AbortController();
 
-  const [imageFiles, setImageFiles] = useState<Array<{ file: File | null; url: string }>>([
-    { file: null, url: "" }
-  ]);
-  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      setSearchError("");
 
-  const [attributes, setAttributes] = useState<Attribute[]>([{ key: "", value: "" }]);
-  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+      try {
+        const params = new URLSearchParams({
+          q: query.trim(),
+          page: "1",
+          limit: "20",
+        });
 
-  const analyzeListing = async () => {
-    if (!formData.title || !formData.description) return;
-    
-    setIsAnalyzing(true);
+        const response = await fetch(
+          `/api/seller/catalogue-search?${params.toString()}`,
+          { signal: controller.signal }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to load the catalogue.");
+        }
+
+        setProducts(data.products || []);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+
+        setSearchError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load the catalogue."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+
+  const chooseProduct = (product: CatalogueProduct) => {
+    setSelectedProduct(product);
+    setSelectedVariant(null);
+    setPrice("");
+    setStockQuantity("");
+    setSellerSku("");
+    setCondition("NEW");
+    setSubmitError("");
+  };
+
+  const chooseVariant = (variant: CatalogueVariant) => {
+    setSelectedVariant(variant);
+    setPrice("");
+    setStockQuantity("");
+    setSellerSku("");
+    setSubmitError("");
+  };
+
+  const returnToCatalogue = () => {
+    setSelectedProduct(null);
+    setSelectedVariant(null);
+    setSubmitError("");
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!selectedVariant) {
+      setSubmitError("Select a product variant first.");
+      return;
+    }
+
+    const parsedPrice = Number(price);
+    const parsedStock = Number(stockQuantity);
+
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      setSubmitError("Enter a valid selling price greater than zero.");
+      return;
+    }
+
+    if (
+      !Number.isInteger(parsedStock) ||
+      parsedStock < 0 ||
+      stockQuantity.trim() === ""
+    ) {
+      setSubmitError("Enter a valid whole-number stock quantity.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
     try {
-      const res = await fetch("/api/seller/ai/analyze-listing", {
+      const response = await fetch("/api/seller/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          imageCount: imageFiles.filter(img => img.url && !img.url.startsWith("blob:")).length,
-          attributes: attributes.reduce((acc, curr) => {
-            if (curr.key && curr.value) acc[curr.key] = curr.value;
-            return acc;
-          }, {} as Record<string, string>),
+          variantId: selectedVariant.id,
+          price: parsedPrice,
+          stockQuantity: parsedStock,
+          sellerSku: sellerSku.trim() || undefined,
+          condition,
         }),
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        setAiScore(data.score);
-        setAiSuggestions(data.suggestions);
-      } else {
-        console.error("AI Analysis failed:", data.error);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to add this offer.");
       }
+
+      router.push("/seller/products");
+      router.refresh();
     } catch (error) {
-      console.error("Failed to analyze listing", error);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch("/api/categories");
-      const data = await res.json();
-      if (res.ok) {
-        const allCategories: Category[] = [];
-        for (const cat of data.categories || []) {
-          allCategories.push({ id: cat.id, name: cat.name });
-          for (const child of cat.children || []) {
-            allCategories.push({ id: child.id, name: `${cat.name} → ${child.name}` });
-          }
-        }
-        setCategories(allCategories);
-      }
-    } catch (error) {
-      console.error("Failed to fetch categories", error);
-    }
-  };
-
-  const handleAddImage = () => {
-    setImageFiles([...imageFiles, { file: null, url: "" }]);
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setImageFiles(imageFiles.filter((_, i) => i !== index));
-  };
-
-  const handleFileChange = async (index: number, file: File | null) => {
-    if (!file) return;
-
-    const localUrl = URL.createObjectURL(file);
-    const newFiles = [...imageFiles];
-    newFiles[index] = { file, url: localUrl };
-    setImageFiles(newFiles);
-
-    setUploadingIndex(index);
-    try {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", file);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: uploadFormData,
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        newFiles[index] = { file, url: data.url };
-        setImageFiles([...newFiles]);
-      } else {
-        alert(`❌ Upload failed: ${data.error}`);
-        newFiles[index] = { file: null, url: "" };
-        setImageFiles([...newFiles]);
-      }
-    } catch (error) {
-      alert("❌ Network error during upload");
-    } finally {
-      setUploadingIndex(null);
-    }
-  };
-
-  const handleAddAttribute = () => {
-    setAttributes([...attributes, { key: "", value: "" }]);
-  };
-
-  const handleRemoveAttribute = (index: number) => {
-    setAttributes(attributes.filter((_, i) => i !== index));
-  };
-
-  const handleAttributeChange = (index: number, field: "key" | "value", value: string) => {
-    const newAttributes = [...attributes];
-    newAttributes[index][field] = value;
-    setAttributes(newAttributes);
-  };
-
-  const handleSubmit = async (e: React.FormEvent, submitAs: "DRAFT" | "ACTIVE") => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const attributesObj: Record<string, string> = {};
-      for (const attr of attributes) {
-        if (attr.key.trim() && attr.value.trim()) {
-          attributesObj[attr.key.trim()] = attr.value.trim();
-        }
-      }
-
-      const validImageUrls = imageFiles
-        .filter((img) => img.url && !img.url.startsWith("blob:"))
-        .map((img) => img.url);
-
-      if (validImageUrls.length === 0) {
-        alert("⚠️ Please wait for at least one image to finish uploading.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const payload = {
-        title: formData.title,
-        description: formData.description,
-        categoryId: formData.categoryId,
-        price: formData.price,
-        compareAtPrice: formData.compareAtPrice || null,
-        costPrice: formData.costPrice || null,
-        sku: formData.sku,
-        stock: formData.stock,
-        status: submitAs,
-        imageUrls: validImageUrls,
-        attributes: attributesObj,
-      };
-
-      const res = await fetch("/api/seller/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        alert(`✅ Product ${submitAs === "DRAFT" ? "saved as draft" : "published"} successfully!`);
-        router.push("/seller/products");
-      } else {
-        alert(`❌ Error: ${data.error}`);
-      }
-    } catch (error) {
-      alert("❌ Something went wrong.");
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const formatPrice = (value: number | string | null) => {
+    if (value === null || value === undefined) return "Not specified";
+
+    const amount = Number(value);
+
+    if (!Number.isFinite(amount)) return "Not specified";
+
+    return new Intl.NumberFormat("en-GH", {
+      style: "currency",
+      currency: "GHS",
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
   return (
-    <div className="max-w-4xl mx-auto pb-12">
-      <div className="mb-6">
-        <Link href="/seller/products" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700 font-medium mb-2">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Products
-        </Link>
-        <h2 className="text-2xl font-bold text-gray-900">Create New Product</h2>
-        <p className="text-sm text-gray-500 mt-1">Fill in the details below. You can save as draft or publish immediately.</p>
-      </div>
+    <div className="min-h-screen bg-gray-50 px-3 py-5 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6">
+          <Link
+            href="/seller/products"
+            className="mb-4 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-gray-600 hover:text-teal-700"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to inventory
+          </Link>
 
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-        {/* Basic Information */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Basic Information</h3>
-          <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-teal-100 p-3 text-teal-700">
+              <Store className="h-6 w-6" />
+            </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Product Title <span className="text-red-500">*</span></label>
+              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
+                Add an offer
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Choose an existing iBUY catalogue product and set your own
+                selling price and stock.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {!selectedProduct ? (
+          <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="mb-1 text-base font-semibold text-gray-900">
+              Find a catalogue product
+            </h2>
+            <p className="mb-4 text-sm text-gray-500">
+              Search by product name or description. Only approved products
+              appear here.
+            </p>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
               <input
-                type="text" required value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="e.g., Premium Wireless Headphones"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search products..."
+                className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-base outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description <span className="text-red-500">*</span></label>
-              <textarea
-                required rows={4} value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Describe your product in detail..."
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Category <span className="text-red-500">*</span>
-              </label>
-              
-              {!showNewCategoryInput ? (
-                <select
-                  required 
-                  value={formData.categoryId}
-                  onChange={(e) => {
-                    if (e.target.value === "NEW") {
-                      setShowNewCategoryInput(true);
-                      setFormData({ ...formData, categoryId: "" });
-                    } else {
-                      setFormData({ ...formData, categoryId: e.target.value });
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="">Select a category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                  <option value="NEW" className="font-semibold text-teal-700">
-                    ➕ Create New Category...
-                  </option>
-                </select>
-              ) : (
-                <div className="space-y-3 p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                  <div>
-                    <label className="block text-xs font-medium text-teal-800 mb-1">
-                      New Category Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      autoFocus
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      placeholder="e.g., Smart Home Devices"
-                      className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          setShowNewCategoryInput(false);
-                          setNewCategoryName("");
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={isCreatingCategory || !newCategoryName.trim()}
-                      onClick={async () => {
-                        setIsCreatingCategory(true);
-                        try {
-                          const res = await fetch("/api/seller/categories", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ name: newCategoryName.trim() }),
-                          });
-                          const data = await res.json();
-                          
-                          if (res.ok) {
-                            const newCat = { id: data.category.id, name: data.category.name };
-                            setCategories([...categories, newCat]);
-                            setFormData({ ...formData, categoryId: newCat.id });
-                            setShowNewCategoryInput(false);
-                            setNewCategoryName("");
-                          } else {
-                            alert(`❌ Error: ${data.error}`);
-                          }
-                        } catch (error) {
-                          alert("❌ Network error. Failed to create category.");
-                        } finally {
-                          setIsCreatingCategory(false);
-                        }
-                      }}
-                      className="flex-1 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-                    >
-                      {isCreatingCategory ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Creating...
-                        </>
-                      ) : (
-                        "Create & Select"
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowNewCategoryInput(false);
-                        setNewCategoryName("");
-                      }}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* AI Quality Score Card */}
-            {(formData.title.length > 5 || formData.description.length > 10) && (
-              <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
-                    ✨ AI Listing Quality
-                  </h4>
+            {isLoading ? (
+              <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-gray-500">
+                <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
+                Searching catalogue...
+              </div>
+            ) : searchError ? (
+              <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">
+                {searchError}
+              </div>
+            ) : products.length === 0 ? (
+              <div className="flex min-h-56 flex-col items-center justify-center px-4 text-center">
+                <Package className="mb-3 h-10 w-10 text-gray-300" />
+                <h3 className="font-semibold text-gray-800">
+                  No catalogue products found
+                </h3>
+                <p className="mt-1 max-w-sm text-sm text-gray-500">
+                  {query
+                    ? "Try another search term."
+                    : "The catalogue currently has no active products available for sellers."}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {products.map((product) => (
                   <button
                     type="button"
-                    onClick={analyzeListing}
-                    disabled={isAnalyzing}
-                    className="text-xs px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition"
+                    key={product.id}
+                    onClick={() => chooseProduct(product)}
+                    className="flex min-w-0 items-center gap-3 rounded-xl border border-gray-200 p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40 focus:outline-none focus:ring-2 focus:ring-teal-500"
                   >
-                    {isAnalyzing ? "Analyzing..." : "Analyze Now"}
-                  </button>
-                </div>
-                
-                {aiScore !== null && (
-                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
-                    {/* Score Bar */}
-                    <div>
-                      <div className="flex justify-between text-xs font-medium text-indigo-800 mb-1">
-                        <span>Quality Score</span>
-                        <span>{aiScore}/100</span>
-                      </div>
-                      <div className="w-full bg-indigo-200 rounded-full h-2.5">
-                        <div 
-                          className={`h-2.5 rounded-full transition-all duration-500 ${
-                            aiScore >= 80 ? "bg-green-500" : aiScore >= 50 ? "bg-yellow-500" : "bg-red-500"
-                          }`}
-                          style={{ width: `${aiScore}%` }}
-                        ></div>
-                      </div>
+                    <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                      {product.images?.[0]?.url ? (
+                        <img
+                          src={product.images[0].url}
+                          alt={product.images[0].altText || product.title}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-gray-400">
+                          <Package className="h-8 w-8" />
+                        </div>
+                      )}
                     </div>
 
-                    {/* Suggestions */}
-                    {aiSuggestions.length > 0 && (
-                      <ul className="space-y-1">
-                        {aiSuggestions.map((suggestion, idx) => (
-                          <li key={idx} className="text-xs text-indigo-800 flex items-start gap-2">
-                            <span className="text-indigo-500 mt-0.5">💡</span>
-                            {suggestion}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="line-clamp-2 text-sm font-semibold text-gray-900">
+                        {product.title}
+                      </h3>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {product.category?.name || "Uncategorized"}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {product.variants.length} active{" "}
+                        {product.variants.length === 1 ? "variant" : "variants"}
+                      </p>
+                    </div>
+
+                    <ChevronRight className="h-5 w-5 flex-shrink-0 text-gray-400" />
+                  </button>
+                ))}
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Pricing & Inventory */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Pricing & Inventory</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Price (GH₵) <span className="text-red-500">*</span></label>
-              <input type="number" required step="0.01" min="0" value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                placeholder="0.00" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Compare-at Price (GH₵)</label>
-              <input type="number" step="0.01" min="0" value={formData.compareAtPrice}
-                onChange={(e) => setFormData({ ...formData, compareAtPrice: e.target.value })}
-                placeholder="Original price" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cost Price (GH₵)</label>
-              <input type="number" step="0.01" min="0" value={formData.costPrice}
-                onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
-                placeholder="Your cost (private)" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">SKU <span className="text-red-500">*</span></label>
-              <input type="text" required value={formData.sku}
-                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                placeholder="e.g., HEADPHONE-001" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Stock Quantity <span className="text-red-500">*</span></label>
-              <input type="number" required min="0" value={formData.stock}
-                onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                placeholder="0" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Product Images */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">Product Images</h3>
-              <p className="text-xs text-gray-500 mt-0.5">First image will be the primary thumbnail</p>
-            </div>
-            <button type="button" onClick={handleAddImage} className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1">
-              <Plus className="w-4 h-4" /> Add Another
-            </button>
-          </div>
+          </section>
+        ) : (
           <div className="space-y-4">
-            {imageFiles.map((fileObj, idx) => (
-              <div key={idx} className="flex items-center gap-3">
-                <div className="relative flex-1">
-                  <input
-                    type="file" accept="image/*"
-                    onChange={(e) => handleFileChange(idx, e.target.files?.[0] || null)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-                <div className="w-24 flex-shrink-0">
-                  {uploadingIndex === idx ? (
-                    <div className="flex items-center justify-center h-10 text-xs text-teal-600 font-medium">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-600 mr-2"></div>
-                      Uploading...
-                    </div>
-                  ) : fileObj.url ? (
-                    <div className="relative h-10 w-10 rounded-md overflow-hidden border border-gray-200">
-                      <img src={fileObj.url} alt="Preview" className="w-full h-full object-cover" />
-                    </div>
-                  ) : null}
-                </div>
-                {imageFiles.length > 1 && (
-                  <button type="button" onClick={() => handleRemoveImage(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+            <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+              <button
+                type="button"
+                onClick={returnToCatalogue}
+                className="mb-4 inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-teal-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Choose another product
+              </button>
 
-        {/* Attributes */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">Specifications</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Add custom attributes (e.g., brand, color, material)</p>
-            </div>
-            <button type="button" onClick={handleAddAttribute} className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1">
-              <Plus className="w-4 h-4" /> Add Attribute
-            </button>
-          </div>
-          <div className="space-y-2">
-            {attributes.map((attr, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  type="text" value={attr.key}
-                  onChange={(e) => handleAttributeChange(idx, "key", e.target.value)}
-                  placeholder="Key (e.g., Brand)"
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-                <input
-                  type="text" value={attr.value}
-                  onChange={(e) => handleAttributeChange(idx, "value", e.target.value)}
-                  placeholder="Value (e.g., Sony)"
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-                {attributes.length > 1 && (
-                  <button type="button" onClick={() => handleRemoveAttribute(idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+              <div className="flex items-center gap-3">
+                <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                  {selectedProduct.images?.[0]?.url ? (
+                    <img
+                      src={selectedProduct.images[0].url}
+                      alt={selectedProduct.title}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-gray-400">
+                      <Package className="h-8 w-8" />
+                    </div>
+                  )}
+                </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-end">
-          <Link href="/seller/products" className="px-6 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition text-center">
-            Cancel
-          </Link>
-          <button
-            type="button" onClick={(e) => handleSubmit(e, "DRAFT")} disabled={isSubmitting}
-            className="px-6 py-2.5 bg-gray-100 text-gray-900 rounded-lg font-semibold hover:bg-gray-200 transition disabled:opacity-50"
-          >
-            {isSubmitting ? "Saving..." : "Save as Draft"}
-          </button>
-          <button
-            type="button" onClick={(e) => handleSubmit(e, "ACTIVE")} disabled={isSubmitting}
-            className="px-6 py-2.5 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition disabled:opacity-50"
-          >
-            {isSubmitting ? "Publishing..." : "Publish Product"}
-          </button>
-        </div>
-      </form>
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-gray-900">
+                    {selectedProduct.title}
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {selectedProduct.category?.name || "Uncategorized"}
+                  </p>
+                  <p className="mt-1 text-xs text-teal-700">
+                    Existing catalogue product
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+              <h2 className="font-semibold text-gray-900">
+                Select a variant
+              </h2>
+              <p className="mb-4 mt-1 text-sm text-gray-500">
+                Choose the exact size, colour or configuration you intend to
+                sell.
+              </p>
+
+              {selectedProduct.variants.length === 0 ? (
+                <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+                  This catalogue product has no active variants available.
+                  Please choose another product.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedProduct.variants.map((variant) => {
+                    const attributes = formatAttributes(variant.attributes);
+                    const isSelected = selectedVariant?.id === variant.id;
+
+                    return (
+                      <button
+                        type="button"
+                        key={variant.id}
+                        onClick={() => chooseVariant(variant)}
+                        className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition ${
+                          isSelected
+                            ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500"
+                            : "border-gray-200 hover:border-teal-300"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {attributes || variant.sku || "Standard variant"}
+                          </p>
+                          {variant.sku && attributes && (
+                            <p className="mt-1 text-xs text-gray-500">
+                              Catalogue SKU: {variant.sku}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-shrink-0 items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            Reference: {formatPrice(variant.price)}
+                          </span>
+                          {isSelected && (
+                            <CheckCircle2 className="h-5 w-5 text-teal-600" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {selectedVariant && (
+              <form
+                onSubmit={handleSubmit}
+                className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6"
+              >
+                <h2 className="font-semibold text-gray-900">
+                  Your selling offer
+                </h2>
+                <p className="mb-5 mt-1 text-sm text-gray-500">
+                  These details belong to your shop. They will not change the
+                  central catalogue product.
+                </p>
+
+                {submitError && (
+                  <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>{submitError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="offer-price"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Your selling price (GH) *
+                    </label>
+                    <input
+                      id="offer-price"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      value={price}
+                      onChange={(event) => setPrice(event.target.value)}
+                      placeholder="e.g. 250.00"
+                      className="min-h-12 w-full rounded-xl border border-gray-300 px-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="offer-stock"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Available stock *
+                    </label>
+                    <input
+                      id="offer-stock"
+                      type="number"
+                      min="0"
+                      step="1"
+                      required
+                      value={stockQuantity}
+                      onChange={(event) =>
+                        setStockQuantity(event.target.value)
+                      }
+                      placeholder="e.g. 25"
+                      className="min-h-12 w-full rounded-xl border border-gray-300 px-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="seller-sku"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Your SKU (optional)
+                    </label>
+                    <input
+                      id="seller-sku"
+                      type="text"
+                      maxLength={100}
+                      value={sellerSku}
+                      onChange={(event) => setSellerSku(event.target.value)}
+                      placeholder="Your internal product code"
+                      className="min-h-12 w-full rounded-xl border border-gray-300 px-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="offer-condition"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Product condition
+                    </label>
+                    <select
+                      id="offer-condition"
+                      value={condition}
+                      onChange={(event) => setCondition(event.target.value)}
+                      className="min-h-12 w-full rounded-xl border border-gray-300 bg-white px-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    >
+                      <option value="NEW">New</option>
+                      <option value="LIKE_NEW">Like new</option>
+                      <option value="USED_GOOD">Used - good</option>
+                      <option value="USED_FAIR">Used - fair</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVariant(null)}
+                    disabled={isSubmitting}
+                    className="min-h-12 rounded-xl border border-gray-300 px-5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Change variant
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Adding offer...
+                      </>
+                    ) : (
+                      "Add to my inventory"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

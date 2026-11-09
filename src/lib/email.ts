@@ -314,3 +314,63 @@ export async function sendSellerApplicationEmail({
     `,
   });
 }
+
+export async function sendEmailVerificationEmail({
+  to,
+  userId,
+  token,
+  callbackUrl,
+}: {
+  to: string;
+  userId: string;
+  token: string;
+  callbackUrl?: string;
+}) {
+  const configuredUrl =
+    process.env.NEXTAUTH_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "");
+
+  if (!configuredUrl) {
+    return {
+      success: false,
+      error: "Application URL is not configured.",
+    };
+  }
+
+  const baseUrl = new URL(configuredUrl).origin;
+  const verificationUrl = new URL("/verify-email", baseUrl);
+
+  verificationUrl.searchParams.set("userId", userId);
+  verificationUrl.searchParams.set("token", token);
+
+  if (
+    callbackUrl?.startsWith("/") &&
+    !callbackUrl.startsWith("//") &&
+    !callbackUrl.includes("\\")
+  ) {
+    verificationUrl.searchParams.set("callbackUrl", callbackUrl);
+  }
+
+  return sendEmail({
+    to,
+    subject: "Verify Your iBUY Email Address",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#111827;">
+        <h2 style="color:#0f766e;">Verify your iBUY account</h2>
+        <p>Welcome to iBUY!</p>
+        <p>Please verify your email address to activate your account.</p>
+        <p style="margin:28px 0;">
+          <a href="${verificationUrl.toString()}"
+             style="background:#0f766e;color:white;padding:13px 22px;text-decoration:none;border-radius:8px;font-weight:bold;">
+            Verify Email Address
+          </a>
+        </p>
+        <p>This verification link expires in 24 hours.</p>
+        <p>If you did not create an iBUY account, you can ignore this email.</p>
+        <p>The iBUY Team</p>
+      </div>
+    `,
+  });
+}

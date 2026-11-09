@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { 
+import {
   ArrowLeft, Package, User, MapPin, Phone, Mail,
   Truck, CheckCircle, Clock, AlertCircle, Loader2,
   Save
@@ -33,8 +33,7 @@ interface Order {
   customerEmail: string;
   customerPhone: string;
   shippingAddress: string;
-  totalAmount: number;
-  deliveryFee: number;
+  sellerSubtotal: number;
   paymentMethod: string | null;
   items: OrderItem[];
 }
@@ -64,6 +63,11 @@ export default function OrderDetailPage() {
     trackingCarrier?: string;
   }>>({});
 
+  const [updateFeedback, setUpdateFeedback] = useState<{
+    itemId: string;
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push(`/login?callbackUrl=/seller/orders/${orderId}`);
@@ -95,12 +99,19 @@ export default function OrderDetailPage() {
 
   const handleUpdateItem = async (itemId: string) => {
     const updates = itemUpdates[itemId];
+
     if (!updates || Object.keys(updates).length === 0) {
-      alert("No changes to save.");
+      setUpdateFeedback({
+        itemId,
+        type: "error",
+        message: "Make a change before saving.",
+      });
       return;
     }
 
     setUpdatingItemId(itemId);
+    setUpdateFeedback(null);
+
     try {
       const res = await fetch("/api/seller/orders", {
         method: "PATCH",
@@ -109,20 +120,36 @@ export default function OrderDetailPage() {
       });
 
       if (res.ok) {
-        alert("Item updated successfully!");
         setExpandedItemId(null);
+
         setItemUpdates((prev) => {
           const next = { ...prev };
           delete next[itemId];
           return next;
         });
-        fetchOrder(); // Refresh data
+
+        setUpdateFeedback({
+          itemId,
+          type: "success",
+          message: "Order item updated successfully.",
+        });
+
+        await fetchOrder();
       } else {
-        const data = await res.json();
-        alert(data.error || "Failed to update item");
+        const data = await res.json().catch(() => ({}));
+
+        setUpdateFeedback({
+          itemId,
+          type: "error",
+          message: data.error || "Unable to update this order item.",
+        });
       }
-    } catch (error) {
-      alert("Network error. Please try again.");
+    } catch {
+      setUpdateFeedback({
+        itemId,
+        type: "error",
+        message: "Network error. Please check your connection and try again.",
+      });
     } finally {
       setUpdatingItemId(null);
     }
@@ -164,7 +191,7 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-6">
       {/* Header */}
       <div>
         <Link
@@ -176,7 +203,7 @@ export default function OrderDetailPage() {
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">
               Order #{order.id.slice(-8).toUpperCase()}
             </h2>
             <p className="text-sm text-gray-500 mt-1">
@@ -196,7 +223,7 @@ export default function OrderDetailPage() {
       {/* Customer & Shipping Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Customer Info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
             <User className="w-4 h-4" />
             Customer
@@ -215,7 +242,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Shipping Address */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
             <MapPin className="w-4 h-4" />
             Shipping Address
@@ -226,14 +253,14 @@ export default function OrderDetailPage() {
 
       {/* Order Items */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-4 sm:px-5 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
             <Package className="w-5 h-5 text-indigo-600" />
             Items ({order.items.length})
           </h3>
           <div className="text-right">
-            <p className="text-xs text-gray-500">Order Total</p>
-            <p className="text-lg font-bold text-gray-900">GH₵ {order.totalAmount.toFixed(2)}</p>
+            <p className="text-xs text-gray-500">Your Items Subtotal</p>
+            <p className="text-lg font-bold text-gray-900">GHâ‚µ {order.sellerSubtotal.toFixed(2)}</p>
           </div>
         </div>
 
@@ -243,7 +270,7 @@ export default function OrderDetailPage() {
             const updates = itemUpdates[item.id] || {};
 
             return (
-              <div key={item.id} className="p-5">
+              <div key={item.id} className="p-4 sm:p-5">
                 {/* Item Header */}
                 <div className="flex items-start gap-4">
                   {item.imageUrl ? (
@@ -274,10 +301,10 @@ export default function OrderDetailPage() {
                         Qty: <strong className="text-gray-900">{item.quantity}</strong>
                       </span>
                       <span className="text-gray-600">
-                        Price: <strong className="text-gray-900">GH₵ {item.price.toFixed(2)}</strong>
+                        Price: <strong className="text-gray-900">GHâ‚µ {item.price.toFixed(2)}</strong>
                       </span>
                       <span className="text-gray-600">
-                        Subtotal: <strong className="text-indigo-600">GH₵ {(item.price * item.quantity).toFixed(2)}</strong>
+                        Subtotal: <strong className="text-indigo-600">GHâ‚µ {(item.price * item.quantity).toFixed(2)}</strong>
                       </span>
                     </div>
 
@@ -297,7 +324,7 @@ export default function OrderDetailPage() {
                         onClick={() => setExpandedItemId(item.id)}
                         className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
                       >
-                        Update Status & Tracking →
+                        Update Status & Tracking â†’
                       </button>
                     )}
                   </div>
@@ -305,12 +332,15 @@ export default function OrderDetailPage() {
 
                 {/* Expanded Update Form */}
                 {isExpanded && (
-                  <div className="mt-4 ml-20 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                  <div className="mt-4 sm:ml-20 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
                     {/* Status Selector */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">
-                        Update Status
+                      <label className="block text-sm font-semibold text-gray-800 mb-1">
+                        Update fulfilment status
                       </label>
+                      <p className="mb-3 text-xs text-gray-500">
+                        Select the latest stage for this product.
+                      </p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {ITEM_STATUSES.map((s) => {
                           const isSelected = (updates.status || item.status) === s.value;
@@ -318,13 +348,14 @@ export default function OrderDetailPage() {
                             <button
                               key={s.value}
                               type="button"
+                              aria-pressed={isSelected}
                               onClick={() =>
                                 setItemUpdates((prev) => ({
                                   ...prev,
                                   [item.id]: { ...prev[item.id], status: s.value },
                                 }))
                               }
-                              className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                              className={`flex min-h-11 w-full items-center justify-center gap-2 px-2 py-2 text-xs font-semibold rounded-lg border transition-colors ${
                                 isSelected
                                   ? "bg-indigo-600 text-white border-indigo-600"
                                   : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
@@ -338,52 +369,52 @@ export default function OrderDetailPage() {
                       </div>
                     </div>
 
-                    {/* Tracking Fields (only show if status is SHIPPED or DELIVERED) */}
+                    {/* Optional delivery details for courier or seller-managed delivery */}
                     {(updates.status === "SHIPPED" || item.status === "SHIPPED" || updates.status === "DELIVERED" || item.status === "DELIVERED") && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-semibold text-gray-700 mb-1">
-                            Tracking Number
+                            Tracking / Dispatch Reference (Optional)
                           </label>
                           <input
                             type="text"
-                            value={updates.trackingNumber || item.trackingNumber || ""}
+                            value={updates.trackingNumber ?? item.trackingNumber ?? ""}
                             onChange={(e) =>
                               setItemUpdates((prev) => ({
                                 ...prev,
                                 [item.id]: { ...prev[item.id], trackingNumber: e.target.value },
                               }))
                             }
-                            placeholder="e.g., 1Z999AA10123456784"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="Courier tracking number or dispatch reference"
+                            className="w-full min-h-11 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-gray-700 mb-1">
-                            Carrier
+                            Courier / Delivery Provider (Optional)
                           </label>
                           <input
                             type="text"
-                            value={updates.trackingCarrier || item.trackingCarrier || ""}
+                            value={updates.trackingCarrier ?? item.trackingCarrier ?? ""}
                             onChange={(e) =>
                               setItemUpdates((prev) => ({
                                 ...prev,
                                 [item.id]: { ...prev[item.id], trackingCarrier: e.target.value },
                               }))
                             }
-                            placeholder="e.g., DHL, FedEx, Ghana Post"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="DHL, Ghana Post, local rider, etc."
+                            className="w-full min-h-11 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           />
                         </div>
                       </div>
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
                       <button
                         onClick={() => handleUpdateItem(item.id)}
                         disabled={updatingItemId === item.id || Object.keys(updates).length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="flex min-h-11 items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {updatingItemId === item.id ? (
                           <>
@@ -406,11 +437,25 @@ export default function OrderDetailPage() {
                             return next;
                           });
                         }}
-                        className="px-4 py-2 text-gray-700 text-sm font-medium hover:bg-gray-200 rounded-lg transition-colors"
+                        className="min-h-11 px-4 py-2 text-gray-700 text-sm font-medium hover:bg-gray-200 rounded-lg transition-colors"
                       >
                         Cancel
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {updateFeedback?.itemId === item.id && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className={`mt-3 rounded-lg border px-3 py-3 text-sm ${
+                      updateFeedback.type === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : "border-rose-200 bg-rose-50 text-rose-800"
+                    }`}
+                  >
+                    {updateFeedback.message}
                   </div>
                 )}
               </div>

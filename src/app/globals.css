@@ -8,8 +8,20 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-ibuy-orange: #F7931E;
+  --color-ibuy-orange-hover: #E78012;
+  --color-ibuy-bg: #F5F6F8;
+  --color-ibuy-card: #FFFFFF;
+  --color-ibuy-text: #202124;
+  --color-ibuy-text-secondary: #6B7280;
+  --color-ibuy-border: #E5E7EB;
+  --color-ibuy-success: #16803D;
+  --color-ibuy-error: #DC2626;
+  --color-ibuy-intelligence: #5B4BDB;
 }
 
 @media (prefers-color-scheme: dark) {

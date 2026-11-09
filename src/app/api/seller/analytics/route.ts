@@ -1,113 +1,168 @@
-// src/app/api/seller/analytics/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
+import { authorizeSeller } from "@/lib/seller-auth";
 
-export async function GET(req: Request) {
+export const dynamic = "force-dynamic";
+
+const REVENUE_STATUSES = [
+  "CONFIRMED",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+];
+
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const access = await authorizeSeller("view_finances");
+    if (!access.authorized) return access.response;
 
-    const sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
+    const sellerId = access.sellerId;
 
-    if (!sellerProfile) {
-      return NextResponse.json({ error: "Seller profile not found" }, { status: 404 });
-    }
+    const [orderItems, allSellerItems] = await Promise.all([
+      db.orderItem.findMany({
+        where: {
+          sellerId,
+          status: { in: REVENUE_STATUSES },
+        },
+        select: {
+          id: true,
+          orderId: true,
+          variantId: true,
+          title: true,
+          price: true,
+          quantity: true,
+          order: {
+            select: { createdAt: true },
+          },
+        },
+      }),
 
-    // Get all seller's order items from completed orders
-    const orderItems = await db.orderItem.findMany({
-      where: {
-        sellerId: sellerProfile.id,
-        order: { status: { in: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"] } },
-      },
-      include: {
-        order: { select: { createdAt: true } },
-      },
-    });
+      db.orderItem.findMany({
+        where: { sellerId },
+        select: {
+          orderId: true,
+          status: true,
+        },
+      }),
+    ]);
 
-    // Calculate daily sales for last 30 days
-    const last30Days: { date: string; sales: number; orders: Set<string> }[] = [];
+    const now = new Date();
+    const last30Days: {
+      date: string;
+      sales: number;
+      orders: Set<string>;
+    }[] = [];
+
     for (let i = 29; i >= 0; i--) {
-      const date = new Date();
+      const date = new Date(now);
       date.setDate(date.getDate() - i);
+
       const dateStr = date.toISOString().split("T")[0];
-      last30Days.push({ date: dateStr, sales: 0, orders: new Set() });
+
+      last30Days.push({
+        date: dateStr,
+        sales: 0,
+        orders: new Set<string>(),
+      });
     }
 
     for (const item of orderItems) {
-       const price = Number(item.price.toString());
-      const itemTotal = price * item.quantity;
+      const itemTotal = Number(item.price) * item.quantity;
       const orderDate = item.order.createdAt.toISOString().split("T")[0];
-      
-      const dayEntry = last30Days.find((d) => d.date === orderDate);
+
+      const dayEntry = last30Days.find(
+        (day) => day.date === orderDate
+      );
+
       if (dayEntry) {
         dayEntry.sales += itemTotal;
-        dayEntry.orders.add(item.order.createdAt.toISOString());
+        dayEntry.orders.add(item.orderId);
       }
     }
 
-    // Calculate order status breakdown
-    const allOrders = await db.order.findMany({
-      where: { items: { some: { sellerId: sellerProfile.id } } },
-      select: { status: true },
-    });
+    const statusOrders = new Map<string, Set<string>>();
 
-    const statusBreakdown: Record<string, number> = {};
-    for (const order of allOrders) {
-      statusBreakdown[order.status] = (statusBreakdown[order.status] || 0) + 1;
+    for (const item of allSellerItems) {
+      const status = item.status || "PENDING";
+
+      if (!statusOrders.has(status)) {
+        statusOrders.set(status, new Set<string>());
+      }
+
+      statusOrders.get(status)!.add(item.orderId);
     }
 
-    // Top products by revenue
-    const productRevenue = new Map<string, { title: string; slug: string; quantity: number; revenue: number }>();
+    const statusBreakdown: Record<string, number> = {};
+
+    for (const [status, orderIds] of statusOrders) {
+      statusBreakdown[status] = orderIds.size;
+    }
+
+    const productRevenue = new Map<
+      string,
+      { title: string; quantity: number; revenue: number }
+    >();
+
     for (const item of orderItems) {
-      const price = Number(item.price.toString());
+      const price = Number(item.price);
       const existing = productRevenue.get(item.variantId) || {
         title: item.title,
-        slug: "",
         quantity: 0,
         revenue: 0,
       };
+
       existing.quantity += item.quantity;
       existing.revenue += price * item.quantity;
+
       productRevenue.set(item.variantId, existing);
     }
 
     const topProducts = Array.from(productRevenue.values())
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
+      .slice(0, 5)
+      .map((product) => ({
+        ...product,
+        revenue: Number(product.revenue.toFixed(2)),
+      }));
 
-    // Summary stats
-    const totalRevenue = orderItems.reduce((sum, item) => {
-      const price = Number(item.price.toString());
-      return sum + price * item.quantity;
-    }, 0);
+    const totalRevenue = orderItems.reduce(
+      (sum, item) => sum + Number(item.price) * item.quantity,
+      0
+    );
 
-    const totalUnitsSold = orderItems.reduce((sum, item) => sum + item.quantity, 0);
-    const uniqueOrders = new Set(orderItems.map((i) => i.order.createdAt.toISOString())).size;
-    const avgOrderValue = uniqueOrders > 0 ? totalRevenue / uniqueOrders : 0;
+    const totalUnitsSold = orderItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0
+    );
+
+    const uniqueOrders = new Set(
+      orderItems.map((item) => item.orderId)
+    ).size;
+
+    const avgOrderValue =
+      uniqueOrders > 0 ? totalRevenue / uniqueOrders : 0;
 
     return NextResponse.json({
-      dailySales: last30Days.map((d) => ({
-        date: d.date,
-        sales: d.sales,
-        orderCount: d.orders.size,
+      dailySales: last30Days.map((day) => ({
+        date: day.date,
+        sales: Number(day.sales.toFixed(2)),
+        orderCount: day.orders.size,
       })),
       statusBreakdown,
       topProducts,
       summary: {
-        totalRevenue,
+        totalRevenue: Number(totalRevenue.toFixed(2)),
         totalUnitsSold,
         totalOrders: uniqueOrders,
-        avgOrderValue,
+        avgOrderValue: Number(avgOrderValue.toFixed(2)),
       },
     });
   } catch (error) {
-    console.error("Analytics fetch error:", error);
-    return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 500 });
+    console.error("[SELLER ANALYTICS] GET error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch analytics" },
+      { status: 500 }
+    );
   }
 }

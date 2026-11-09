@@ -26,7 +26,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     // 👇 FIX: Updated to match your exact Prisma schema enum
-    const validRoles = ["CUSTOMER", "SELLER_OWNER", "SELLER_STAFF", "SUPPORT", "ADMIN", "SUPER_ADMIN"];
+    // Seller roles must only be granted through the approved seller workflow.
+    const validRoles = ["CUSTOMER", "SUPPORT", "ADMIN", "SUPER_ADMIN"];
     if (role && !validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role specified" }, { status: 400 });
     }
@@ -55,24 +56,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       },
     });
 
-    // 👇 CRITICAL FIX: If promoted to a Seller role, auto-create their SellerProfile
-    if ((role === "SELLER_OWNER" || role === "SELLER_STAFF") && updatedUser) {
-      const existingProfile = await db.sellerProfile.findUnique({
-        where: { userId: id }
-      });
-
-      if (!existingProfile) {
-        await db.sellerProfile.create({
-          data: {
-            userId: id,
-            businessName: `${updatedUser.firstName || 'My'} ${updatedUser.lastName || 'Store'}`.trim() || "New Seller Store",
-            description: "Auto-generated profile upon admin upgrade",
-            commissionRate: 10, // Default platform commission
-            isActive: true,     // Make it active immediately
-          }
-        });
-      }
-    }
 
     // Create audit logs for what was changed
     const auditActions = [];

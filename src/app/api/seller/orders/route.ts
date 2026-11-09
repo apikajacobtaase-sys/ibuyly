@@ -1,68 +1,117 @@
-// src/app/api/seller/orders/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
 import { sendShippingUpdateEmail, sendDeliveryConfirmationEmail } from "@/lib/email";
+import { authorizeSeller } from "@/lib/seller-auth";
 import { z } from "zod";
+
+const ItemStatusSchema = z.enum([
+  "CONFIRMED",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
+]);
 
 const UpdateItemSchema = z.object({
   itemId: z.string().cuid("Invalid item ID"),
-  status: z.enum(["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
-  trackingNumber: z.string().optional(),
-  trackingCarrier: z.string().optional(),
-});
+  status: ItemStatusSchema.optional(),
+  trackingNumber: z.string().trim().max(100).optional(),
+  trackingCarrier: z.string().trim().max(80).optional(),
+}).strict().refine(
+  (data) =>
+    data.status !== undefined ||
+    data.trackingNumber !== undefined ||
+    data.trackingCarrier !== undefined,
+  { message: "At least one field must be provided" }
+);
+
+const ALL_STATUSES = [
+  "PENDING",
+  "CONFIRMED",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
+] as const;
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["PROCESSING", "CANCELLED"],
+  PROCESSING: ["SHIPPED", "CANCELLED"],
+  SHIPPED: ["DELIVERED"],
+  DELIVERED: [],
+  CANCELLED: [],
+};
 
 // ==========================================
-// GET: Fetch orders containing seller's items
+// GET: Fetch only this seller's order items
 // ==========================================
 export async function GET(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const access = await authorizeSeller("manage_orders");
 
-    const sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!sellerProfile) {
-      return NextResponse.json({ error: "Seller profile not found" }, { status: 403 });
+    if (!access.authorized) {
+      return access.response;
     }
 
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const itemStatus = searchParams.get("itemStatus");
+
+    const page = Number(searchParams.get("page") ?? "1");
+    const limit = Number(searchParams.get("limit") ?? "10");
+    const itemStatus = searchParams.get("itemStatus") ?? "ALL";
+
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 50
+    ) {
+      return NextResponse.json(
+        { error: "Invalid pagination parameters" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      itemStatus !== "ALL" &&
+      !ALL_STATUSES.includes(itemStatus as typeof ALL_STATUSES[number])
+    ) {
+      return NextResponse.json(
+        { error: "Invalid order item status" },
+        { status: 400 }
+      );
+    }
 
     const skip = (page - 1) * limit;
 
-    const whereClause: any = {
-      items: {
-        some: { sellerId: sellerProfile.id },
-      },
+    const itemWhere = {
+      sellerId: access.sellerId,
+      ...(itemStatus !== "ALL" ? { status: itemStatus } : {}),
     };
 
-    if (itemStatus && itemStatus !== "ALL") {
-      whereClause.items.some.status = itemStatus;
-    }
+    const whereClause = {
+      items: {
+        some: itemWhere,
+      },
+    };
 
     const [orders, total] = await Promise.all([
       db.order.findMany({
         where: whereClause,
-           include: {
-  user: {
-    select: { id: true, email: true },
-  },
-
-  payment: {
-    select: {
-      paymentMethod: true,
-    },
-  },
-
-  shippingAddress: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+          payment: {
+            select: {
+              paymentMethod: true,
+            },
+          },
+          shippingAddress: {
             select: {
               recipientName: true,
               phone: true,
@@ -72,20 +121,19 @@ export async function GET(req: Request) {
               locality: { select: { name: true } },
             },
           },
-          // ✅ Only this seller's items
           items: {
-            where: { sellerId: sellerProfile.id },
+            where: {
+              sellerId: access.sellerId,
+              ...(itemStatus !== "ALL" ? { status: itemStatus } : {}),
+            },
             include: {
-              // ✅ ProductVariant has: sku, price, stockQuantity, etc.
               variant: {
                 select: {
                   sku: true,
-                  // ✅ Product has: title, slug, description, status
                   product: {
                     select: {
                       title: true,
                       slug: true,
-                      // ✅ ProductImage has: id, url
                       images: {
                         take: 1,
                         select: { url: true },
@@ -104,18 +152,44 @@ export async function GET(req: Request) {
       db.order.count({ where: whereClause }),
     ]);
 
-       // Format data for frontend
     const formattedOrders = orders.map((order) => {
-      // 👇 Prioritize the Snapshot, fallback to relational Address
-      const recipient = order.deliveryRecipient || order.shippingAddress?.recipientName || "Customer";
-      const phone = order.deliveryPhone || order.shippingAddress?.phone || "N/A";
-      
+      const recipient =
+        order.deliveryRecipient ||
+        order.shippingAddress?.recipientName ||
+        "Customer";
+
+      const phone =
+        order.deliveryPhone ||
+        order.shippingAddress?.phone ||
+        "N/A";
+
       let addressString = "No address provided";
+
       if (order.deliveryLocality) {
-        addressString = `${order.deliveryStreet || ''}, ${order.deliveryLandmark ? order.deliveryLandmark + ', ' : ''}${order.deliveryLocality}, ${order.deliveryDistrict}, ${order.deliveryRegion}`;
+        addressString = [
+          order.deliveryStreet || "",
+          order.deliveryLandmark || "",
+          order.deliveryLocality,
+          order.deliveryDistrict || "",
+          order.deliveryRegion || "",
+        ]
+          .filter(Boolean)
+          .join(", ");
       } else if (order.shippingAddress) {
-        addressString = `${order.shippingAddress.neighbourhood || ''}, ${order.shippingAddress.locality?.name || ''}, ${order.shippingAddress.region?.name || ''}`;
+        addressString = [
+          order.shippingAddress.neighbourhood || "",
+          order.shippingAddress.locality?.name || "",
+          order.shippingAddress.district?.name || "",
+          order.shippingAddress.region?.name || "",
+        ]
+          .filter(Boolean)
+          .join(", ");
       }
+
+      const sellerSubtotal = order.items.reduce(
+        (sum, item) => sum + Number(item.price) * item.quantity,
+        0
+      );
 
       return {
         id: order.id,
@@ -126,25 +200,20 @@ export async function GET(req: Request) {
         customerEmail: order.user?.email || "N/A",
         customerPhone: phone,
         shippingAddress: addressString,
-        totalAmount: Number(order.totalAmount),
-        deliveryFee: Number(order.deliveryFee),
-        items: order.items.map((item) => {
-          const productImage = item.variant?.product?.images?.[0]?.url || null;
-          const productTitle = item.variant?.product?.title || item.title;
-          return {
-            id: item.id,
-            title: productTitle,
-            quantity: item.quantity,
-            price: Number(item.price),
-            status: item.status,
-            trackingNumber: item.trackingNumber,
-            trackingCarrier: item.trackingCarrier,
-            shippedAt: item.shippedAt,
-            deliveredAt: item.deliveredAt,
-            imageUrl: productImage,
-            sku: item.variant?.sku || "N/A",
-          };
-        }),
+        sellerSubtotal,
+        items: order.items.map((item) => ({
+          id: item.id,
+          title: item.variant?.product?.title || item.title,
+          quantity: item.quantity,
+          price: Number(item.price),
+          status: item.status,
+          trackingNumber: item.trackingNumber,
+          trackingCarrier: item.trackingCarrier,
+          shippedAt: item.shippedAt,
+          deliveredAt: item.deliveredAt,
+          imageUrl: item.variant?.product?.images?.[0]?.url || null,
+          sku: item.variant?.sku || "N/A",
+        })),
       };
     });
 
@@ -156,137 +225,262 @@ export async function GET(req: Request) {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("🚨 Fetch seller orders error:", error);
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
+    console.error("Fetch seller orders error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch orders" },
+      { status: 500 }
+    );
   }
 }
 
 // ==========================================
-// PATCH: Update a specific order item's status/tracking
+// PATCH: Update a seller-owned order item
 // ==========================================
 export async function PATCH(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("manage_orders");
+
+    if (!access.authorized) {
+      return access.response;
     }
 
-    const sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
+    let body: unknown;
 
-    if (!sellerProfile) {
-      return NextResponse.json({ error: "Seller profile not found" }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const validation = UpdateItemSchema.safeParse(body);
-
-    if (!validation.success) {
+    try {
+      body = await req.json();
+    } catch {
       return NextResponse.json(
-        { error: "Invalid request", details: validation.error.flatten() },
+        { error: "Invalid JSON request body" },
         { status: 400 }
       );
     }
 
-    const { itemId, status, trackingNumber, trackingCarrier } = validation.data;
-       // 🔒 SECURITY: Verify this item belongs to THIS seller
-    const orderItem = await db.orderItem.findUnique({
-      where: { id: itemId },
+    const validation = UpdateItemSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid request",
+          details: validation.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+
+    const {
+      itemId,
+      status,
+      trackingNumber,
+      trackingCarrier,
+    } = validation.data;
+
+    // Never retrieve an item belonging to another seller.
+    const orderItem = await db.orderItem.findFirst({
+      where: {
+        id: itemId,
+        sellerId: access.sellerId,
+      },
       include: {
         order: {
-          include: { // 👈 Changed from 'select' to 'include' to fetch relations
-            user: { 
-              select: { 
-                email: true, 
-                firstName: true, 
-                lastName: true 
-              } 
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
             },
             items: {
+              where: {
+                sellerId: access.sellerId,
+              },
               select: {
                 title: true,
                 quantity: true,
-              }
-            }
+              },
+            },
           },
         },
       },
     });
 
-    if (!orderItem || orderItem.sellerId !== sellerProfile.id) {
-      return NextResponse.json({ error: "Forbidden: You do not own this item" }, { status: 403 });
+    if (!orderItem) {
+      return NextResponse.json(
+        { error: "Order item not found" },
+        { status: 404 }
+      );
     }
 
-    // Prepare update data
-    const updateData: any = {};
-    if (status !== undefined) updateData.status = status;
-    if (trackingNumber !== undefined) updateData.trackingNumber = trackingNumber;
-    if (trackingCarrier !== undefined) updateData.trackingCarrier = trackingCarrier;
+    const statusChanged =
+      status !== undefined && status !== orderItem.status;
 
-    // Auto-set timestamps based on status
-    if (status === "SHIPPED") {
+    const trackingChanged =
+      trackingNumber !== undefined ||
+      trackingCarrier !== undefined;
+
+    if (!statusChanged && !trackingChanged) {
+      return NextResponse.json(
+        { error: "No changes detected" },
+        { status: 400 }
+      );
+    }
+
+    // Enforce forward-only fulfilment transitions.
+    if (statusChanged) {
+      const allowed = ALLOWED_TRANSITIONS[orderItem.status] || [];
+
+      if (!allowed.includes(status!)) {
+        return NextResponse.json(
+          {
+            error: `Cannot change order item from ${orderItem.status} to ${status}.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Tracking information can only be edited while shipped.
+    const resultingStatus = status ?? orderItem.status;
+
+    if (trackingChanged && resultingStatus !== "SHIPPED") {
+      return NextResponse.json(
+        {
+          error: "Tracking information can only be updated for shipped items.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const updateData: {
+      status?: string;
+      trackingNumber?: string | null;
+      trackingCarrier?: string | null;
+      shippedAt?: Date;
+      deliveredAt?: Date;
+    } = {};
+
+    if (statusChanged) {
+      updateData.status = status;
+    }
+
+    if (trackingNumber !== undefined) {
+      updateData.trackingNumber = trackingNumber || null;
+    }
+
+    if (trackingCarrier !== undefined) {
+      updateData.trackingCarrier = trackingCarrier || null;
+    }
+
+    if (statusChanged && status === "SHIPPED") {
       updateData.shippedAt = new Date();
     }
-    if (status === "DELIVERED") {
+
+    if (statusChanged && status === "DELIVERED") {
       updateData.deliveredAt = new Date();
     }
 
-    // Update the item
-    await db.orderItem.update({
-      where: { id: itemId },
-      data: updateData,
-    });
+    const finalTrackingNumber =
+      trackingNumber !== undefined
+        ? trackingNumber || null
+        : orderItem.trackingNumber;
 
-     // 🔔 CREATE NOTIFICATION FOR CUSTOMER
-    if (status && ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"].includes(status)) {
-      const orderShortId = orderItem.order.id.slice(-8).toUpperCase();
-      
-      let title = "";
-      let message = "";
-      
-      switch (status) {
-        case "CONFIRMED":
-          title = `Order #${orderShortId} Confirmed ✅`;
-          message = "The seller has confirmed your order and is preparing it for dispatch.";
-          break;
-        case "PROCESSING":
-          title = `Order #${orderShortId} is Being Processed 📦`;
-          message = "The seller is currently packing your items.";
-          break;
-        case "SHIPPED":
-          title = `Order #${orderShortId} Has Been Shipped! 🚚`;
-          message = trackingNumber 
-            ? `Track your package: ${trackingNumber}${trackingCarrier ? ` via ${trackingCarrier}` : ""}`
-            : "Your package is on its way! You will be notified when it arrives.";
-          break;
-        case "DELIVERED":
-          title = `Order #${orderShortId} Delivered! 🎉`;
-          message = "We hope you enjoy your purchase. Consider leaving a review for the seller!";
-          break;
-        case "CANCELLED":
-          title = `Item in Order #${orderShortId} Cancelled ❌`;
-          message = "Please contact support or the seller if you have questions about a refund.";
-          break;
+    const finalTrackingCarrier =
+      trackingCarrier !== undefined
+        ? trackingCarrier || null
+        : orderItem.trackingCarrier;
+
+    // Update and notify atomically.
+    const transactionResult = await db.$transaction(async (tx) => {
+      const updated = await tx.orderItem.updateMany({
+        where: {
+          id: itemId,
+          sellerId: access.sellerId,
+          status: orderItem.status,
+        },
+        data: updateData,
+      });
+
+      if (updated.count !== 1) {
+        return false;
       }
 
-      // Create the in-app notification matching your exact schema
-      await db.notification.create({
-        data: {
-          userId: orderItem.order.userId,
-          sellerId: sellerProfile.id, // Matches your SellerProfile relation
-          type: "ORDER",              // Matches your type string
-          title,
-          message,
-          link: `/account/orders/${orderItem.order.id}`, // Points customer to the specific order
-          isRead: false,
-        },
-      });
+      if (statusChanged) {
+        const orderShortId = orderItem.order.id
+          .slice(-8)
+          .toUpperCase();
+
+        let title = "";
+        let message = "";
+
+        switch (status) {
+          case "CONFIRMED":
+            title = `Order #${orderShortId} Confirmed`;
+            message =
+              "The seller has confirmed your order and is preparing it for dispatch.";
+            break;
+
+          case "PROCESSING":
+            title = `Order #${orderShortId} is Being Processed`;
+            message = "The seller is currently packing your items.";
+            break;
+
+          case "SHIPPED":
+            title = `Order #${orderShortId} Has Been Shipped!`;
+            message = finalTrackingNumber
+              ? `Track your package: ${finalTrackingNumber}${finalTrackingCarrier ? ` via ${finalTrackingCarrier}` : ""}`
+              : "Your package is on its way! You will be notified when it arrives.";
+            break;
+
+          case "DELIVERED":
+            title = `Order #${orderShortId} Delivered!`;
+            message =
+              "We hope you enjoy your purchase. Consider leaving a review for the seller!";
+            break;
+
+          case "CANCELLED":
+            title = `Item in Order #${orderShortId} Cancelled`;
+            message =
+              "An item in your order has been cancelled. Please contact support if you need assistance.";
+            break;
+        }
+
+        await tx.notification.create({
+          data: {
+            userId: orderItem.order.userId,
+            sellerId: access.sellerId,
+            type: "ORDER",
+            title,
+            message,
+            link: `/account/orders/${orderItem.order.id}`,
+            isRead: false,
+          },
+        });
+      }
+
+      return true;
+    });
+
+    if (!transactionResult) {
+      return NextResponse.json(
+        { error: "This order item changed. Refresh and try again." },
+        { status: 409 }
+      );
     }
-    // 👇 NEW: Trigger Email for SHIPPED or DELIVERED
-      if (status === "SHIPPED" || status === "DELIVERED") {
-        const customerName = `${orderItem.order.user.firstName || ""} ${orderItem.order.user.lastName || ""}`.trim() || "Valued Customer";
-        const orderItems = orderItem.order.items.map((item: any) => ({
+
+    // Send email after the database transaction.
+    // Email failures must not undo a successful order update.
+    if (
+      statusChanged &&
+      (status === "SHIPPED" || status === "DELIVERED")
+    ) {
+      try {
+        const customerName =
+          `${orderItem.order.user.firstName || ""} ${orderItem.order.user.lastName || ""}`.trim() ||
+          "Valued Customer";
+
+        const orderItems = orderItem.order.items.map((item) => ({
           title: item.title,
           quantity: item.quantity,
         }));
@@ -296,21 +490,32 @@ export async function PATCH(req: Request) {
             to: orderItem.order.user.email,
             customerName,
             orderId: orderItem.order.id,
-            trackingNumber,
-            carrier: trackingCarrier,
+            trackingNumber: finalTrackingNumber ?? undefined,
+            carrier: finalTrackingCarrier ?? undefined,
             items: orderItems,
           });
-        } else if (status === "DELIVERED") {
+        } else {
           await sendDeliveryConfirmationEmail({
             to: orderItem.order.user.email,
             customerName,
             orderId: orderItem.order.id,
           });
         }
+      } catch (emailError) {
+        console.error("Order update email failed:", emailError);
       }
-    return NextResponse.json({ success: true, message: "Item updated successfully" });
-  } catch (error: any) {
-    console.error("🚨 Update order item error:", error);
-    return NextResponse.json({ error: error.message || "Failed to update item" }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Item updated successfully",
+    });
+  } catch (error) {
+    console.error("Update seller order item error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to update order item" },
+      { status: 500 }
+    );
   }
 }

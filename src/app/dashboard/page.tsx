@@ -67,15 +67,10 @@ export default function DashboardPage() {
             <li>⏳ Step 5: Shopping Cart & Checkout</li>
             <li>⏳ Step 6: Payments (Paystack/MoMo)</li>
           </ul>
-          
-          <Link 
-            href="/seller" 
-            className="block mt-6 w-full text-center bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
-          >
-            Go to Seller Dashboard →
-          </Link>
-          <Link 
-  href="/concierge" 
+
+
+          <Link
+  href="/concierge"
   className="block mt-4 w-full text-center bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition"
 >
   ✨ Talk to the AI Concierge

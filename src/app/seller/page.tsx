@@ -1,4 +1,4 @@
-// src/app/seller/page.tsx
+﻿// src/app/seller/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -60,11 +60,11 @@ export default function SellerOverviewPage() {
   const fetchStats = async () => {
     try {
       const res = await fetch("/api/seller/stats");
-      if (res.status === 404) {
-        setHasSellerProfile(false);
-        setIsLoading(false);
+      if (res.status === 403) {
+      setHasSellerProfile(false);
+      setStats(null);
         return;
-      }
+     }
       const data = await res.json();
       if (res.ok) {
         setStats(data);
@@ -110,12 +110,12 @@ export default function SellerOverviewPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-6">
       {/* Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">
-            Welcome back, {session?.user?.name?.split(" ")[0] || "Seller"}! 👋
+          <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
+            Welcome back, {session?.user?.name?.split(" ")[0] || "Seller"}! ðŸ‘‹
           </h2>
           <p className="text-sm text-gray-500 mt-1">
             Here&apos;s what&apos;s happening with your store today.
@@ -123,7 +123,7 @@ export default function SellerOverviewPage() {
         </div>
         <Link
           href="/seller/products/new"
-          className="inline-flex items-center gap-2 bg-teal-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-teal-700 transition self-start"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-3 font-semibold text-white transition hover:bg-teal-700 sm:w-auto sm:self-start"
         >
           <Plus className="w-4 h-4" />
           Add Product
@@ -131,10 +131,10 @@ export default function SellerOverviewPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           title="Total Sales"
-          value={`GH₵ ${stats.totalSales.toFixed(2)}`}
+          value={`GHâ‚µ ${stats.totalSales.toFixed(2)}`}
           icon={DollarSign}
           color="text-green-600"
           bg="bg-green-100"
@@ -167,10 +167,10 @@ export default function SellerOverviewPage() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
         {/* Recent Orders - 2 columns */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-4 sm:px-6">
             <h3 className="font-semibold text-gray-900">Recent Orders</h3>
             <Link href="/seller/orders" className="text-sm text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1">
               View all <ArrowRight className="w-3 h-3" />
@@ -184,17 +184,17 @@ export default function SellerOverviewPage() {
           ) : (
             <div className="divide-y divide-gray-100">
               {stats.recentOrders.map((order) => (
-                <div key={order.id} className="px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+                <div key={order.id} className="flex flex-col gap-2 px-4 py-3 transition hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                   <div className="min-w-0 flex-1">
                     <p className="font-mono text-xs text-gray-500 truncate">{order.id}</p>
                     <p className="text-sm text-gray-900 mt-0.5">
-                      {order.itemCount} item{order.itemCount !== 1 ? "s" : ""} •{" "}
+                      {order.itemCount} item{order.itemCount !== 1 ? "s" : ""} â€¢{" "}
                       {new Date(order.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 ml-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 sm:ml-4 sm:justify-end sm:gap-3">
                     <span className="font-semibold text-gray-900 text-sm">
-                      GH₵ {order.subtotal.toFixed(2)}
+                      GHâ‚µ {order.subtotal.toFixed(2)}
                     </span>
                     <StatusBadge status={order.status} size="sm" />
                   </div>
@@ -205,10 +205,10 @@ export default function SellerOverviewPage() {
         </div>
 
         {/* Right Column */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-4 sm:space-y-6">
           {/* Best Performing Products */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+            <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-4 sm:px-6">
               <TrendingUp className="w-4 h-4 text-teal-600" />
               <h3 className="font-semibold text-gray-900">Best Sellers</h3>
             </div>
@@ -229,7 +229,7 @@ export default function SellerOverviewPage() {
                       </span>
                     </div>
                     <p className="text-xs text-teal-600 font-semibold mt-0.5">
-                      GH₵ {product.revenue.toFixed(2)}
+                      GHâ‚µ {product.revenue.toFixed(2)}
                     </p>
                   </div>
                 ))}
@@ -239,7 +239,7 @@ export default function SellerOverviewPage() {
 
           {/* Low Stock Alerts */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-4 sm:px-6">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-500" />
                 <h3 className="font-semibold text-gray-900">Low Stock</h3>
@@ -250,7 +250,7 @@ export default function SellerOverviewPage() {
             </div>
             {stats.lowStockProducts.length === 0 ? (
               <div className="p-6 text-center text-gray-500 text-sm">
-                All products well-stocked ✓
+                All products well-stocked âœ“
               </div>
             ) : (
               <div className="divide-y divide-gray-100">

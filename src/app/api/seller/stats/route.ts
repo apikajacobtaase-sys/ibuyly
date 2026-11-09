@@ -1,40 +1,15 @@
-// src/app/api/seller/stats/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
+import { authorizeSeller } from "@/lib/seller-auth";
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const access = await authorizeSeller("view_finances");
 
-    // 1. Check if user is seller owner or has membership
-    const sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
+    if (!access.authorized) return access.response;
 
-    let sellerId: string | null = null;
+    const sellerId = access.sellerId;
 
-    if (sellerProfile) {
-      sellerId = sellerProfile.id;
-    } else {
-      // Check if user has membership with any seller
-      const membership = await db.sellerMembership.findFirst({
-        where: { userId: session.user.id, isActive: true },
-      });
-      if (membership) {
-        sellerId = membership.sellerId;
-      }
-    }
-
-    if (!sellerId) {
-      return NextResponse.json({ error: "No seller access" }, { status: 403 });
-    }
-
-    // 2. Run all queries in parallel using the SAFE `sellerId` variable
     const [
       totalProducts,
       activeProducts,
@@ -42,22 +17,43 @@ export async function GET() {
       lowStockProducts,
       recentOrders,
       allOrderItems,
+      pendingOrderCount,
+      totalOrders,
     ] = await Promise.all([
       db.product.count({ where: { sellerId } }),
-      db.product.count({ where: { sellerId, status: "ACTIVE" } }),
-      db.product.count({ where: { sellerId, status: "DRAFT" } }),
-      db.productVariant.findMany({
+
+      db.product.count({
+        where: { sellerId, status: "ACTIVE" },
+      }),
+
+      db.product.count({
+        where: { sellerId, status: "DRAFT" },
+      }),
+
+      db.sellerOffer.findMany({
         where: {
-          product: { sellerId },
-          stockQuantity: { lte: db.productVariant.fields.lowStockThreshold },
+          sellerId,
+          stockQuantity: { gt: 0 },
         },
-        include: { product: { select: { title: true, slug: true } } },
+        include: {
+          variant: {
+            include: {
+              product: {
+                select: { title: true, slug: true },
+              },
+            },
+          },
+        },
+        orderBy: { stockQuantity: "asc" },
         take: 5,
       }),
+
       db.order.findMany({
         where: {
           items: { some: { sellerId } },
-          status: { in: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"] },
+          status: {
+            in: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"],
+          },
         },
         include: {
           items: { where: { sellerId } },
@@ -65,45 +61,54 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         take: 5,
       }),
+
       db.orderItem.findMany({
         where: {
           sellerId,
-          order: { status: { in: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"] } },
+          order: {
+            status: {
+              in: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"],
+            },
+          },
+        },
+      }),
+
+      db.order.count({
+        where: {
+          items: { some: { sellerId } },
+          status: "PENDING",
+        },
+      }),
+
+      db.order.count({
+        where: {
+          items: { some: { sellerId } },
         },
       }),
     ]);
 
-    // 3. Calculate total sales (sum of price * quantity)
     const totalSales = allOrderItems.reduce((sum, item) => {
-  const price = Number(item.price.toString());
-  return sum + price * item.quantity;
-}, 0);
+      return sum + Number(item.price) * item.quantity;
+    }, 0);
 
-    // 4. Count pending orders
-    const pendingOrderCount = await db.order.count({
-      where: {
-        items: { some: { sellerId } },
-        status: "PENDING",
-      },
-    });
+    const productSales = new Map<
+      string,
+      { title: string; slug: string; quantity: number; revenue: number }
+    >();
 
-    // 5. Calculate total orders
-    const totalOrders = await db.order.count({
-      where: { items: { some: { sellerId } } },
-    });
-
-    // 6. Best performing products (by quantity sold)
-    const productSales = new Map<string, { title: string; slug: string; quantity: number; revenue: number }>();
     for (const item of allOrderItems) {
-      const existing = productSales.get(item.variantId) || {
+      const existing = productSales.get(item.variantId) ?? {
         title: item.title || "Unknown Product",
         slug: "",
         quantity: 0,
         revenue: 0,
       };
-      const price = Number(item.price.toString());
+
+      const revenue = Number(item.price) * item.quantity;
+
       existing.quantity += item.quantity;
-      existing.revenue += price * item.quantity;
+      existing.revenue += revenue;
+
       productSales.set(item.variantId, existing);
     }
 
@@ -118,31 +123,43 @@ export async function GET() {
       totalProducts,
       activeProducts,
       draftProducts,
-      lowStockProducts: lowStockProducts.map((v) => ({
-        variantId: v.id,
-        productTitle: v.product.title,
-        productSlug: v.product.slug,
-        stockQuantity: v.stockQuantity,
-        threshold: v.lowStockThreshold,
+
+      lowStockProducts: lowStockProducts.map((offer) => ({
+        variantId: offer.variantId,
+        offerId: offer.id,
+        productTitle: offer.variant.product.title,
+        productSlug: offer.variant.product.slug,
+        stockQuantity: offer.stockQuantity,
+        threshold: offer.variant.lowStockThreshold ?? 5,
       })),
-      recentOrders: recentOrders.map((o) => {
-        const sellerItems = o.items.filter((i) => i.sellerId === sellerId);
-        const subtotal = sellerItems.reduce((sum, i) => {
-          const p = Number(i.price.toString());
-          return sum + p * i.quantity;
-        }, 0);
+
+      recentOrders: recentOrders.map((order) => {
+        const sellerItems = order.items;
+        const subtotal = sellerItems.reduce(
+          (sum, item) => sum + Number(item.price) * item.quantity,
+          0
+        );
+
         return {
-          id: o.id,
-          status: o.status,
-          createdAt: o.createdAt,
-          itemCount: sellerItems.reduce((sum, i) => sum + i.quantity, 0),
+          id: order.id,
+          status: order.status,
+          createdAt: order.createdAt,
+          itemCount: sellerItems.reduce(
+            (sum, item) => sum + item.quantity,
+            0
+          ),
           subtotal,
         };
       }),
+
       bestProducts,
     });
   } catch (error) {
     console.error("Seller stats error:", error);
-    return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "Failed to fetch stats" },
+      { status: 500 }
+    );
   }
 }

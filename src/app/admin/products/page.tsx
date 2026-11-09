@@ -1,4 +1,4 @@
-// src/app/admin/products/page.tsx
+﻿// src/app/admin/products/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -53,10 +53,10 @@ export default function AdminProductsPage() {
       if (res.ok) {
         fetchProducts();
       } else {
-        alert("❌ Failed to update product");
+        alert("âŒ Failed to update product");
       }
     } catch (error) {
-      alert("❌ Network error");
+      alert("âŒ Network error");
     }
   };
 
@@ -97,7 +97,7 @@ export default function AdminProductsPage() {
     {
       key: "price",
       header: "Price",
-      render: (item) => <span className="font-semibold text-sm">GH₵ {item.price.toFixed(2)}</span>,
+      render: (item) => <span className="font-semibold text-sm">GHâ‚µ {item.price.toFixed(2)}</span>,
     },
     {
       key: "status",
@@ -151,11 +151,18 @@ export default function AdminProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Product Moderation</h2>
         <p className="text-sm text-gray-500 mt-1">
           Review and moderate all products across the marketplace
         </p>
+        <Link
+          href="/admin/products/new"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition shadow-sm w-full sm:w-auto"
+        >
+          <Package className="w-4 h-4" />
+          Create Catalogue Product
+        </Link>
       </div>
 
       {/* Filters */}

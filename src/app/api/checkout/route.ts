@@ -465,7 +465,10 @@ export async function POST(req: Request) {
             }),
           },
         },
-      });
+           });
+    }, {
+      maxWait: 10000,
+      timeout: 20000,
     });
 
     const localReference = `ORD-${order.id}`;

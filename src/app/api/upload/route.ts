@@ -1,6 +1,7 @@
  // src/app/api/upload/route.ts
 
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin";
 import { v2 as cloudinary } from "cloudinary";
 
 export const runtime = "nodejs";
@@ -14,6 +15,10 @@ cloudinary.config({
 
 export async function POST(req: Request) {
   try {
+    // Only administrators can upload central catalogue images.
+    const { error } = await requireAdmin();
+    if (error) return error;
+
     // 1. Verify Cloudinary configuration
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;

@@ -1,4 +1,4 @@
- "use client";
+﻿ "use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -16,11 +16,12 @@ interface ProductCardProps {
   compareAtPrice?: number | string | null;
   imageUrl?: string | null;
   sellerName?: string;
+  sellerLogoUrl?: string | null;
   stockQuantity?: number;
   avgRating?: number;
   reviewCount?: number;
-  bestVariantId?: string | null; // 👈 ADDED: To ensure correct cart addition
-  bestOfferId?: string | null;    // 👈 ADDED: To ensure correct seller stock deduction
+  bestVariantId?: string | null; // ðŸ‘ˆ ADDED: To ensure correct cart addition
+  bestOfferId?: string | null;    // ðŸ‘ˆ ADDED: To ensure correct seller stock deduction
 }
 
 export default function ProductCard({
@@ -31,6 +32,7 @@ export default function ProductCard({
   compareAtPrice,
   imageUrl,
   sellerName,
+  sellerLogoUrl,
   stockQuantity = 0,
   avgRating,
   reviewCount,
@@ -73,13 +75,13 @@ export default function ProductCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           variantId: bestVariantId || id, 
-          offerId: bestOfferId || null, // 👈 THIS MUST BE SENT!
+          offerId: bestOfferId || null, // ðŸ‘ˆ THIS MUST BE SENT!
           quantity: 1,
         }),
       });
 
       if (res.ok) {
-        console.log("✅ Added to cart with offerId:", bestOfferId);
+        console.log("âœ… Added to cart with offerId:", bestOfferId);
         // Trigger your cart UI update here
       } else {
         const data = await res.json();
@@ -148,7 +150,7 @@ try {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-300">
-            <span className="text-3xl">📦</span>
+            <span className="text-3xl">ðŸ“¦</span>
           </div>
         )}
         
@@ -202,7 +204,7 @@ try {
         
         <div className="flex items-baseline gap-1 mb-1">
           <span className="text-sm font-bold text-orange-600">
-            GH₵ {numericPrice.toFixed(2)}
+            GHâ‚µ {numericPrice.toFixed(2)}
           </span>
           {numericCompare && numericCompare > numericPrice && (
             <span className="text-[10px] text-gray-400 line-through">
@@ -212,12 +214,17 @@ try {
         </div>
 
         {sellerName && (
-          <p className="text-[10px] text-gray-500 mb-2 truncate">
-            Sold by: {sellerName}
-          </p>
+          <div className="flex items-center gap-1.5 mb-2 min-w-0">
+            {sellerLogoUrl ? (
+              <Image src={sellerLogoUrl} alt="" width={20} height={20} className="w-5 h-5 rounded-full object-cover shrink-0 border border-gray-100" />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-gray-100 shrink-0 flex items-center justify-center text-[9px] font-semibold text-gray-500">{sellerName.charAt(0).toUpperCase()}</div>
+            )}
+            <p className="text-[10px] text-gray-500 truncate">Sold by: {sellerName}</p>
+          </div>
         )}
 
-        {/* 👇 NEW: Live Stock Status Indicator */}
+        {/* ðŸ‘‡ NEW: Live Stock Status Indicator */}
         <div className="mb-2">
           {stockQuantity > 10 ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded w-fit">
@@ -237,7 +244,7 @@ try {
           )}
         </div>
 
-        {/* 👇 UPDATED: Add to Cart Button with Loading & Disabled States */}
+        {/* ðŸ‘‡ UPDATED: Add to Cart Button with Loading & Disabled States */}
         <button
           onClick={handleAddToCart}
           disabled={stockQuantity <= 0 || isAdding}

@@ -1,42 +1,41 @@
- // src/components/ClientLayout.tsx
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import GlobalSidebar from "@/components/GlobalSidebar";
 import Header from "@/components/Header";
 import OnboardingBanner from "@/components/OnboardingBanner";
 import DraggableFAB from "@/components/DraggableFAB";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
-export default function ClientLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function ClientLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Seller and admin dashboards have their own independent navigation.
+  const isSellerRoute = pathname === "/seller" || pathname.startsWith("/seller/");
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+
+  if (isSellerRoute || isAdminRoute) {
+    return <>{children}</>;
+  }
 
   return (
-    // ✅ 1. Lock to screen height
-    <div className="flex h-screen w-full overflow-hidden bg-white">
-      
-      {/* ✅ 2. Sidebar is static in flow, handles its own internal scroll */}
+    <div className="flex min-h-screen w-full min-w-0 overflow-x-hidden bg-white">
       <GlobalSidebar
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
-        onCollapseChange={(collapsed) => setIsSidebarCollapsed(collapsed)}
       />
-      
-      {/* ✅ 3. Main Area takes remaining width and full height */}
-      <div className="flex-1 flex flex-col min-w-0 h-full relative">
-        
-        {/* Header is fixed at top of this column */}
-        <div className="flex-shrink-0 z-20">
-           <OnboardingBanner />
-           <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
+
+      <div className="relative flex min-h-screen min-w-0 flex-1 flex-col">
+        <div className="sticky top-0 z-30 flex-shrink-0">
+          <OnboardingBanner />
+          <Header onMenuToggle={() => setMobileMenuOpen((open) => !open)} />
         </div>
 
-        {/* ✅ 4. Main Content scrolls independently */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 w-full scroll-smooth">
+        <PWAInstallPrompt />
+
+        <main className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6 scroll-smooth">
           {children}
         </main>
       </div>

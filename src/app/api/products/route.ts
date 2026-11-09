@@ -1,4 +1,4 @@
-  // src/app/api/products/route.ts
+﻿  // src/app/api/products/route.ts
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
           include: {
             sellerOffers: {
               include: {
-                seller: { select: { id: true, businessName: true } }
+                seller: { select: { id: true, businessName: true, logoUrl: true } }
               }
             }, 
           },
@@ -39,6 +39,7 @@ export async function GET(req: Request) {
       let bestVariantId: string | null = null;
       let bestSellerId: string | null = null;
       let bestSellerName: string | null = null;
+      let bestSellerLogoUrl: string | null = null;
       let bestStockQuantity: number = 0;
 
       for (const v of p.variants) {
@@ -59,6 +60,7 @@ export async function GET(req: Request) {
             bestVariantId = v.id;
             bestSellerId = cheapestOffer.seller.id;
             bestSellerName = cheapestOffer.seller.businessName;
+            bestSellerLogoUrl = cheapestOffer.seller.logoUrl;
             bestStockQuantity = cheapestOffer.stockQuantity;
           }
         } else if (v.stockQuantity > 0) {
@@ -84,13 +86,14 @@ export async function GET(req: Request) {
         slug: p.slug || "",
         price: lowestPrice ?? 0,
         imageUrl: imageUrl,
-        stockQuantity: bestStockQuantity, // 👈 The accurate "Buy Box" stock
+        stockQuantity: bestStockQuantity, // ðŸ‘ˆ The accurate "Buy Box" stock
         inStock: isAnyInStock,
         categoryName: p.category?.name || "General",
         sellerId: bestSellerId,
         sellerName: bestSellerName,
-        bestOfferId: bestOfferId,   // 👈 CRITICAL for Add to Cart
-        bestVariantId: bestVariantId, // 👈 CRITICAL for Add to Cart
+        sellerLogoUrl: bestSellerLogoUrl,
+        bestOfferId: bestOfferId,   // ðŸ‘ˆ CRITICAL for Add to Cart
+        bestVariantId: bestVariantId, // ðŸ‘ˆ CRITICAL for Add to Cart
       };
     });
 
@@ -102,7 +105,7 @@ export async function GET(req: Request) {
       total,
     });
   } catch (error: any) {
-    console.error("🚨 PRODUCTS API CRASHED:", error.message);
+    console.error("ðŸš¨ PRODUCTS API CRASHED:", error.message);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }

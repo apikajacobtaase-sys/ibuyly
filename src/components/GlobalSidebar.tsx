@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useCartStore } from "@/store/cartStore";
 import { useState, useEffect } from "react";
-import { 
+import {
   Home, ShoppingBag, Tag, LayoutDashboard, Package,MessageSquare,
-  Bell, MapPin, Settings, Store, LogOut, ShoppingCart, 
+  Bell, MapPin, Settings, Store, LogOut, ShoppingCart,
   User, Shield, Heart, ChevronLeft, ChevronRight, Users, PackagePlus, X
 } from "lucide-react";
 
@@ -40,16 +40,56 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
   const isAuthenticated = status === "authenticated";
   const userRole = session?.user?.role as string | undefined;
 
-  const isSeller = userRole === "SELLER_OWNER" || userRole === "SELLER_STAFF" || userRole === "SUPER_ADMIN";
   const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
   const isSuperAdmin = userRole === "SUPER_ADMIN";
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
+   const [hasSellerAccess, setHasSellerAccess] = useState(false);
+
+useEffect(() => {
+  if (status !== "authenticated") {
+    setHasSellerAccess(false);
+    return;
+  }
+
+  let cancelled = false;
+
+  const checkSellerAccess = async () => {
+    try {
+      const response = await fetch("/api/seller/stores", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        if (!cancelled) setHasSellerAccess(false);
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!cancelled) {
+        setHasSellerAccess(
+          Array.isArray(data.stores) && data.stores.length > 0
+        );
+      }
+    } catch {
+      if (!cancelled) setHasSellerAccess(false);
+    }
+  };
+
+  checkSellerAccess();
+
+  return () => {
+    cancelled = true;
+  };
+}, [status]);
+
   useEffect(() => {
     setIsMounted(true);
-    
+
     const savedState = localStorage.getItem("sidebar-collapsed");
     if (savedState !== null) {
       setIsCollapsed(JSON.parse(savedState));
@@ -60,7 +100,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
     const newState = !isCollapsed;
     setIsCollapsed(newState);
     localStorage.setItem("sidebar-collapsed", JSON.stringify(newState));
-    
+
     if (onCollapseChange) {
       onCollapseChange(newState);
     }
@@ -71,7 +111,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
   const renderLink = (link: { href: string; label: string; icon: any }) => {
     const Icon = link.icon;
     const active = isActive(link.href);
-    
+
     return (
       <Link
         key={link.href}
@@ -95,21 +135,21 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
     <>
       {/* ✅ Mobile Overlay */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm" 
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
           onClick={onClose}
         />
       )}
 
       {/* ✅ Sidebar Container */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-full bg-white border-r border-gray-200 
+        fixed top-0 left-0 z-50 h-dvh w-72 max-w-[85vw] bg-white border-r border-gray-200
         transform transition-all duration-300 ease-in-out
-        md:translate-x-0 md:static md:h-full md:border-r
+         md:translate-x-0 md:sticky md:top-0 md:h-screen md:max-w-none md:border-r
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
         ${isCollapsed ? "md:w-20" : "md:w-72"}
       `}>
-        
+
         {/* Mobile Header inside Sidebar */}
         <div className="md:hidden p-4 border-b border-gray-100 flex items-center justify-between">
           <span className="font-bold text-lg text-green-600">Menu</span>
@@ -120,7 +160,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
 
         {/* ✅ Flex Column Wrapper for Desktop Structure */}
         <div className="hidden md:flex flex-col h-full">
-          
+
           {/* 1. Brand & Toggle (Fixed at top) */}
           <div className={`flex-shrink-0 p-4 border-b border-gray-100 items-center ${isCollapsed ? "justify-center flex" : "flex justify-between"}`}>
             <Link href="/" className="flex items-center gap-3 overflow-hidden">
@@ -129,7 +169,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
               </div>
               {!isCollapsed && <span className="text-xl font-bold text-gray-900 tracking-tight">iBUY</span>}
             </Link>
-            
+
             <button
               onClick={toggleSidebar}
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
@@ -156,13 +196,13 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
               </div>
             )}
 
-            {isAuthenticated && (isSeller || isAdmin) && (
+            {isAuthenticated && ((hasSellerAccess || isAdmin)) && (
               <div>
                 <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>
                 <nav className="space-y-1">
-                   {isSeller && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
-                  {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
-                  {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
+                   {hasSellerAccess && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
+                  {hasSellerAccess && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
+                  {hasSellerAccess && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
                   {isAdmin && renderLink({ href: "/admin", label: "Admin Dashboard", icon: Shield })}
                   {isSuperAdmin && renderLink({ href: "/admin/users", label: "User Management", icon: Users })}
                 </nav>
@@ -187,7 +227,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
                 </span>
               )}
             </Link>
-            
+
             {isAuthenticated && (
                <button
                 onClick={() => { signOut({ callbackUrl: "/" }); onClose(); }}
@@ -204,7 +244,7 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
         {/* ✅ MOBILE NAVIGATION (Visible only on mobile) */}
         <div className="md:hidden flex flex-col h-full pb-20">
            <div className="flex-1 overflow-y-auto p-3 space-y-6">
-            
+
             {/* Browse Section */}
             <div>
               <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Browse</h3>
@@ -224,13 +264,13 @@ export default function GlobalSidebar({ isOpen, onClose, onCollapseChange }: Glo
             )}
 
             {/* Management Section */}
-            {isAuthenticated && (isSeller || isAdmin) && (
+            {isAuthenticated && (hasSellerAccess || isAdmin) && (
               <div>
                 <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</h3>
                 <nav className="space-y-1">
-                  {isSeller && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
-                  {isSeller && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
-                  {isSeller && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
+                  {hasSellerAccess && renderLink({ href: "/seller/inbox", label: "Messages", icon: MessageSquare })}
+                  {hasSellerAccess && renderLink({ href: "/seller", label: "Seller Dashboard", icon: Store })}
+                  {hasSellerAccess && renderLink({ href: "/seller/stocking", label: "Stock Products", icon: PackagePlus })}
                   {isAdmin && renderLink({ href: "/admin", label: "Admin Dashboard", icon: Shield })}
                   {isSuperAdmin && renderLink({ href: "/admin/users", label: "User Management", icon: Users })}
                 </nav>

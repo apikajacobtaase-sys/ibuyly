@@ -42,22 +42,17 @@ const callbackUrl = (() => {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, callbackUrl }),
       });
 
       const data = await res.json();
-
-     if (res.ok) {
-  setSuccess("Account created! Redirecting to login...");
-
-  setTimeout(() => {
-    router.replace(
-      `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
-    );
-  }, 1500);
-} else {
-  setError(data.error || "Registration failed");
-}
+      if (res.ok) {
+        setSuccess(
+          data.message || "Account created successfully! You can now sign in."
+        );
+      } else {
+        setError(data.error || "Registration failed");
+      }
     } catch (err) {
       setError("Network error. Please try again.");
     } finally {
@@ -233,15 +228,18 @@ const callbackUrl = (() => {
           {/* Login Link */}
           <p className="text-center text-sm text-ibuy-text-secondary mt-6">
             Already have an account?{" "}
-           <Link
-  href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-></Link>
+            <Link
+              href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              className="text-ibuy-orange font-semibold hover:underline"
+            >
+              Sign in
+            </Link>
           </p>
         </div>
 
         {/* Security Note */}
         <p className="text-center text-xs text-ibuy-text-secondary mt-4">
-          🔒 Your account will be created as a Customer. Seller access requires a separate application.
+          ðŸ”’ Your account will be created as a Customer. Seller access requires a separate application.
         </p>
       </div>
     </div>

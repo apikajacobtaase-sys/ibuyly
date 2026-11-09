@@ -7,7 +7,7 @@ import { authOptions } from "@/lib/auth";
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "ADMIN") {
+    if (!session || !["ADMIN", "SUPER_ADMIN"].includes(session.user?.role ?? "")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -43,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "ADMIN") {
+    if (!session || !["ADMIN", "SUPER_ADMIN"].includes(session.user?.role ?? "")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

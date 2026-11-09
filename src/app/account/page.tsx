@@ -5,10 +5,10 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
-import { 
-  Search, Heart, Store, History, MapPin, User, 
-  Bell, ShieldAlert, LogOut, ChevronRight, 
-  Package, Mail, Star, Ticket, MessageCircle, 
+import {
+  Search, Heart, Store, History, MapPin, User,
+  Bell, ShieldAlert, LogOut, ChevronRight,
+  Package, Mail, Star, Ticket, MessageCircle, FileText,
   Phone, HelpCircle, Edit2, Wallet
 } from "lucide-react";
 
@@ -34,14 +34,14 @@ export default function AccountPage() {
   const userInitial = userName.charAt(0).toUpperCase();
 
   // WhatsApp configuration (Add NEXT_PUBLIC_WHATSAPP_NUMBER to your .env)
-  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "233000000000"; 
+  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "233000000000";
   const whatsappLink = `https://wa.me/${whatsappNumber}`;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-8">
-      
+
       <main className="max-w-4xl mx-auto">
-        
+
         {/* ==========================================
             SECTION B: WELCOME / GREETING HEADER
         ========================================== */}
@@ -50,7 +50,7 @@ export default function AccountPage() {
             <div className="flex flex-col">
               <h1 className="text-2xl font-bold text-gray-900">Welcome</h1>
               <p className="text-sm text-gray-500 mt-1 mb-4">Enter your account</p>
-              <Link 
+              <Link
                 href={getLoginHref("/account")}
                 className="w-full md:w-auto self-start bg-green-600 text-white font-semibold text-sm px-8 py-2.5 rounded-full hover:bg-green-700 transition-colors text-center"
               >
@@ -79,8 +79,8 @@ export default function AccountPage() {
         {/* ==========================================
             SECTION C: WALLET / BALANCE ROW
         ========================================== */}
-        <Link 
-          href={isGuest ? getLoginHref("/account") : "/account/vouchers"} 
+        <Link
+          href={isGuest ? getLoginHref("/account") : "/account/vouchers"}
           className="flex items-center justify-between bg-white px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors"
         >
           <div className="flex items-center gap-3">
@@ -91,7 +91,7 @@ export default function AccountPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className={`text-sm font-bold ${isGuest ? "text-gray-400" : "text-green-600"}`}>
-              {isGuest ? "GH₵ 0.00" : "GH₵ 0.00"} {/* Replace 0.00 with real balance if implemented */}
+              {isGuest ? "GHâ‚µ 0.00" : "GHâ‚µ 0.00"} {/* Replace 0.00 with real balance if implemented */}
             </span>
             <ChevronRight className="w-4 h-4 text-gray-400" />
           </div>
@@ -102,14 +102,14 @@ export default function AccountPage() {
         ========================================== */}
         <div className="bg-white px-5 py-4 border-b border-gray-100">
           <div className="grid grid-cols-2 gap-3">
-            <Link 
+            <Link
               href={isGuest ? getLoginHref("/account/support") : "/account/support"}
               className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium text-sm py-3 rounded-lg transition-colors"
             >
               <MessageCircle className="w-4 h-4" />
               Live Chat
             </Link>
-            <a 
+            <a
               href={whatsappLink}
               target="_blank"
               rel="noopener noreferrer"
@@ -128,10 +128,10 @@ export default function AccountPage() {
           <p className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
             Need Assistance?
           </p>
-          <AccountRow 
-            href={isGuest ? getLoginHref("/account/support") : "/account/support"} 
-            icon={<HelpCircle className="w-5 h-5 text-gray-600" />} 
-            label="Help & Support" 
+          <AccountRow
+            href={isGuest ? getLoginHref("/account/support") : "/account/support"}
+            icon={<HelpCircle className="w-5 h-5 text-gray-600" />}
+            label="Help & Support"
           />
         </div>
 
@@ -148,6 +148,7 @@ export default function AccountPage() {
           <AccountRow href={isGuest ? getLoginHref("/account/vouchers") : "/account/vouchers"} icon={<Ticket className="w-5 h-5 text-gray-600" />} label="Vouchers" />
           <AccountRow href={isGuest ? getLoginHref("/account/wishlist") : "/account/wishlist"} icon={<Heart className="w-5 h-5 text-gray-600" />} label="Wishlist" />
           <AccountRow href={isGuest ? getLoginHref("/account/following") : "/account/following"} icon={<Store className="w-5 h-5 text-gray-600" />} label="Follow Seller" />
+          <AccountRow href={isGuest ? getLoginHref('/account/seller-application') : '/account/seller-application'} icon={<FileText className="w-5 h-5 text-gray-600" />} label="Seller Application" />
           <AccountRow href="/account/recently-viewed" icon={<History className="w-5 h-5 text-gray-600" />} label="Recently Viewed" />
         </div>
 
@@ -190,8 +191,8 @@ export default function AccountPage() {
 // ==========================================
 function AccountRow({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   return (
-    <Link 
-      href={href} 
+    <Link
+      href={href}
       className="flex items-center justify-between px-5 h-14 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
     >
       <div className="flex items-center gap-4">

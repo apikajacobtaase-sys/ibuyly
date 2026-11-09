@@ -111,14 +111,25 @@ export default function SellerFinancesPage() {
         return;
       }
 
+      if (network.trim().length < 2) {
+        alert(
+          paymentMethod === "MOBILE_MONEY"
+            ? "Please enter your mobile money network"
+            : "Please enter your bank name"
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       const payload = {
         amount,
         paymentMethod,
         paymentDetails: {
           accountName: accountName.trim(),
           accountNumber: accountNumber.trim(),
-          bankName: bankName.trim() || undefined,
-          network: network.trim() || undefined,
+          ...(paymentMethod === "BANK_TRANSFER"
+            ? { bankName: network.trim() }
+            : { network: network.trim() }),
         },
       };
 

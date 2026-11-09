@@ -156,20 +156,29 @@ export default function AdminProductDetailPage() {
               <Store className="w-5 h-5 text-indigo-600" />
               <h3 className="font-semibold text-gray-900">Seller</h3>
             </div>
-            <div className="space-y-3 text-sm">
-              <div>
-                <p className="text-xs text-gray-500">Business Name</p>
-                <p className="font-medium text-gray-900">{product.seller.businessName}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Email</p>
-                <p className="font-medium text-gray-900 break-all">{product.seller.user.email}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Verification</p>
-                <StatusBadge status={product.seller.verificationStatus} />
-              </div>
-            </div>
+            {product.seller ? (
+  <div className="space-y-3 text-sm">
+    <div>
+      <p className="text-xs text-gray-500">Business Name</p>
+      <p className="font-medium text-gray-900">{product.seller.businessName}</p>
+    </div>
+    <div>
+      <p className="text-xs text-gray-500">Email</p>
+      <p className="font-medium text-gray-900 break-all">{product.seller.user.email}</p>
+    </div>
+    <div>
+      <p className="text-xs text-gray-500">Verification</p>
+      <StatusBadge status={product.seller.verificationStatus} />
+    </div>
+  </div>
+) : (
+  <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
+    <p className="font-semibold text-indigo-900">iBUY Central Catalogue</p>
+    <p className="mt-1 text-xs text-indigo-700">
+      This product is managed centrally by iBUY and is available for sellers to list through their own offers.
+    </p>
+  </div>
+)}
           </div>
 
           {/* Moderation Panel */}

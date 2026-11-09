@@ -1,15 +1,39 @@
- // src/app/layout.tsx
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import ClientLayout from "@/components/ClientLayout"; // ✅ Import the client wrapper
+import ClientLayout from "@/components/ClientLayout";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "iBUY Marketplace",
-  description: "Ghana's premier multi-vendor e-commerce platform",
+  title: {
+    default: "iBUY Marketplace",
+    template: "%s | iBUY",
+  },
+  description: "Shop from trusted sellers across Ghana.",
+  applicationName: "iBUY",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "iBUY",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#F7931E",
 };
 
 export default function RootLayout({
@@ -19,12 +43,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-    <body className={`${inter.className} bg-white text-gray-900`}>
+      <body className={`${inter.className} bg-white text-gray-900`}>
         <Providers>
-          {/* ✅ Wrap everything in the Client Layout */}
-          <ClientLayout>
-            {children}
-          </ClientLayout>
+          <ClientLayout>{children}</ClientLayout>
         </Providers>
       </body>
     </html>

@@ -1,81 +1,80 @@
-// src/tests/security/seller-isolation.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock('@/lib/db', () => ({
+vi.mock("@/lib/db", () => ({
   db: {
-    sellerProfile: {
-      findUnique: vi.fn(),
-    },
-    product: {
+    sellerOffer: {
       findMany: vi.fn(),
-    },
-    orderItem: {
-      findMany: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
 
-vi.mock('next-auth', () => ({
-  getServerSession: vi.fn(),
+vi.mock("@/lib/seller-auth", () => ({
+  authorizeSeller: vi.fn(),
 }));
 
-import { GET as getProducts } from '@/app/api/seller/products/list/route';
-import { db } from '@/lib/db';
-import { getServerSession } from 'next-auth';
+import { GET } from "@/app/api/seller/products/route";
+import { db } from "@/lib/db";
+import { authorizeSeller } from "@/lib/seller-auth";
 
-describe('Seller Tenant Isolation', () => {
+describe("Seller Tenant Isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    vi.mocked(authorizeSeller).mockResolvedValue({
+      authorized: true,
+      userId: "seller1",
+      sellerId: "seller-profile-1",
+      isOwner: true,
+    } as any);
+
+    vi.mocked(db.sellerOffer.findMany).mockResolvedValue([] as any);
+    vi.mocked(db.sellerOffer.count).mockResolvedValue(0);
   });
 
-  it('should only return products owned by the authenticated seller', async () => {
-    vi.mocked(getServerSession).mockResolvedValue({
-      user: { id: 'seller1', role: 'SELLER_OWNER' },
-    } as any);
+  it("should only query offers belonging to the authenticated seller", async () => {
+    const request = new Request(
+      "http://localhost:3000/api/seller/products"
+    );
 
-    vi.mocked(db.sellerProfile.findUnique).mockResolvedValue({
-      id: 'seller-profile-1',
-      userId: 'seller1',
-    } as any);
+    const response = await GET(request);
 
-    vi.mocked(db.product.findMany).mockResolvedValue([
-      { id: 'p1', title: 'Seller 1 Product', sellerId: 'seller-profile-1' },
-    ] as any);
+    expect(response.status).toBe(200);
 
-    const request = new Request('http://localhost:3000/api/seller/products/list');
-    const response = await getProducts(request);
-    const data = await response.json();
+    expect(authorizeSeller).toHaveBeenCalledWith("manage_products");
 
-    // CRITICAL: Verify the WHERE clause filters by seller ID
-    expect(db.product.findMany).toHaveBeenCalledWith(
+    expect(db.sellerOffer.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          sellerId: 'seller-profile-1', // ✅ Only this seller's products
+          sellerId: "seller-profile-1",
         }),
       })
     );
+
+    expect(db.sellerOffer.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        sellerId: "seller-profile-1",
+      }),
+    });
   });
 
-  it('should reject access when user has no seller profile', async () => {
-    vi.mocked(getServerSession).mockResolvedValue({
-      user: { id: 'customer1', role: 'CUSTOMER' },
+  it("should reject users without seller access", async () => {
+    vi.mocked(authorizeSeller).mockResolvedValue({
+      authorized: false,
+      response: new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { status: 403 }
+      ),
     } as any);
 
-    vi.mocked(db.sellerProfile.findUnique).mockResolvedValue(null);
+    const request = new Request(
+      "http://localhost:3000/api/seller/products"
+    );
 
-    const request = new Request('http://localhost:3000/api/seller/products/list');
-    const response = await getProducts(request);
+    const response = await GET(request);
 
-    expect(response.status).toBe(404);
-    expect(db.product.findMany).not.toHaveBeenCalled(); // ✅ No data leaked
-  });
-
-  it('should reject unauthenticated requests', async () => {
-    vi.mocked(getServerSession).mockResolvedValue(null);
-
-    const request = new Request('http://localhost:3000/api/seller/products/list');
-    const response = await getProducts(request);
-
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(403);
+    expect(db.sellerOffer.findMany).not.toHaveBeenCalled();
+    expect(db.sellerOffer.count).not.toHaveBeenCalled();
   });
 });

@@ -1,17 +1,27 @@
 // src/app/api/auth/verify-email/route.ts
+
 import { db } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
-    const { userId, token } = await req.json();
+    const body = await req.json();
+    const { userId, token } = body;
 
-    if (!userId || !token) {
-      return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
+    if (
+      typeof userId !== "string" ||
+      !userId.trim() ||
+      typeof token !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(token)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid verification parameters" },
+        { status: 400 }
+      );
     }
 
-    // Find the latest unused token for this user
     const verificationToken = await db.emailVerificationToken.findFirst({
       where: {
         userId,
@@ -28,8 +38,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify token hash
-    const isValid = await bcrypt.compare(token, verificationToken.tokenHash);
+    const isValid = await bcrypt.compare(
+      token,
+      verificationToken.tokenHash
+    );
+
     if (!isValid) {
       return NextResponse.json(
         { error: "Invalid verification token" },
@@ -37,12 +50,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // Mark token as used and verify email
     await db.$transaction(async (tx) => {
-      await tx.emailVerificationToken.update({
-        where: { id: verificationToken.id },
-        data: { usedAt: new Date() },
+      const consumed = await tx.emailVerificationToken.updateMany({
+        where: {
+          id: verificationToken.id,
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          usedAt: new Date(),
+        },
       });
+
+      if (consumed.count !== 1) {
+        throw new Error("TOKEN_ALREADY_USED");
+      }
 
       await tx.user.update({
         where: { id: userId },
@@ -50,18 +72,33 @@ export async function POST(req: Request) {
       });
     });
 
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "EMAIL_VERIFIED",
-        resourceType: "User",
-        resourceId: userId,
-      },
+    await logAudit({
+      userId,
+      action: "EMAIL_VERIFIED",
+      resourceType: "User",
+      resourceId: userId,
     });
 
-    return NextResponse.json({ success: true, message: "Email verified successfully" });
+    return NextResponse.json({
+      success: true,
+      message: "Email verified successfully",
+    });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "TOKEN_ALREADY_USED"
+    ) {
+      return NextResponse.json(
+        { error: "This verification link has already been used or expired" },
+        { status: 400 }
+      );
+    }
+
     console.error("Email verification error:", error);
-    return NextResponse.json({ error: "Verification failed" }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "Verification failed" },
+      { status: 500 }
+    );
   }
 }

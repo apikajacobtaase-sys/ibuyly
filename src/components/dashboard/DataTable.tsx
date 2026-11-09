@@ -72,19 +72,24 @@ export default function DataTable<T>({
       </div>
 
       {/* Mobile Card View */}
-      <div className="md:hidden divide-y divide-gray-200">
+      <div className="divide-y divide-gray-200 md:hidden">
         {data.map((item) => (
           <div
             key={keyExtractor(item)}
             onClick={() => onRowClick?.(item)}
-            className={`p-4 hover:bg-gray-50 transition ${onRowClick ? "cursor-pointer" : ""}`}
+            className={`space-y-2 p-4 transition hover:bg-gray-50 ${
+              onRowClick ? "cursor-pointer" : ""
+            }`}
           >
-            {columns.slice(0, 3).map((col) => (
-              <div key={col.key} className="flex justify-between items-start py-1.5">
-                <span className="text-xs font-medium text-gray-500 uppercase">
+            {columns.map((col) => (
+              <div
+                key={col.key}
+                className="flex min-w-0 items-center justify-between gap-3"
+              >
+                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                   {col.header}
                 </span>
-                <div className="text-sm text-gray-900 text-right max-w-[60%]">
+                <div className="min-w-0 max-w-[65%] text-right text-sm text-gray-900">
                   {col.render
                     ? col.render(item)
                     : String((item as any)[col.key] ?? "")}
@@ -93,7 +98,6 @@ export default function DataTable<T>({
             ))}
           </div>
         ))}
-      </div>
-    </div>
+      </div>    </div>
   );
 }

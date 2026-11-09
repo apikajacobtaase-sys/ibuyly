@@ -27,19 +27,28 @@ export default function SellerProductsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sort, setSort] = useState("newest");
-  const { permissions } = useSellerPermissions();
+  const { permissions, requiresStoreSelection, isLoading: permissionsLoading } = useSellerPermissions();
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // ✅ State for Inline Editing
+  // ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ State for Inline Editing
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({ price: 0, stock: 0 });
 
   useEffect(() => {
     fetchProducts();
-  }, [statusFilter, sort, page]); // Removed totalPages from dependency to avoid loop
+  }, [statusFilter, sort, page, permissions, permissionsLoading, requiresStoreSelection]);
 
   const fetchProducts = async () => {
+    if (permissionsLoading) return;
+
+    if (requiresStoreSelection || !permissions) {
+      setProducts([]);
+      setTotalPages(1);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const res = await fetch(`/api/seller/products?page=${page}&limit=10&search=${search}&status=${statusFilter}&sort=${sort}`);
@@ -61,13 +70,13 @@ export default function SellerProductsPage() {
     fetchProducts();
   };
 
-  // ✅ Handle Status Change (Archive/Reactivate)
-  const handleStatusChange = async (productId: string, newStatus: string) => {
+  // ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ Handle Status Change (Archive/Reactivate)
+  const handleStatusChange = async (offerId: string, newStatus: string) => {
     try {
       const res = await fetch("/api/seller/products", { // Ensure this points to seller API
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, status: newStatus }),
+        body: JSON.stringify({ offerId, status: newStatus }),
       });
       if (res.ok) fetchProducts();
     } catch (error) {
@@ -75,30 +84,30 @@ export default function SellerProductsPage() {
     }
   };
 
-  // ✅ Handle Delete
-  const handleDelete = async (productId: string) => {
-    if (!confirm("Are you sure? This action cannot be undone.")) return;
+  // ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ Handle Delete
+  const handleDelete = async (offerId: string) => {
+    if (!confirm("Remove this offer from your inventory? The catalogue product will remain available to other sellers.")) return;
     try {
-      const res = await fetch(`/api/seller/products?id=${productId}`, { method: "DELETE" });
+      const res = await fetch(`/api/seller/products?id=${offerId}`, { method: "DELETE" });
       if (res.ok) fetchProducts();
     } catch (error) {
       alert("Failed to delete product");
     }
   };
 
-  // ✅ Handle Inline Edit Start
+  // ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ Handle Inline Edit Start
   const startEditing = (product: Product) => {
     setEditingId(product.id);
     setEditValues({ price: product.price, stock: product.stock });
   };
 
-  // ✅ Handle Inline Edit Save
-  const saveEdit = async (productId: string) => {
+  // ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ Handle Inline Edit Save
+  const saveEdit = async (offerId: string) => {
     try {
       const res = await fetch("/api/seller/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, price: editValues.price, stockQuantity: editValues.stock }),
+        body: JSON.stringify({ offerId, price: editValues.price, stockQuantity: editValues.stock }),
       });
       if (res.ok) {
         setEditingId(null);
@@ -141,7 +150,7 @@ export default function SellerProductsPage() {
             className="w-20 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-teal-500 outline-none"
           />
         ) : (
-          <span className="font-semibold">GH₵ {item.price.toFixed(2)}</span>
+          <span className="font-semibold">GHÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âµ {item.price.toFixed(2)}</span>
         )
       ),
     },
@@ -174,7 +183,7 @@ export default function SellerProductsPage() {
       className: "text-right",
       render: (item) => {
         if (!permissions?.canManageProducts) return null;
-        
+
         return (
           <div className="flex items-center justify-end gap-2">
             {editingId === item.id ? (
@@ -186,13 +195,13 @@ export default function SellerProductsPage() {
               <>
                 <button onClick={() => startEditing(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Edit Price/Stock"><Edit2 className="w-4 h-4" /></button>
                 <Link href={`/products/${item.slug}`} className="p-1.5 text-gray-600 hover:text-teal-600 hover:bg-teal-50 rounded" title="View"><Eye className="w-4 h-4" /></Link>
-                
+
                 {item.status === "ACTIVE" ? (
-                  <button onClick={() => handleStatusChange(item.id, "ARCHIVED")} className="p-1.5 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded" title="Archive"><Archive className="w-4 h-4" /></button>
+                  <button onClick={() => handleStatusChange(item.id, "PAUSED")} className="p-1.5 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded" title="Pause offer"><Archive className="w-4 h-4" /></button>
                 ) : (
-                  <button onClick={() => handleStatusChange(item.id, "ACTIVE")} className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded" title="Reactivate"><RotateCcw className="w-4 h-4" /></button>
+                  <button onClick={() => handleStatusChange(item.id, "ACTIVE")} disabled={item.stock <= 0} className="p-1.5 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded disabled:opacity-40 disabled:cursor-not-allowed" title={item.stock <= 0 ? "Add stock before reactivating" : "Reactivate offer"}><RotateCcw className="w-4 h-4" /></button>
                 )}
-                
+
                 <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 className="w-4 h-4" /></button>
               </>
             )}
@@ -218,11 +227,22 @@ export default function SellerProductsPage() {
             className="inline-flex items-center gap-2 bg-teal-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-teal-700 transition self-start shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            Add Product
+            Add from Catalogue
           </Link>
         )}
       </div>
 
+      {requiresStoreSelection && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+        >
+          <p className="font-semibold">Select a seller store</p>
+          <p className="mt-1">
+            Choose the store you want to manage using the store selector above.
+          </p>
+        </div>
+      )}
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
         <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
@@ -243,8 +263,8 @@ export default function SellerProductsPage() {
           >
             <option value="">All Statuses</option>
             <option value="ACTIVE">Active</option>
-            <option value="DRAFT">Draft</option>
-            <option value="ARCHIVED">Archived</option>
+            <option value="PAUSED">Paused</option>
+            <option value="OUT_OF_STOCK">Out of Stock</option>
           </select>
           <button
             type="submit"
@@ -273,7 +293,7 @@ export default function SellerProductsPage() {
           columns={columns}
           data={products}
           keyExtractor={(item) => item.id}
-          emptyMessage="No products found. Create your first product!"
+          emptyMessage="No offers found. Add a product from the catalogue to start selling."
         />
       )}
 

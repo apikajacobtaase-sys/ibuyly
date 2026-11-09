@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { 
-  Package, Clock, Truck, CheckCircle, XCircle, 
-  Loader2, AlertCircle, ChevronRight, Filter
+import {
+  Package, Clock, Truck, CheckCircle, XCircle,
+  Loader2, AlertCircle, ChevronRight, Filter, Phone, MapPin
 } from "lucide-react";
 
 interface OrderItem {
@@ -28,8 +28,7 @@ interface Order {
   customerEmail: string;
   customerPhone: string;
   shippingAddress: string;
-  totalAmount: number;
-  deliveryFee: number;
+  sellerSubtotal: number;
   paymentMethod: string | null;
   items: OrderItem[];
 }
@@ -49,6 +48,12 @@ export default function SellerOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("ALL");
   const [total, setTotal] = useState(0);
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+  const [confirmationFeedback, setConfirmationFeedback] = useState<{
+    orderId: string;
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -64,10 +69,10 @@ export default function SellerOrdersPage() {
     try {
       const params = new URLSearchParams({ page: "1", limit: "50" });
       if (activeTab !== "ALL") params.set("itemStatus", activeTab);
-      
+
       const res = await fetch(`/api/seller/orders?${params}`);
       const data = await res.json();
-      
+
       if (res.ok) {
         setOrders(data.orders);
         setTotal(data.total);
@@ -81,6 +86,55 @@ export default function SellerOrdersPage() {
     }
   };
 
+  const handleQuickConfirm = async (order: Order) => {
+    const pendingItems = order.items.filter(
+      (item) => item.status === "PENDING"
+    );
+
+    if (pendingItems.length !== 1) return;
+
+    setConfirmingOrderId(order.id);
+    setConfirmationFeedback(null);
+
+    try {
+      const response = await fetch("/api/seller/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: pendingItems[0].id,
+          status: "CONFIRMED",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setConfirmationFeedback({
+          orderId: order.id,
+          type: "error",
+          message: data.error || "Could not confirm this order. Please try again.",
+        });
+        return;
+      }
+
+      setConfirmationFeedback({
+        orderId: order.id,
+        type: "success",
+        message: "Order confirmed successfully.",
+      });
+
+      await fetchOrders();
+    } catch (error) {
+      console.error("Quick confirmation failed:", error);
+      setConfirmationFeedback({
+        orderId: order.id,
+        type: "error",
+        message: "Network error. Please try again.",
+      });
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  };
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       PENDING: "bg-amber-100 text-amber-800 border-amber-200",
@@ -104,10 +158,10 @@ export default function SellerOrdersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Package className="w-6 h-6" />
           Orders
           {total > 0 && (
@@ -122,14 +176,14 @@ export default function SellerOrdersPage() {
       </div>
 
       {/* Status Filter Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-2 -mx-4 px-4 scrollbar-hide snap-x snap-mandatory">
         {STATUS_TABS.map((tab) => {
           const Icon = tab.icon;
           return (
             <button
               key={tab.value}
               onClick={() => setActiveTab(tab.value)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+              className={`flex min-h-11 shrink-0 snap-start items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
                 activeTab === tab.value
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
@@ -160,19 +214,39 @@ export default function SellerOrdersPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 sm:space-y-4">
           {orders.map((order) => {
             const primaryStatus = getPrimaryItemStatus(order.items);
             const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
-            
+
+            const statusCounts = order.items.reduce(
+              (counts, item) => {
+                const itemStatus = item.status as keyof typeof counts;
+
+                if (itemStatus in counts) {
+                  counts[itemStatus] += item.quantity;
+                }
+
+                return counts;
+              },
+              {
+                PENDING: 0,
+                CONFIRMED: 0,
+                PROCESSING: 0,
+                SHIPPED: 0,
+                DELIVERED: 0,
+                CANCELLED: 0,
+              }
+            );
+
             return (
-              <Link
-                key={order.id}
+              <div key={order.id} className="min-w-0">
+                <Link
                 href={`/seller/orders/${order.id}`}
-                className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-md transition-all"
+                className={`block min-w-0 rounded-xl border p-3.5 sm:p-4 transition-all hover:shadow-md ${statusCounts.PENDING > 0 ? "border-amber-300 bg-amber-50/40 active:bg-amber-50" : "border-gray-200 bg-white active:bg-gray-50 hover:border-indigo-300"}`}
               >
                 {/* Top Row: Order ID + Status */}
-                <div className="flex items-start justify-between mb-3">
+                <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
                     <p className="text-xs text-gray-500">Order</p>
                     <p className="text-sm font-semibold text-gray-900 font-mono">
@@ -184,9 +258,32 @@ export default function SellerOrdersPage() {
                   </span>
                 </div>
 
+                {/* Fulfilment Breakdown */}
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["PENDING", "Pending"],
+                      ["CONFIRMED", "Confirmed"],
+                      ["PROCESSING", "Processing"],
+                      ["SHIPPED", "Shipped"],
+                      ["DELIVERED", "Delivered"],
+                      ["CANCELLED", "Cancelled"],
+                    ] as const
+                  ).map(([key, label]) =>
+                    statusCounts[key] > 0 ? (
+                      <span
+                        key={key}
+                        className={`rounded-full border px-2 py-1 text-[11px] font-medium ${getStatusBadge(key)}`}
+                      >
+                        {label}: {statusCounts[key]}
+                      </span>
+                    ) : null
+                  )}
+                </div>
+
                 {/* Customer Info */}
-                <div className="mb-3 pb-3 border-b border-gray-100">
-                  <p className="text-sm font-medium text-gray-900">{order.customerName}</p>
+                <div className="mb-3 pb-3 border-b border-gray-100 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{order.customerName}</p>
                   <p className="text-xs text-gray-500">
                     {new Date(order.createdAt).toLocaleDateString("en-US", {
                       month: "short",
@@ -198,8 +295,20 @@ export default function SellerOrdersPage() {
                   </p>
                 </div>
 
+                  {order.customerPhone && (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                      <Phone className="h-3.5 w-3.5 shrink-0" />
+                      <a href={`tel:${order.customerPhone}`} className="min-h-8 inline-flex items-center underline underline-offset-2 hover:text-indigo-700" onClick={(event) => event.stopPropagation()}>{order.customerPhone}</a>
+                    </p>
+                  )}
+                  {order.shippingAddress && order.shippingAddress !== "No address provided" && (
+                    <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-600">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                      <span className="line-clamp-2">{order.shippingAddress}</span>
+                    </p>
+                  )}
                 {/* Items Preview */}
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex min-w-0 items-center gap-3 mb-3">
                   <div className="flex -space-x-2">
                     {order.items.slice(0, 3).map((item, idx) => (
                       item.imageUrl ? (
@@ -207,12 +316,12 @@ export default function SellerOrdersPage() {
                           key={idx}
                           src={item.imageUrl}
                           alt={item.title}
-                          className="w-10 h-10 rounded-lg border-2 border-white object-cover"
+                          className="w-11 h-11 shrink-0 rounded-lg border-2 border-white object-cover"
                         />
                       ) : (
                         <div
                           key={idx}
-                          className="w-10 h-10 rounded-lg border-2 border-white bg-gray-100 flex items-center justify-center"
+                          className="w-11 h-11 shrink-0 rounded-lg border-2 border-white bg-gray-100 flex items-center justify-center"
                         >
                           <Package className="w-4 h-4 text-gray-400" />
                         </div>
@@ -229,16 +338,50 @@ export default function SellerOrdersPage() {
                 </div>
 
                 {/* Bottom Row: Total + Arrow */}
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
                   <div>
-                    <p className="text-xs text-gray-500">Total</p>
-                    <p className="text-base font-bold text-gray-900">
-                      GH₵ {order.totalAmount.toFixed(2)}
+                    <p className="text-xs text-gray-500">Your Items Subtotal</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      GHâ‚µ {order.sellerSubtotal.toFixed(2)}
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400" />
                 </div>
               </Link>
+
+              {order.items.filter((item) => item.status === "PENDING").length === 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleQuickConfirm(order)}
+                  disabled={confirmingOrderId === order.id}
+                  className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {confirmingOrderId === order.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Confirming...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4" />
+                      Confirm Pending Item
+                    </>
+                  )}
+                </button>
+              )}
+
+              {confirmationFeedback && confirmationFeedback.orderId === order.id && (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className={confirmationFeedback.type === "success"
+                    ? "mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+                    : "mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700"}
+                >
+                  {confirmationFeedback.message}
+                </p>
+              )}
+              </div>
             );
           })}
         </div>

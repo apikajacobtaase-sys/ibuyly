@@ -193,14 +193,14 @@ function LoginFormContent() {
               className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-colors bg-gray-50 focus:bg-white text-gray-900"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             />
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+            className="w-full bg-ibuy-orange text-white py-3 px-4 rounded-lg font-semibold hover:bg-ibuy-orange-hover transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
           >
             {isLoading ? (
               <>
@@ -220,12 +220,12 @@ function LoginFormContent() {
   href={`/register?callbackUrl=${encodeURIComponent(
     searchParams.get("callbackUrl") || "/account"
   )}`}
-></Link>
+             className="text-ibuy-orange font-semibold hover:underline">Create account</Link>
           </p>
 
           <Link
             href="/forgot-password"
-            className="text-xs text-gray-400 hover:text-gray-600 block"
+            className="text-sm text-ibuy-orange font-medium hover:underline block"
           >
             Forgot Password?
           </Link>

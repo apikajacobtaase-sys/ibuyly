@@ -1,124 +1,117 @@
 // src/app/api/seller/reviews/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
+import { authorizeSeller } from "@/lib/seller-auth";
 import { z } from "zod";
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("manage_reviews");
+
+    if (!access.authorized) {
+      return access.response;
     }
 
-    // Get seller profile
-    let sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!sellerProfile) {
-      sellerProfile = await db.sellerProfile.create({
-        data: {
-          userId: session.user.id,
-          businessName: session.user.name || "My Store",
-          isActive: true,
-        },
-      });
-    }
-
-    // Fetch reviews
     const reviews = await db.sellerReview.findMany({
-      where: { sellerId: sellerProfile.id },
+      where: { sellerId: access.sellerId },
       include: {
         buyer: {
-          select: { firstName: true, lastName: true, email: true }
+          select: {
+            firstName: true,
+            lastName: true,
+          },
         },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    // Calculate average rating
     const totalReviews = reviews.length;
-    const averageRating = totalReviews > 0
-      ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
-      : 0;
 
-    // Rating distribution
+    const averageRating =
+      totalReviews > 0
+        ? reviews.reduce((sum, review) => sum + review.rating, 0) /
+          totalReviews
+        : 0;
+
     const ratingDistribution = {
-      5: reviews.filter((r) => r.rating === 5).length,
-      4: reviews.filter((r) => r.rating === 4).length,
-      3: reviews.filter((r) => r.rating === 3).length,
-      2: reviews.filter((r) => r.rating === 2).length,
-      1: reviews.filter((r) => r.rating === 1).length,
+      5: reviews.filter((review) => review.rating === 5).length,
+      4: reviews.filter((review) => review.rating === 4).length,
+      3: reviews.filter((review) => review.rating === 3).length,
+      2: reviews.filter((review) => review.rating === 2).length,
+      1: reviews.filter((review) => review.rating === 1).length,
     };
 
     return NextResponse.json({
-      reviews: reviews.map((r) => ({
-        id: r.id,
-        rating: r.rating,
-        comment: r.comment,
-        isVerified: r.isVerified,
-        sellerResponse: r.sellerResponse,
-        respondedAt: r.respondedAt,
-        createdAt: r.createdAt,
+      reviews: reviews.map((review) => ({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        isVerified: review.isVerified,
+        sellerResponse: review.sellerResponse,
+        respondedAt: review.respondedAt,
+        createdAt: review.createdAt,
         buyerName:
-  [r.buyer.firstName, r.buyer.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || "Anonymous",
+          [review.buyer.firstName, review.buyer.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim() || "Anonymous",
       })),
       totalReviews,
       averageRating: Math.round(averageRating * 10) / 10,
       ratingDistribution,
     });
   } catch (error) {
-    console.error("Fetch reviews error:", error);
-    return NextResponse.json({ error: "Failed to fetch reviews" }, { status: 500 });
+    console.error("Fetch seller reviews error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch reviews" },
+      { status: 500 }
+    );
   }
 }
 
 const RespondSchema = z.object({
   reviewId: z.string().cuid(),
-  response: z.string().min(1).max(500),
+  response: z.string().trim().min(1).max(500),
 });
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("manage_reviews");
+
+    if (!access.authorized) {
+      return access.response;
     }
 
     const body = await req.json();
     const validation = RespondSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid request" },
+        { status: 400 }
+      );
     }
 
     const { reviewId, response } = validation.data;
 
-    // Verify the review belongs to this seller
-    const sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!sellerProfile) {
-      return NextResponse.json({ error: "Seller profile not found" }, { status: 404 });
-    }
-
-    const review = await db.sellerReview.findUnique({
-      where: { id: reviewId, sellerId: sellerProfile.id },
+    const review = await db.sellerReview.findFirst({
+      where: {
+        id: reviewId,
+        sellerId: access.sellerId,
+      },
+      select: { id: true },
     });
 
     if (!review) {
-      return NextResponse.json({ error: "Review not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Review not found" },
+        { status: 404 }
+      );
     }
 
-    // Update review with seller response
     await db.sellerReview.update({
-      where: { id: reviewId },
+      where: { id: review.id },
       data: {
         sellerResponse: response,
         respondedAt: new Date(),
@@ -127,7 +120,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Respond to review error:", error);
-    return NextResponse.json({ error: "Failed to respond to review" }, { status: 500 });
+    console.error("Respond to seller review error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to respond to review" },
+      { status: 500 }
+    );
   }
 }

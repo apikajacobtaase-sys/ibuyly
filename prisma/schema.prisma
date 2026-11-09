@@ -41,6 +41,7 @@ model User {
   orders                  Order[]
   reviews                 Review[]
   sellerApplications      SellerApplication[]
+  sellerInvitationsSent   SellerInvitation[]        @relation("SellerInvitationInviter")
   memberships             SellerMembership[]
   sellerProfile           SellerProfile?
   goals                   ShoppingGoal[]
@@ -628,7 +629,9 @@ model SellerApplication {
   description     String?
   documents       Json?
   rejectionReason String?        @map("rejection_reason")
-  adminNotes      String?        @map("admin_notes")
+  adminNotes          String? @map("admin_notes")
+  requestedQuestions Json?   @map("requested_questions")
+  submittedAnswers   Json?   @map("submitted_answers")
   reviewedBy      String?        @map("reviewed_by")
   reviewedAt      DateTime?      @map("reviewed_at")
   sellerProfileId String?        @unique @map("seller_profile_id")
@@ -636,11 +639,31 @@ model SellerApplication {
   updatedAt       DateTime       @updatedAt @map("updated_at")
   status          String         @default("PENDING")
   sellerProfile   SellerProfile? @relation(fields: [sellerProfileId], references: [id])
+  invitation      SellerInvitation?
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@map("seller_applications")
+}
+
+model SellerInvitation {
+  id            String    @id @default(cuid())
+  email         String
+  tokenHash     String    @unique @map("token_hash")
+  invitedBy     String    @map("invited_by")
+  applicationId String?   @unique @map("application_id")
+  expiresAt     DateTime  @map("expires_at")
+  redeemedAt    DateTime? @map("redeemed_at")
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  inviter      User              @relation("SellerInvitationInviter", fields: [invitedBy], references: [id])
+  application  SellerApplication? @relation(fields: [applicationId], references: [id])
+
+  @@index([email])
+  @@index([invitedBy])
+  @@map("seller_invitations")
 }
 
 model AuditLog {

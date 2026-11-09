@@ -1,18 +1,7 @@
-﻿ // src/app/api/seller/products/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { authorizeSeller } from "@/lib/seller-auth";
 import { Prisma } from "@prisma/client";
-
-function createSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
 
 function isValidPrice(value: unknown): value is number | string {
   if (typeof value !== "number" && typeof value !== "string") {
@@ -23,340 +12,358 @@ function isValidPrice(value: unknown): value is number | string {
     return false;
   }
 
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) && parsed >= 0;
+  return Number.isFinite(Number(value)) && Number(value) > 0;
 }
 
+function isValidStock(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+  );
+}
+
+async function readBody(req: Request): Promise<unknown | null> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
+
+// GET: List this seller's catalogue offers.
 export async function GET(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await authorizeSeller("manage_products");
 
-    // 1. Find the seller profile
-    const seller = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
+    if (!auth.authorized) return auth.response;
 
-    if (!seller) {
-      return NextResponse.json({ products: [], pagination: { totalPages: 0, total: 0 } });
-    }
-
-    // 2. Parse Query Params
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const search = searchParams.get("search") || "";
-    const status = searchParams.get("status") || "";
-    
-    const skip = (page - 1) * limit;
 
-    // 3. Build Where Clause
-    // We look for products where the seller has an OFFER.
-    const where: any = {
-      variants: {
-        some: {
-          sellerOffers: {
-            some: {
-              sellerId: seller.id,
-            }
+    const page = Math.max(1, Number(searchParams.get("page")) || 1);
+    const limit = Math.min(
+      50,
+      Math.max(1, Number(searchParams.get("limit")) || 10)
+    );
+
+    const search = searchParams.get("search")?.trim() || "";
+    const status = searchParams.get("status") || "";
+    const sort = searchParams.get("sort") || "newest";
+
+    const where: Prisma.SellerOfferWhereInput = {
+      sellerId: auth.sellerId,
+      ...(status &&
+      ["ACTIVE", "PAUSED", "OUT_OF_STOCK"].includes(status)
+        ? { status: status as "ACTIVE" | "PAUSED" | "OUT_OF_STOCK" }
+        : {}),
+      ...(search
+        ? {
+            variant: {
+              product: {
+                title: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
           }
-        }
-      },
-      ...(search && { title: { contains: search, mode: 'insensitive' } }),
+        : {}),
     };
 
-    // 4. Fetch Products
-    const [products, total] = await Promise.all([
-      db.product.findMany({
+    const orderBy: Prisma.SellerOfferOrderByWithRelationInput =
+      sort === "oldest"
+        ? { createdAt: "asc" }
+        : sort === "price-low"
+          ? { price: "asc" }
+          : sort === "price-high"
+            ? { price: "desc" }
+            : { createdAt: "desc" };
+
+    const [offers, total] = await Promise.all([
+      db.sellerOffer.findMany({
         where,
-        skip,
+        skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
-          images: { where: { isPrimary: true }, take: 1 },
-          category: { select: { name: true } },
-          variants: {
+          variant: {
             include: {
-              sellerOffers: {
-                where: { sellerId: seller.id },
-                take: 1,
-              }
-            }
-          }
+              product: {
+                include: {
+                  category: { select: { name: true } },
+                  images: {
+                    where: { isPrimary: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
         },
       }),
-      db.product.count({ where })
+      db.sellerOffer.count({ where }),
     ]);
 
-    // 5. Format Data for Frontend
-    const formattedProducts = products.map(p => {
-      const variant = p.variants[0];
-      const offer = variant?.sellerOffers[0];
-      
+    const products = offers.map((offer) => {
+      const product = offer.variant.product;
+
       return {
-        id: p.id,
-        title: p.title,
-        slug: p.slug,
-        status: p.status,
-        imageUrl: p.images[0]?.url || null,
-        categoryName: p.category?.name || "Uncategorized",
+        id: offer.id,
+        offerId: offer.id,
+        productId: product.id,
+        variantId: offer.variantId,
+        title: product.title,
+        slug: product.slug,
+        status: offer.status,
+        price: Number(offer.price),
+        stock: offer.stockQuantity,
+        imageUrl: product.images[0]?.url || null,
+        categoryName: product.category?.name || "Uncategorized",
         reviewCount: 0,
-        createdAt: p.createdAt.toISOString(),
-        price: offer ? parseFloat(offer.price.toString()) : 0,
-        stock: offer?.stockQuantity || 0,
+        createdAt: offer.createdAt.toISOString(),
+        variantSku: offer.variant.sku,
+        variantAttributes: offer.variant.attributes,
+        condition: offer.condition,
+        sellerSku: offer.sellerSku,
       };
     });
 
     return NextResponse.json({
-      products: formattedProducts,
+      products,
       pagination: {
         totalPages: Math.ceil(total / limit),
         total,
-      }
-    });
-
-  } catch (error) {
-    console.error("GET Seller Products Error:", error);
-    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
-  }
-}
-
-export async function DELETE(req: Request) {
-  try {
-    // 1. Authenticate the seller
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized. Please log in." },
-        { status: 401 }
-      );
-    }
-
-    // 2. Find the seller profile
-    const seller = await db.sellerProfile.findUnique({
-      where: {
-        userId: session.user.id,
+        page,
       },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!seller) {
-      return NextResponse.json(
-        { error: "Seller profile not found." },
-        { status: 403 }
-      );
-    }
-
-    // 3. Get the product ID
-    const { searchParams } = new URL(req.url);
-    const productId = searchParams.get("id");
-
-    if (!productId) {
-      return NextResponse.json(
-        { error: "Product ID is required." },
-        { status: 400 }
-      );
-    }
-
-    // 4. Find offers belonging to this seller for this product
-    const sellerOffers = await db.sellerOffer.findMany({
-      where: {
-        sellerId: seller.id,
-        variant: {
-          productId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (sellerOffers.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "This product is not available in your inventory or has already been removed.",
-        },
-        { status: 404 }
-      );
-    }
-
-    // 5. Remove only this seller's offers
-    const result = await db.sellerOffer.deleteMany({
-      where: {
-        sellerId: seller.id,
-        variant: {
-          productId,
-        },
-      },
-    });
-
-    if (result.count === 0) {
-      return NextResponse.json(
-        { error: "No seller offers were deleted." },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Product removed from your inventory successfully.",
-      deletedOffers: result.count,
-      productId,
     });
   } catch (error) {
-    console.error("DELETE Seller Product Error:", error);
+    console.error("GET Seller Offers Error:", error);
 
     return NextResponse.json(
-      { error: "Failed to remove product from your inventory." },
+      { error: "Failed to fetch your inventory." },
       { status: 500 }
     );
   }
 }
 
-export async function PUT(req: Request) {
+// POST: Create an offer for an existing catalogue variant.
+export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const body = await readBody(req);
 
-    const seller = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-    });
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 }
+      );
+    }
 
-    if (!seller) return NextResponse.json({ error: "Seller profile not found" }, { status: 403 });
+    const {
+      variantId,
+      price,
+      stockQuantity,
+      sellerSku,
+      condition,
+      status,
+    } = body as Record<string, unknown>;
 
-    const body = await req.json();
-    const { productId, price, stockQuantity } = body;
+    if (typeof variantId !== "string" || !variantId.trim()) {
+      return NextResponse.json(
+        { error: "Select a valid catalogue variant." },
+        { status: 400 }
+      );
+    }
 
-    // Update the offer price and stock
-    await db.sellerOffer.updateMany({
+    if (!isValidPrice(price)) {
+      return NextResponse.json(
+        { error: "Enter a valid selling price greater than zero." },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidStock(stockQuantity)) {
+      return NextResponse.json(
+        { error: "Stock must be a non-negative integer." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      sellerSku !== undefined &&
+      sellerSku !== null &&
+      (typeof sellerSku !== "string" || sellerSku.trim().length > 100)
+    ) {
+      return NextResponse.json(
+        { error: "Enter a valid seller SKU." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      condition !== undefined &&
+      (typeof condition !== "string" || condition.trim().length > 50)
+    ) {
+      return NextResponse.json(
+        { error: "Enter a valid product condition." },
+        { status: 400 }
+      );
+    }
+
+    if (status !== undefined && status !== "ACTIVE" && status !== "PAUSED") {
+      return NextResponse.json(
+        { error: "Invalid offer status." },
+        { status: 400 }
+      );
+    }
+
+    const auth = await authorizeSeller("manage_products");
+
+    if (!auth.authorized) return auth.response;
+
+    const inventoryAuth = await authorizeSeller(
+      "manage_inventory",
+      auth.sellerId
+    );
+
+    if (!inventoryAuth.authorized) return inventoryAuth.response;
+
+    const variant = await db.productVariant.findFirst({
       where: {
-        sellerId: seller.id,
-        variant: { productId: productId }
+        id: variantId,
+        isActive: true,
+        product: {
+          status: "ACTIVE",
+        },
       },
-      data: {
-        price: price ? String(price) : undefined,
-        stockQuantity: stockQuantity !== undefined ? stockQuantity : undefined,
-      }
+      select: {
+        id: true,
+        product: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
     });
 
-    return NextResponse.json({ success: true });
+    if (!variant) {
+      return NextResponse.json(
+        { error: "This catalogue variant is unavailable." },
+        { status: 404 }
+      );
+    }
+
+    const existingOffer = await db.sellerOffer.findUnique({
+      where: {
+        sellerId_variantId: {
+          sellerId: auth.sellerId,
+          variantId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existingOffer) {
+      return NextResponse.json(
+        { error: "You have already listed this variant." },
+        { status: 409 }
+      );
+    }
+
+    const offerStatus =
+      stockQuantity === 0
+        ? "OUT_OF_STOCK"
+        : status === "PAUSED"
+          ? "PAUSED"
+          : "ACTIVE";
+
+    const offer = await db.sellerOffer.create({
+      data: {
+        sellerId: auth.sellerId,
+        variantId,
+        price: new Prisma.Decimal(String(price)),
+        stockQuantity,
+        sellerSku:
+          typeof sellerSku === "string" && sellerSku.trim()
+            ? sellerSku.trim()
+            : null,
+        condition:
+          typeof condition === "string" && condition.trim()
+            ? condition.trim()
+            : "NEW",
+        status: offerStatus,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Your offer has been added successfully.",
+        offer: {
+          id: offer.id,
+          offerId: offer.id,
+          productId: variant.product.id,
+          variantId: offer.variantId,
+          title: variant.product.title,
+          price: Number(offer.price),
+          stock: offer.stockQuantity,
+          status: offer.status,
+        },
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error("PUT Error:", error);
-    return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
+    console.error("POST Seller Offer Error:", error);
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "This variant or seller SKU is already in use." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to add this catalogue item to your inventory." },
+      { status: 500 }
+    );
   }
 }
 
-
-export async function POST(req: Request) {
+// PUT: Update price and/or stock on one seller offer.
+export async function PUT(req: Request) {
   try {
-    // 1. Authenticate the user
-    const session = await getServerSession(authOptions);
+    const body = await readBody(req);
 
-    if (!session?.user?.id) {
+    if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { error: "Unauthorized. Please log in." },
-        { status: 401 }
-      );
-    }
-
-    // 2. Find the seller profile
-    const seller = await db.sellerProfile.findUnique({
-      where: {
-        userId: session.user.id,
-      },
-    });
-
-    if (!seller) {
-      return NextResponse.json(
-        {
-          error:
-            "You need a seller profile before creating products.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // 3. Parse the request body
-    const body = await req.json();
-
-    const {
-      title,
-      description,
-      categoryId,
-      price,
-      compareAtPrice,
-      costPrice,
-      sku,
-      stock,
-      status,
-      imageUrls,
-      attributes,
-    } = body;
-
-    // 4. Validate required fields
-    if (
-      typeof title !== "string" ||
-      !title.trim() ||
-      typeof description !== "string" ||
-      !description.trim() ||
-      typeof categoryId !== "string" ||
-      !categoryId.trim() ||
-      typeof sku !== "string" ||
-      !sku.trim()
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Title, description, category, and SKU are required.",
-        },
+        { error: "Invalid request body." },
         { status: 400 }
       );
     }
 
-    if (!isValidPrice(price) || Number(price) <= 0) {
+    const { offerId, price, stockQuantity } =
+      body as Record<string, unknown>;
+
+    if (typeof offerId !== "string" || !offerId.trim()) {
       return NextResponse.json(
-        { error: "Enter a valid price greater than zero." },
+        { error: "Offer ID is required." },
+        { status: 400 }
+      );
+    }
+
+    if (price !== undefined && !isValidPrice(price)) {
+      return NextResponse.json(
+        { error: "Enter a valid selling price greater than zero." },
         { status: 400 }
       );
     }
 
     if (
-      compareAtPrice !== undefined &&
-      compareAtPrice !== null &&
-      compareAtPrice !== "" &&
-      !isValidPrice(compareAtPrice)
-    ) {
-      return NextResponse.json(
-        { error: "Enter a valid comparison price." },
-        { status: 400 }
-      );
-    }
-
-    if (
-      costPrice !== undefined &&
-      costPrice !== null &&
-      costPrice !== "" &&
-      !isValidPrice(costPrice)
-    ) {
-      return NextResponse.json(
-        { error: "Enter a valid cost price." },
-        { status: 400 }
-      );
-    }
-
-    const parsedStock = Number(stock);
-
-    if (
-      stock === undefined ||
-      stock === null ||
-      stock === "" ||
-      !Number.isInteger(parsedStock) ||
-      parsedStock < 0
+      stockQuantity !== undefined &&
+      !isValidStock(stockQuantity)
     ) {
       return NextResponse.json(
         { error: "Stock must be a non-negative integer." },
@@ -364,221 +371,207 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
+    if (price === undefined && stockQuantity === undefined) {
       return NextResponse.json(
-        { error: "Upload at least one product image." },
+        { error: "No changes were provided." },
         { status: 400 }
       );
     }
 
-    const validImageUrls = imageUrls.filter(
-      (url: unknown): url is string =>
-        typeof url === "string" &&
-        url.trim().length > 0 &&
-        /^https?:\/\//i.test(url)
-    );
+    // Price and stock are independently permission-controlled.
+    const permission = price !== undefined
+      ? "manage_products"
+      : "manage_inventory";
 
-    if (validImageUrls.length === 0) {
-      return NextResponse.json(
-        { error: "No valid uploaded image URLs were provided." },
-        { status: 400 }
+    const auth = await authorizeSeller(permission);
+
+    if (!auth.authorized) return auth.response;
+
+    if (price !== undefined && stockQuantity !== undefined) {
+      const inventoryAuth = await authorizeSeller(
+        "manage_inventory",
+        auth.sellerId
       );
+
+      if (!inventoryAuth.authorized) return inventoryAuth.response;
     }
 
-    // 5. Validate product status
-    const productStatus =
-      status === "ACTIVE" ? "ACTIVE" : "DRAFT";
-
-    // 6. Verify the category exists
-    const category = await db.category.findUnique({
+    const existingOffer = await db.sellerOffer.findFirst({
       where: {
-        id: categoryId,
-      },
-      select: {
-        id: true,
+        id: offerId,
+        sellerId: auth.sellerId,
       },
     });
 
-    if (!category) {
+    if (!existingOffer) {
       return NextResponse.json(
-        { error: "The selected category does not exist." },
-        { status: 400 }
+        { error: "Offer not found in your inventory." },
+        { status: 404 }
       );
     }
 
-    // 7. Check the SKU before creating anything
-    const normalizedSku = sku.trim();
+    let nextStatus = existingOffer.status;
 
-    const existingVariant = await db.productVariant.findUnique({
-      where: {
-        sku: normalizedSku,
-      },
-      select: {
-        id: true,
+    if (stockQuantity !== undefined) {
+      if (stockQuantity === 0) {
+        nextStatus = "OUT_OF_STOCK";
+      } else if (existingOffer.status === "OUT_OF_STOCK") {
+        nextStatus = "ACTIVE";
+      }
+    }
+
+    const offer = await db.sellerOffer.update({
+      where: { id: existingOffer.id },
+      data: {
+        ...(price !== undefined
+          ? { price: new Prisma.Decimal(String(price)) }
+          : {}),
+        ...(stockQuantity !== undefined ? { stockQuantity } : {}),
+        ...(stockQuantity !== undefined ? { status: nextStatus } : {}),
       },
     });
 
-    if (existingVariant) {
-      return NextResponse.json(
-        {
-          error:
-            "This SKU is already in use. Please enter a unique SKU.",
-        },
-        { status: 409 }
-      );
-    }
-
-    // 8. Generate a unique slug
-    const baseSlug = createSlug(title);
-
-    if (!baseSlug) {
-      return NextResponse.json(
-        { error: "Please enter a valid product title." },
-        { status: 400 }
-      );
-    }
-
-    const slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
-
-    // 9. Prepare optional JSON attributes
-    const productAttributes =
-      attributes &&
-      typeof attributes === "object" &&
-      !Array.isArray(attributes)
-        ? attributes
-        : undefined;
-
-    // 10. Create everything in one transaction
-    const createdProduct = await db.$transaction(async (tx) => {
-      const product = await tx.product.create({
-        data: {
-          title: title.trim(),
-          description: description.trim(),
-          slug,
-          categoryId,
-          sellerId: seller.id,
-          status: productStatus,
-          ...(productAttributes
-            ? {
-                attributes:
-                  productAttributes as Prisma.InputJsonValue,
-              }
-            : {}),
-        },
-      });
-
-      const variant = await tx.productVariant.create({
-        data: {
-          productId: product.id,
-          sku: normalizedSku,
-          price: new Prisma.Decimal(String(price)),
-          compareAtPrice:
-            compareAtPrice !== undefined &&
-            compareAtPrice !== null &&
-            compareAtPrice !== ""
-              ? new Prisma.Decimal(String(compareAtPrice))
-              : null,
-          costPrice:
-            costPrice !== undefined &&
-            costPrice !== null &&
-            costPrice !== ""
-              ? new Prisma.Decimal(String(costPrice))
-              : null,
-          stockQuantity: parsedStock,
-          isActive: productStatus === "ACTIVE",
-          ...(productAttributes
-            ? {
-                attributes:
-                  productAttributes as Prisma.InputJsonValue,
-              }
-            : {}),
-        },
-      });
-
-      await tx.productImage.createMany({
-        data: validImageUrls.map((url, index) => ({
-          productId: product.id,
-          url,
-          sortOrder: index,
-          isPrimary: index === 0,
-        })),
-      });
-
-      const offer = await tx.sellerOffer.create({
-        data: {
-          sellerId: seller.id,
-          variantId: variant.id,
-          price: new Prisma.Decimal(String(price)),
-          stockQuantity: parsedStock,
-          status: productStatus === "ACTIVE" ? "ACTIVE" : "PAUSED",
-        },
-      });
-
-      return {
-        product,
-        variant,
-        offer,
-      };
-    });
-
-    // 11. Return the created product
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Product created successfully.",
-        product: {
-          id: createdProduct.product.id,
-          title: createdProduct.product.title,
-          slug: createdProduct.product.slug,
-          status: createdProduct.product.status,
-          variantId: createdProduct.variant.id,
-          offerId: createdProduct.offer.id,
-          sku: createdProduct.variant.sku,
-          price: createdProduct.offer.price.toString(),
-          stock: createdProduct.offer.stockQuantity,
-          imageUrl: validImageUrls[0],
-        },
+    return NextResponse.json({
+      success: true,
+      message: "Offer updated successfully.",
+      offer: {
+        id: offer.id,
+        price: Number(offer.price),
+        stock: offer.stockQuantity,
+        status: offer.status,
       },
-      { status: 201 }
-    );
+    });
   } catch (error) {
-    console.error("POST Seller Products Error:", error);
+    console.error("PUT Seller Offer Error:", error);
 
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "A product with one of these unique values already exists. Check the SKU and try again.",
-        },
-        { status: 409 }
-      );
-    }
+    return NextResponse.json(
+      { error: "Failed to update your offer." },
+      { status: 500 }
+    );
+  }
+}
 
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2003"
-    ) {
+// PATCH: Activate, pause or mark an offer out of stock.
+export async function PATCH(req: Request) {
+  try {
+    const body = await readBody(req);
+
+    if (!body || typeof body !== "object") {
       return NextResponse.json(
-        {
-          error:
-            "A referenced record is invalid. Check the selected category and seller profile.",
-        },
+        { error: "Invalid request body." },
         { status: 400 }
       );
     }
 
-    return NextResponse.json(
-      {
-        error: "Failed to create product.",
-        details:
-          process.env.NODE_ENV === "development" &&
-          error instanceof Error
-            ? error.message
-            : undefined,
+    const { offerId, status } = body as Record<string, unknown>;
+
+    if (
+      typeof offerId !== "string" ||
+      !["ACTIVE", "PAUSED", "OUT_OF_STOCK"].includes(String(status))
+    ) {
+      return NextResponse.json(
+        { error: "A valid offer ID and status are required." },
+        { status: 400 }
+      );
+    }
+
+    const auth = await authorizeSeller("manage_products");
+
+    if (!auth.authorized) return auth.response;
+
+    if (status === "OUT_OF_STOCK") {
+      const inventoryAuth = await authorizeSeller(
+        "manage_inventory",
+        auth.sellerId
+      );
+
+      if (!inventoryAuth.authorized) return inventoryAuth.response;
+    }
+
+    const existingOffer = await db.sellerOffer.findFirst({
+      where: {
+        id: offerId,
+        sellerId: auth.sellerId,
       },
+    });
+
+    if (!existingOffer) {
+      return NextResponse.json(
+        { error: "Offer not found in your inventory." },
+        { status: 404 }
+      );
+    }
+
+    if (status === "ACTIVE" && existingOffer.stockQuantity === 0) {
+      return NextResponse.json(
+        { error: "Add stock before activating this offer." },
+        { status: 400 }
+      );
+    }
+
+    const offer = await db.sellerOffer.update({
+      where: { id: existingOffer.id },
+      data: { status: status as "ACTIVE" | "PAUSED" | "OUT_OF_STOCK" },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Offer status updated successfully.",
+      offer: {
+        id: offer.id,
+        status: offer.status,
+      },
+    });
+  } catch (error) {
+    console.error("PATCH Seller Offer Error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to update offer status." },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: Remove a seller's offer without deleting catalogue data.
+export async function DELETE(req: Request) {
+  try {
+    const auth = await authorizeSeller("manage_products");
+
+    if (!auth.authorized) return auth.response;
+
+    const { searchParams } = new URL(req.url);
+    const offerId = searchParams.get("id");
+
+    if (!offerId) {
+      return NextResponse.json(
+        { error: "Offer ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const result = await db.sellerOffer.deleteMany({
+      where: {
+        id: offerId,
+        sellerId: auth.sellerId,
+      },
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Offer not found in your inventory." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Offer removed from your inventory.",
+    });
+  } catch (error) {
+    console.error("DELETE Seller Offer Error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to remove your offer." },
       { status: 500 }
     );
   }

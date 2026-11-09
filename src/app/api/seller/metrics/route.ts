@@ -1,99 +1,327 @@
- // src/app/api/seller/metrics/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authorizeSeller } from "@/lib/seller-auth";
+import { checkSellerPermission } from "@/lib/permissions";
+import { calculateSellerBalance } from "@/lib/finance/accounting";
+
+export const dynamic = "force-dynamic";
+
+const REVENUE_STATUSES = [
+  "CONFIRMED",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+];
+
+const RESERVED_PAYOUT_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "PROCESSING",
+];
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("view_finances");
+
+    if (!access.authorized) {
+      return access.response;
     }
 
-    // 1. Get the Seller Profile ID
-    const sellerProfile = await db.sellerProfile.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true, businessName: true }
-    });
+    const [canManageProducts, canManageInventory, seller] =
+      await Promise.all([
+        checkSellerPermission(
+          access.userId,
+          access.sellerId,
+          "manage_products"
+        ),
+        checkSellerPermission(
+          access.userId,
+          access.sellerId,
+          "manage_inventory"
+        ),
+        db.sellerProfile.findFirst({
+          where: {
+            id: access.sellerId,
+            isActive: true,
+            verificationStatus: "VERIFIED",
+          },
+          select: {
+            id: true,
+            businessName: true,
+            commissionRate: true,
+          },
+        }),
+      ]);
 
-    // ✅ FIX: If no profile exists (e.g., after DB reset), return zeros
-    if (!sellerProfile) {
-      return NextResponse.json({
-        totalRevenue: 0,
-        totalOrders: 0,
-        pendingOrders: 0,
-        completedOrders: 0,
-        recentOrders: [],
-        businessName: "New Seller"
+    if (!seller) {
+      return NextResponse.json(
+        { error: "Verified seller profile not found" },
+        { status: 403 }
+      );
+    }
+
+    const now = new Date();
+    const chartStart = new Date(now);
+    chartStart.setDate(chartStart.getDate() - 29);
+    chartStart.setHours(0, 0, 0, 0);
+
+    const [
+      financialRecords,
+      payouts,
+      allOrderItems,
+      chartOrderItems,
+      offers,
+    ] = await Promise.all([
+      db.sellerFinancialRecord.findMany({
+        where: { sellerId: seller.id },
+        select: {
+          id: true,
+          orderId: true,
+          type: true,
+          amount: true,
+        },
+      }),
+
+      db.payout.findMany({
+        where: { sellerId: seller.id },
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+        },
+      }),
+
+      db.orderItem.findMany({
+        where: { sellerId: seller.id },
+        select: {
+          orderId: true,
+          variantId: true,
+          title: true,
+          price: true,
+          quantity: true,
+          status: true,
+          order: {
+            select: { createdAt: true },
+          },
+          variant: {
+            select: {
+              product: {
+                select: {
+                  title: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+
+      db.orderItem.findMany({
+        where: {
+          sellerId: seller.id,
+          status: { in: REVENUE_STATUSES },
+          order: {
+            createdAt: { gte: chartStart },
+          },
+        },
+        select: {
+          orderId: true,
+          price: true,
+          quantity: true,
+          order: {
+            select: { createdAt: true },
+          },
+        },
+      }),
+
+      canManageInventory
+        ? db.sellerOffer.findMany({
+            where: { sellerId: seller.id },
+            select: {
+              id: true,
+              sellerSku: true,
+              stockQuantity: true,
+              variant: {
+                select: {
+                  sku: true,
+                  lowStockThreshold: true,
+                  product: {
+                    select: {
+                      title: true,
+                      slug: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const amountOf = (value: { toNumber(): number } | number) =>
+      typeof value === "number" ? value : value.toNumber();
+
+    const balance = calculateSellerBalance(
+      financialRecords.map((record) => ({
+        id: record.id,
+        type: record.type as
+          | "SALE"
+          | "FEE"
+          | "DISCOUNT"
+          | "REFUND"
+          | "FEE_REVERSAL"
+          | "DISCOUNT_REVERSAL"
+          | "ADJUSTMENT"
+          | "PAYOUT",
+        amount: amountOf(record.amount),
+      })),
+      payouts.map((payout) => ({
+        id: payout.id,
+        amount: amountOf(payout.amount),
+        status: payout.status as
+          | "PENDING"
+          | "APPROVED"
+          | "PROCESSING"
+          | "PAID"
+          | "REJECTED"
+          | "FAILED",
+      }))
+    );
+
+    const grossRevenue = financialRecords
+      .filter((record) => record.type === "SALE")
+      .reduce((sum, record) => sum + amountOf(record.amount), 0);
+
+    const revenueItems = allOrderItems.filter((item) =>
+      REVENUE_STATUSES.includes(item.status)
+    );
+
+    const allOrderIds = new Set(
+      allOrderItems.map((item) => item.orderId)
+    );
+
+    const pendingOrderIds = new Set(
+      allOrderItems
+        .filter((item) => item.status === "PENDING")
+        .map((item) => item.orderId)
+    );
+
+    const saleOrderIds = new Set(
+      financialRecords
+        .filter((record) => record.type === "SALE" && record.orderId)
+        .map((record) => record.orderId as string)
+    );
+
+    const summary = {
+      grossRevenue: Number(grossRevenue.toFixed(2)),
+      netEarnings: Number(balance.earnedBalance.toFixed(2)),
+      totalOrders: allOrderIds.size,
+      avgOrderValue: saleOrderIds.size > 0
+        ? Number((grossRevenue / saleOrderIds.size).toFixed(2))
+        : 0,
+      pendingOrders: pendingOrderIds.size,
+      commissionRate: amountOf(seller.commissionRate),
+    };
+
+    const revenueByDay = new Map<
+      string,
+      { revenue: number; orderIds: Set<string> }
+    >();
+
+    for (let offset = 0; offset < 30; offset++) {
+      const date = new Date(chartStart);
+      date.setDate(chartStart.getDate() + offset);
+
+      const key = date.toISOString().slice(0, 10);
+
+      revenueByDay.set(key, {
+        revenue: 0,
+        orderIds: new Set(),
       });
     }
 
-    const sellerId = sellerProfile.id;
+    for (const item of chartOrderItems) {
+      const key = item.order.createdAt.toISOString().slice(0, 10);
+      const day = revenueByDay.get(key);
 
-    // 2. Fetch Orders
-    const allOrders = await db.order.findMany({
-      where: {
-        items: {
-          some: { sellerId: sellerId }
-        }
-      },
-      include: {
-        items: { where: { sellerId: sellerId } },
-        user: { select: { firstName: true, lastName: true, email: true } }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5
-    });
+      if (!day) continue;
 
-    // 3. Calculate Metrics
-    let totalRevenue = 0;
-    let totalOrders = 0;
-    let pendingOrders = 0;
-    let completedOrders = 0;
-    const recentOrders: {
-  id: string;
-  customerName: string;
-  totalAmount: number;
-  status: string;
-  createdAt: Date;
-  itemCount: number;
-}[] = [];
+      day.revenue += amountOf(item.price) * item.quantity;
+      day.orderIds.add(item.orderId);
+    }
 
-    allOrders.forEach(order => {
-      const sellerSubtotal = order.items.reduce((sum, item) => {
-        return sum + (parseFloat(item.price.toString()) * item.quantity);
-      }, 0);
-      
-      totalRevenue += sellerSubtotal;
-      totalOrders++;
-      if (order.status === "PENDING") pendingOrders++;
-      if (order.status === "DELIVERED") completedOrders++;
+    const revenueChart = Array.from(revenueByDay.entries()).map(
+      ([date, data]) => ({
+        date,
+        revenue: Number(data.revenue.toFixed(2)),
+        orders: data.orderIds.size,
+      })
+    );
 
-      recentOrders.push({
-        id: order.id,
-        customerName: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || order.user.email,
-        totalAmount: sellerSubtotal,
-        status: order.status,
-        createdAt: order.createdAt,
-        itemCount: order.items.length
-      });
-    });
+    const productSales = new Map<
+      string,
+      {
+        id: string;
+        title: string;
+        slug: string;
+        unitsSold: number;
+        revenue: number;
+      }
+    >();
+
+    for (const item of revenueItems) {
+      const product = item.variant.product;
+      const existing = productSales.get(item.variantId);
+
+      if (existing) {
+        existing.unitsSold += item.quantity;
+        existing.revenue += amountOf(item.price) * item.quantity;
+      } else {
+        productSales.set(item.variantId, {
+          id: item.variantId,
+          title: product.title || item.title,
+          slug: product.slug,
+          unitsSold: item.quantity,
+          revenue: amountOf(item.price) * item.quantity,
+        });
+      }
+    }
+
+    const topProducts = Array.from(productSales.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+      .map((product) => ({
+        ...product,
+        revenue: Number(product.revenue.toFixed(2)),
+      }));
+
+    const lowStock = offers
+      .filter(
+        (offer) =>
+          offer.stockQuantity <= offer.variant.lowStockThreshold
+      )
+      .sort((a, b) => a.stockQuantity - b.stockQuantity)
+      .slice(0, 10)
+      .map((offer) => ({
+        id: offer.id,
+        sku: offer.sellerSku || offer.variant.sku,
+        stockQuantity: offer.stockQuantity,
+        productTitle: offer.variant.product.title,
+        productSlug: offer.variant.product.slug,
+      }));
 
     return NextResponse.json({
-      totalRevenue,
-      totalOrders,
-      pendingOrders,
-      completedOrders,
-      recentOrders,
-      businessName: sellerProfile.businessName
+      summary,
+      revenueChart,
+      topProducts,
+      lowStock,
+      businessName: seller.businessName,
     });
+  } catch (error) {
+    console.error("[SELLER METRICS] GET error:", error);
 
-  } catch (error: any) {
-    console.error("🚨 Seller Metrics Crash:", error);
-    // ✅ FIX: Return JSON error to prevent HTML response
     return NextResponse.json(
-      { error: "Failed to load dashboard", details: error.message },
+      { error: "Failed to load seller dashboard metrics" },
       { status: 500 }
     );
   }

@@ -26,10 +26,13 @@ export default function StartChatButton({ receiverId, productId, productName }: 
         }),
       });
 
+       const result = await res.json();
+
       if (res.ok) {
         window.location.reload();
       } else {
-        alert("Failed to start conversation.");
+        alert(result.error || "Failed to start conversation.");
+        console.error("Chat API error:", result);
         setIsLoading(false);
       }
     } catch (error) {

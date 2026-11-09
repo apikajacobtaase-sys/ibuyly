@@ -1,4 +1,4 @@
-// src/lib/auth.ts
+﻿// src/lib/auth.ts
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "@/lib/db";
@@ -25,11 +25,12 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
-        if (!user.accountStatus || user.accountStatus === "SUSPENDED") {
-          throw new Error("Your account has been suspended. Please contact support.");
+        if (!user.isActive) {
+          throw new Error("Your account is inactive. Please contact support.");
         }
-        if (user.accountStatus === "DISABLED") {
-          throw new Error("Your account has been disabled.");
+
+        if (user.accountStatus !== "ACTIVE") {
+          throw new Error("Your account is unavailable. Please contact support.");
         }
 
         const isPasswordValid = await bcrypt.compare(
@@ -46,26 +47,91 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
           role: user.role,
+          avatarUrl: user.avatarUrl,
+          firstName: user.firstName,
+          lastName: user.lastName,
         };
       },
     }),
   ],
+
   session: {
     strategy: "jwt",
   },
+
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.role = user.role;
+      const userId = user?.id ?? token.id;
+
+      if (typeof userId !== "string" || !userId) {
+        token.id = "";
+        token.role = "";
+        token.avatarUrl = null;
+        token.firstName = null;
+        token.lastName = null;
+        return token;
       }
+
+      const currentUser = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          role: true,
+          isActive: true,
+          accountStatus: true,
+          avatarUrl: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+
+      if (
+        !currentUser ||
+        !currentUser.isActive ||
+        currentUser.accountStatus !== "ACTIVE"
+      ) {
+        token.id = "";
+        token.role = "";
+        token.avatarUrl = null;
+        token.firstName = null;
+        token.lastName = null;
+        return token;
+      }
+
+      token.id = currentUser.id;
+      token.role = currentUser.role;
+      token.avatarUrl = currentUser.avatarUrl;
+      token.firstName = currentUser.firstName;
+      token.lastName = currentUser.lastName;
+      token.name =
+        `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim();
+
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.id =
+          typeof token.id === "string" ? token.id : "";
+
+        session.user.role =
+          typeof token.role === "string" ? token.role : "";
+
+        session.user.avatarUrl =
+          typeof token.avatarUrl === "string" ? token.avatarUrl : null;
+
+        session.user.firstName =
+          typeof token.firstName === "string" ? token.firstName : null;
+
+        session.user.lastName =
+          typeof token.lastName === "string" ? token.lastName : null;
+
+        session.user.name =
+          typeof token.name === "string" ? token.name : null;
+
+        session.user.image = session.user.avatarUrl;
       }
+
       return session;
     },
   },

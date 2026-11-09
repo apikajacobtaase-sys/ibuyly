@@ -1,116 +1,235 @@
-// src/app/api/seller/discounts/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
+import { authorizeSeller } from "@/lib/seller-auth";
 import { z } from "zod";
 
-const CreateDiscountSchema = z.object({
-  code: z.string().min(3).max(20).transform((val) => val.toUpperCase().replace(/\s+/g, "_")),
-  type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
-  value: z.number().positive(),
-  minOrderAmount: z.number().optional().nullable(),
-  maxDiscount: z.number().optional().nullable(),
-  usageLimit: z.number().int().positive().optional().nullable(),
-  expiresAt: z.string().optional().nullable(),
-});
+const CreateDiscountSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .min(3)
+      .max(20)
+      .transform((value) =>
+        value.toUpperCase().replace(/\s+/g, "_")
+      )
+      .refine(
+        (value) => /^[A-Z0-9_-]+$/.test(value),
+        "Discount code can only contain letters, numbers, underscores and hyphens."
+      ),
+    type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
+    value: z.number().finite().positive(),
+    minOrderAmount: z.number().finite().nonnegative().nullable().optional(),
+    maxDiscount: z.number().finite().positive().nullable().optional(),
+    usageLimit: z.number().int().positive().nullable().optional(),
+    expiresAt: z.string().datetime().nullable().optional(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.type === "PERCENTAGE" && data.value > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["value"],
+        message: "Percentage discount cannot exceed 100.",
+      });
+    }
+
+    if (data.type === "FIXED_AMOUNT" && data.maxDiscount != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxDiscount"],
+        message: "Maximum discount is only applicable to percentage discounts.",
+      });
+    }
+
+    if (
+      data.expiresAt &&
+      new Date(data.expiresAt).getTime() <= Date.now()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expiresAt"],
+        message: "Expiry date must be in the future.",
+      });
+    }
+  });
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("manage_products");
 
-    const seller = await db.sellerProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } });
-    if (!seller) return NextResponse.json({ error: "Seller profile not found" }, { status: 404 });
+    if (!access.authorized) {
+      return access.response;
+    }
 
     const discounts = await db.discountCode.findMany({
-      where: { sellerId: seller.id },
+      where: { sellerId: access.sellerId },
       orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({
-      discounts: discounts.map((d) => ({
-        id: d.id,
-        code: d.code,
-        type: d.type,
-        value: Number(d.value),
-        minOrderAmount: d.minOrderAmount ? Number(d.minOrderAmount) : null,
-        maxDiscount: d.maxDiscount ? Number(d.maxDiscount) : null,
-        usageLimit: d.usageLimit,
-        usedCount: d.usedCount,
-        startsAt: d.startsAt,
-        expiresAt: d.expiresAt,
-        isActive: d.isActive,
+      discounts: discounts.map((discount) => ({
+        id: discount.id,
+        code: discount.code,
+        type: discount.type,
+        value: Number(discount.value),
+        minOrderAmount:
+          discount.minOrderAmount != null
+            ? Number(discount.minOrderAmount)
+            : null,
+        maxDiscount:
+          discount.maxDiscount != null
+            ? Number(discount.maxDiscount)
+            : null,
+        usageLimit: discount.usageLimit,
+        usedCount: discount.usedCount,
+        startsAt: discount.startsAt,
+        expiresAt: discount.expiresAt,
+        isActive: discount.isActive,
       })),
     });
-  } catch (error: any) {
-    console.error("🚨 Seller discounts GET error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("Seller discounts GET error:", error);
+
+    return NextResponse.json(
+      { error: "Unable to retrieve discounts." },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("manage_products");
 
-    const seller = await db.sellerProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } });
-    if (!seller) return NextResponse.json({ error: "Seller profile not found" }, { status: 404 });
-
-    const body = await req.json();
-    const validation = CreateDiscountSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ error: "Invalid request", details: validation.error.flatten() }, { status: 400 });
+    if (!access.authorized) {
+      return access.response;
     }
 
-    const { code, type, value, minOrderAmount, maxDiscount, usageLimit, expiresAt } = validation.data;
+    let body: unknown;
 
-    // Check if code already exists
-    const existing = await db.discountCode.findUnique({ where: { code } });
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON request body." },
+        { status: 400 }
+      );
+    }
+
+    const validation = CreateDiscountSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid discount details.",
+          details: validation.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+
+    const {
+      code,
+      type,
+      value,
+      minOrderAmount,
+      maxDiscount,
+      usageLimit,
+      expiresAt,
+    } = validation.data;
+
+    const existing = await db.discountCode.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+
     if (existing) {
-      return NextResponse.json({ error: "This discount code already exists. Please choose another." }, { status: 400 });
+      return NextResponse.json(
+        { error: "This discount code already exists." },
+        { status: 409 }
+      );
     }
 
     const discount = await db.discountCode.create({
       data: {
-        sellerId: seller.id,
+        sellerId: access.sellerId,
         code,
         type,
         value,
-        minOrderAmount: minOrderAmount || null,
-        maxDiscount: maxDiscount || null,
-        usageLimit: usageLimit || null,
+        minOrderAmount: minOrderAmount ?? null,
+        maxDiscount: maxDiscount ?? null,
+        usageLimit: usageLimit ?? null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
+      select: { id: true },
     });
 
-    return NextResponse.json({ success: true, discountId: discount.id }, { status: 201 });
-  } catch (error: any) {
-    console.error("🚨 Seller discounts POST error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: true, discountId: discount.id },
+      { status: 201 }
+    );
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "This discount code already exists." },
+        { status: 409 }
+      );
+    }
+
+    console.error("Seller discounts POST error:", error);
+
+    return NextResponse.json(
+      { error: "Unable to create discount." },
+      { status: 500 }
+    );
   }
 }
 
 export async function DELETE(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = await authorizeSeller("manage_products");
+
+    if (!access.authorized) {
+      return access.response;
+    }
 
     const { searchParams } = new URL(req.url);
     const discountId = searchParams.get("id");
 
-    if (!discountId) return NextResponse.json({ error: "Discount ID required" }, { status: 400 });
+    if (!discountId || discountId.length > 191) {
+      return NextResponse.json(
+        { error: "A valid discount ID is required." },
+        { status: 400 }
+      );
+    }
 
-    const seller = await db.sellerProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } });
-    if (!seller) return NextResponse.json({ error: "Seller profile not found" }, { status: 404 });
-
-    await db.discountCode.delete({
-      where: { id: discountId, sellerId: seller.id }, // Ensures seller can only delete their own
+    const result = await db.discountCode.deleteMany({
+      where: {
+        id: discountId,
+        sellerId: access.sellerId,
+      },
     });
 
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Discount not found." },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error("🚨 Seller discounts DELETE error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("Seller discounts DELETE error:", error);
+
+    return NextResponse.json(
+      { error: "Unable to delete discount." },
+      { status: 500 }
+    );
   }
 }

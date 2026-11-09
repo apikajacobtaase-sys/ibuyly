@@ -1,71 +1,214 @@
-// src/app/api/seller/products/import/route.ts
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
+import { authorizeSeller } from "@/lib/seller-auth";
 import Papa from "papaparse";
+import { z } from "zod";
+
+export const runtime = "nodejs";
+
+const ImportRowSchema = z.object({
+  variantId: z.string().trim().min(1).max(191),
+  price: z.coerce.number().finite().positive().max(99999999.99),
+  stock: z.coerce.number().int().min(0).max(2147483647),
+  sku: z.string().trim().max(100).optional().default(""),
+  condition: z.string().trim().min(1).max(50).default("NEW"),
+}).strict();
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const productAccess = await authorizeSeller("manage_products");
 
-    const seller = await db.sellerProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } });
-    if (!seller) return NextResponse.json({ error: "Seller profile not found" }, { status: 404 });
+    if (!productAccess.authorized) {
+      return productAccess.response;
+    }
+
+    const inventoryAccess = await authorizeSeller(
+      "manage_inventory",
+      productAccess.sellerId
+    );
+
+    if (!inventoryAccess.authorized) {
+      return inventoryAccess.response;
+    }
 
     const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const categoryId = formData.get("categoryId") as string;
+    const file = formData.get("file");
 
-    if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    if (!categoryId) return NextResponse.json({ error: "Category ID is required" }, { status: 400 });
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { error: "A CSV file is required." },
+        { status: 400 }
+      );
+    }
+
+    if (file.size === 0 || file.size > 1024 * 1024) {
+      return NextResponse.json(
+        { error: "File must be between 1 byte and 1 MB." },
+        { status: 400 }
+      );
+    }
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      return NextResponse.json(
+        { error: "Only CSV files are supported." },
+        { status: 400 }
+      );
+    }
 
     const text = await file.text();
-    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-    const rows = parsed.data as any[];
 
-    if (rows.length === 0) return NextResponse.json({ error: "CSV file is empty" }, { status: 400 });
-    if (rows.length > 100) return NextResponse.json({ error: "Maximum 100 products per import" }, { status: 400 });
+    if (text.includes("\u0000")) {
+      return NextResponse.json(
+        { error: "Invalid CSV file." },
+        { status: 400 }
+      );
+    }
 
-    const created = [];
-    const errors = [];
+    const parsed = Papa.parse<Record<string, string>>(text, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim(),
+    });
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const title = row.title?.trim();
-      const description = row.description?.trim() || "No description";
-      const price = parseFloat(row.price);
-      const stock = parseInt(row.stock) || 0;
-      const sku = row.sku?.trim() || `SKU-${Date.now()}-${i}`;
+    if (parsed.errors.length > 0) {
+      return NextResponse.json(
+        {
+          error: "CSV parsing failed.",
+          details: parsed.errors.slice(0, 10).map((error) => error.message),
+        },
+        { status: 400 }
+      );
+    }
 
-      if (!title || isNaN(price)) {
-        errors.push(`Row ${i + 2}: Missing title or invalid price`);
+    const expectedHeaders = [
+      "variantId",
+      "price",
+      "stock",
+      "sku",
+      "condition",
+    ];
+
+    const headers = parsed.meta.fields ?? [];
+
+    if (
+      headers.length !== expectedHeaders.length ||
+      !expectedHeaders.every((header) => headers.includes(header))
+    ) {
+      return NextResponse.json(
+        {
+          error: "Invalid CSV headers.",
+          expected: expectedHeaders.join(","),
+        },
+        { status: 400 }
+      );
+    }
+
+    const rows = parsed.data;
+
+    if (rows.length === 0) {
+      return NextResponse.json(
+        { error: "CSV file contains no products." },
+        { status: 400 }
+      );
+    }
+
+    if (rows.length > 100) {
+      return NextResponse.json(
+        { error: "Maximum 100 offers per import." },
+        { status: 400 }
+      );
+    }
+
+    const created: { variantId: string; offerId: string }[] = [];
+    const errors: string[] = [];
+    const seenVariants = new Set<string>();
+
+    for (let index = 0; index < rows.length; index++) {
+      const rowNumber = index + 2;
+      const validation = ImportRowSchema.safeParse(rows[index]);
+
+      if (!validation.success) {
+        errors.push(`Row ${rowNumber}: Invalid data.`);
         continue;
       }
 
-      const slug = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
+      const data = validation.data;
+
+      if (seenVariants.has(data.variantId)) {
+        errors.push(`Row ${rowNumber}: Duplicate variant ID in this file.`);
+        continue;
+      }
+
+      seenVariants.add(data.variantId);
 
       try {
-        const product = await db.product.create({
-          data: {
-            title,
-            slug,
-            description,
-            categoryId,
-            sellerId: seller.id,
-            status: "DRAFT",
-            variants: {
-              create: {
-                price,
-                stockQuantity: stock,
-                sku,
-              },
+        const variant = await db.productVariant.findFirst({
+          where: {
+            id: data.variantId,
+            isActive: true,
+            product: {
+              status: "ACTIVE",
             },
           },
+          select: { id: true },
         });
-        created.push({ title, id: product.id });
-      } catch (err: any) {
-        errors.push(`Row ${i + 2} (${title}): ${err.message}`);
+
+        if (!variant) {
+          errors.push(
+            `Row ${rowNumber}: Catalogue variant not found or unavailable.`
+          );
+          continue;
+        }
+
+        const existingOffer = await db.sellerOffer.findUnique({
+          where: {
+            sellerId_variantId: {
+              sellerId: productAccess.sellerId,
+              variantId: variant.id,
+            },
+          },
+          select: { id: true },
+        });
+
+        if (existingOffer) {
+          errors.push(
+            `Row ${rowNumber}: You already have an offer for this variant.`
+          );
+          continue;
+        }
+
+        const offer = await db.sellerOffer.create({
+          data: {
+            sellerId: productAccess.sellerId,
+            variantId: variant.id,
+            price: data.price,
+            stockQuantity: data.stock,
+            sellerSku: data.sku || null,
+            condition: data.condition,
+            status: data.stock > 0 ? "ACTIVE" : "OUT_OF_STOCK",
+          },
+          select: { id: true },
+        });
+
+        created.push({
+          variantId: variant.id,
+          offerId: offer.id,
+        });
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "P2002"
+        ) {
+          errors.push(
+            `Row ${rowNumber}: This variant or seller SKU already exists.`
+          );
+          continue;
+        }
+
+        console.error(`Seller import row ${rowNumber} failed:`, error);
+        errors.push(`Row ${rowNumber}: Import failed.`);
       }
     }
 
@@ -75,8 +218,12 @@ export async function POST(req: Request) {
       errors: errors.length,
       details: { created, errors },
     });
-  } catch (error: any) {
-    console.error("🚨 CSV import error:", error);
-    return NextResponse.json({ error: error.message || "Failed to import products" }, { status: 500 });
+  } catch (error) {
+    console.error("Seller CSV import error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to import seller offers." },
+      { status: 500 }
+    );
   }
 }

@@ -1,28 +1,23 @@
-
-// src/store/wishlistStore.ts
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export interface WishlistItem {
-  id: string; // Product ID
+  id: string;
   title: string;
   price: number;
   imageUrl: string | null;
   slug: string;
   sellerName: string;
-
-  // Optional IDs for integrations such as Move to Cart.
-  // These must be real database IDs, never placeholders.
   variantId?: string;
   offerId?: string;
   sellerId?: string;
   stockQuantity?: number;
+  inStock?: boolean;
 }
 
 interface WishlistState {
   items: WishlistItem[];
   isLoading: boolean;
-
   fetchWishlist: () => Promise<void>;
   addItem: (item: WishlistItem) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
@@ -39,11 +34,35 @@ export const useWishlistStore = create<WishlistState>()(
       isInWishlist: (id) =>
         get().items.some((item) => item.id === id),
 
-      // Load saved products from the database.
       fetchWishlist: async () => {
+        const localItems = get().items;
         set({ isLoading: true });
 
         try {
+          // Sync locally saved guest items after authentication.
+          const unsyncedItems: WishlistItem[] = [];
+
+          for (const item of localItems) {
+            try {
+              const response = await fetch("/api/wishlist", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ productId: item.id }),
+              });
+
+              if (response.status === 401) {
+                return;
+              }
+
+              if (!response.ok) {
+                unsyncedItems.push(item);
+              }
+            } catch {
+              unsyncedItems.push(item);
+            }
+          }
+
           const response = await fetch("/api/wishlist", {
             method: "GET",
             credentials: "same-origin",
@@ -51,18 +70,21 @@ export const useWishlistStore = create<WishlistState>()(
           });
 
           if (!response.ok) {
-            console.error(
-              "Failed to load wishlist:",
-              response.status,
-              await response.text()
-            );
             return;
           }
 
           const data = await response.json();
 
           if (Array.isArray(data.items)) {
-            set({ items: data.items });
+            const serverItems = data.items as WishlistItem[];
+            const serverIds = new Set(serverItems.map((item) => item.id));
+
+            set({
+              items: [
+                ...serverItems,
+                ...unsyncedItems.filter((item) => !serverIds.has(item.id)),
+              ],
+            });
           }
         } catch (error) {
           console.error("Failed to fetch wishlist:", error);
@@ -71,13 +93,10 @@ export const useWishlistStore = create<WishlistState>()(
         }
       },
 
-      // Add locally first, then persist to the database.
       addItem: async (item) => {
-        const alreadyExists = get().items.some(
-          (existing) => existing.id === item.id
-        );
-
-        if (alreadyExists) return;
+        if (get().items.some((existing) => existing.id === item.id)) {
+          return;
+        }
 
         set((state) => ({
           items: [...state.items, item],
@@ -87,27 +106,19 @@ export const useWishlistStore = create<WishlistState>()(
           const response = await fetch("/api/wishlist", {
             method: "POST",
             credentials: "same-origin",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              productId: item.id,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productId: item.id }),
           });
 
-          if (!response.ok) {
-            console.error(
-              "Failed to save wishlist item:",
-              response.status,
-              await response.text()
-            );
+          // Guests keep their wishlist locally.
+          if (!response.ok && response.status !== 401) {
+            console.error("Failed to save wishlist item:", response.status);
           }
         } catch (error) {
           console.error("Failed to sync wishlist addition:", error);
         }
       },
 
-      // Remove locally and from the database.
       removeItem: async (id) => {
         const previousItems = get().items;
 
@@ -124,25 +135,21 @@ export const useWishlistStore = create<WishlistState>()(
             }
           );
 
-          if (!response.ok) {
-            console.error(
-              "Failed to remove wishlist item:",
-              response.status,
-              await response.text()
-            );
-
-            // Restore local data if the server rejects the removal.
+          // A guest has no database wishlist to update.
+          if (!response.ok && response.status !== 401) {
             set({ items: previousItems });
           }
         } catch (error) {
           console.error("Failed to sync wishlist removal:", error);
-          set({ items: previousItems });
+          // Keep the local removal; the server can be reconciled later.
         }
       },
 
-      // Clear the database first; clear local state only on success.
       clearWishlist: async () => {
         const previousItems = get().items;
+
+        // Clear immediately for a responsive guest experience.
+        set({ items: [] });
 
         try {
           const response = await fetch("/api/wishlist", {
@@ -150,16 +157,9 @@ export const useWishlistStore = create<WishlistState>()(
             credentials: "same-origin",
           });
 
-          if (!response.ok) {
-            console.error(
-              "Failed to clear wishlist:",
-              response.status,
-              await response.text()
-            );
-            return;
+          if (!response.ok && response.status !== 401) {
+            set({ items: previousItems });
           }
-
-          set({ items: [] });
         } catch (error) {
           console.error("Failed to clear wishlist:", error);
           set({ items: previousItems });

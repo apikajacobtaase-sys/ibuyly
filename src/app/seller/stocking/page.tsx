@@ -1,4 +1,4 @@
- // src/app/seller/stocking/page.tsx
+﻿ // src/app/seller/stocking/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -156,19 +156,19 @@ export default function StockingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
+    <div className="min-h-screen min-w-0 bg-gray-50 pb-6">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-900 mb-1">Stock Your Store</h1>
-          <p className="text-sm text-gray-500">Find products in the iBUY catalogue and add them to your inventory.</p>
+      <div className="sticky top-14 z-20 border-b border-gray-200 bg-white lg:top-0">
+        <div className="mx-auto max-w-5xl px-4 py-3 sm:py-4">
+          <h1 className="mb-1 text-lg font-bold text-gray-900 sm:text-xl">Stock Your Store</h1>
+          <p className="text-xs leading-relaxed text-gray-500 sm:text-sm">Find products in the iBUY catalogue and add them to your inventory.</p>
         </div>
         
         {/* Tabs */}
-        <div className="max-w-5xl mx-auto px-4 flex gap-6 border-t border-gray-100">
+        <div className="mx-auto flex max-w-5xl gap-2 border-t border-gray-100 px-4 sm:gap-6">
           <button
             onClick={() => setActiveTab("find")}
-            className={`py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`min-h-12 flex-1 whitespace-nowrap border-b-2 py-3 text-center text-xs font-semibold transition-colors sm:flex-none sm:text-sm ${
               activeTab === "find" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -176,7 +176,7 @@ export default function StockingPage() {
           </button>
           <button
             onClick={() => setActiveTab("mystock")}
-            className={`py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`min-h-12 flex-1 whitespace-nowrap border-b-2 py-3 text-center text-xs font-semibold transition-colors sm:flex-none sm:text-sm ${
               activeTab === "mystock" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -185,7 +185,7 @@ export default function StockingPage() {
         </div>
       </div>
 
-      <main className="max-w-5xl mx-auto px-4 py-6">
+      <main className="mx-auto min-w-0 max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
         {/* ================= FIND PRODUCTS TAB ================= */}
         {activeTab === "find" && (
           <div className="space-y-4">
@@ -197,7 +197,7 @@ export default function StockingPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by product name, brand, model, or SKU..."
-                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent shadow-sm"
+                className="min-h-12 w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-4 text-base shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-green-500 sm:text-sm"
               />
             </div>
 
@@ -218,8 +218,8 @@ export default function StockingPage() {
 
             <div className="space-y-3">
               {searchResults.map((product) => (
-                <div key={product.id} className="bg-white border border-gray-200 rounded-lg p-3 flex gap-4 shadow-sm">
-                  <div className="w-20 h-20 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+                <div key={product.id} className="flex min-w-0 gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:gap-4">
+                  <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 sm:h-20 sm:w-20">
                     {product.images[0]?.url ? (
                       <img src={product.images[0].url} alt={product.title} className="w-full h-full object-cover" />
                     ) : (
@@ -233,17 +233,17 @@ export default function StockingPage() {
                     
                     <div className="mt-2 space-y-2">
                       {product.variants.slice(0, 2).map((variant) => (
-                        <div key={variant.id} className="flex items-center justify-between bg-gray-50 rounded-md p-2">
+                        <div key={variant.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 p-2">
                           <div className="min-w-0">
                             <p className="text-xs font-medium text-gray-700 truncate">
                               {variant.sku || "No SKU"} 
-                              {variant.attributes && typeof variant.attributes === 'object' && Object.values(variant.attributes)[0] && ` • ${Object.values(variant.attributes)[0]}`}
+                              {variant.attributes && typeof variant.attributes === 'object' && Object.values(variant.attributes)[0] && ` â€¢ ${Object.values(variant.attributes)[0]}`}
                             </p>
-                            <p className="text-xs text-green-700 font-semibold">Catalogue Base: GH₵ {Number(variant.price).toFixed(2)}</p>
+                            <p className="text-xs text-green-700 font-semibold">Catalogue Base: GHâ‚µ {Number(variant.price).toFixed(2)}</p>
                           </div>
                           <button
                             onClick={() => openAddModal(product, variant)}
-                            className="flex-shrink-0 ml-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-md transition-colors flex items-center gap-1"
+                            className="flex min-h-10 flex-shrink-0 items-center justify-center gap-1 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-700"
                           >
                             <Plus className="w-3.5 h-3.5" /> Add
                           </button>
@@ -269,13 +269,13 @@ export default function StockingPage() {
                 <button
                   key={filter}
                   onClick={() => setStockFilter(filter)}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                  className={`min-h-10 flex-shrink-0 rounded-full px-4 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${
                     stockFilter === filter
                       ? "bg-green-600 text-white"
                       : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  {filter === "all" ? "All Stock" : filter === "low_stock" ? "Low Stock (≤10)" : "Out of Stock"}
+                  {filter === "all" ? "All Stock" : filter === "low_stock" ? "Low Stock (â‰¤10)" : "Out of Stock"}
                 </button>
               ))}
             </div>
@@ -291,8 +291,8 @@ export default function StockingPage() {
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 {myStock.map((offer) => (
-                  <div key={offer.id} className="p-4 border-b border-gray-100 last:border-0 flex items-center gap-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+                  <div key={offer.id} className="flex flex-col gap-3 border-b border-gray-100 p-3 last:border-0 sm:flex-row sm:items-center sm:gap-4 sm:p-4">
+                    <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
                       {offer.variant.product.images[0]?.url ? (
                         <img src={offer.variant.product.images[0].url} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -308,8 +308,8 @@ export default function StockingPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">GH₵ {Number(offer.price).toFixed(2)}</p>
+                    <div className="self-end text-right sm:ml-auto sm:self-auto">
+                      <p className="text-sm font-bold text-gray-900">GHâ‚µ {Number(offer.price).toFixed(2)}</p>
                       <p className="text-xs text-gray-500 capitalize">{offer.condition.toLowerCase()}</p>
                     </div>
                   </div>
@@ -322,16 +322,16 @@ export default function StockingPage() {
 
       {/* ================= ADD TO STOCK MODAL ================= */}
       {isModalOpen && selectedProduct && selectedVariant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-gray-50 p-4">
               <h2 className="text-lg font-bold text-gray-900">Add to My Stock</h2>
               <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-gray-200 rounded-full transition">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             
-            <div className="p-4 space-y-4">
+            <div className="space-y-4 p-4 sm:p-5">
               {/* Product Summary */}
               <div className="flex gap-3 p-3 bg-green-50 border border-green-100 rounded-lg">
                 <div className="w-12 h-12 bg-white rounded-md overflow-hidden flex-shrink-0">
@@ -353,7 +353,7 @@ export default function StockingPage() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Your Selling Price (GH₵) *</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Your Selling Price (GHâ‚µ) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -361,7 +361,7 @@ export default function StockingPage() {
                     min="0.01"
                     value={formPrice}
                     onChange={(e) => setFormPrice(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                    className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500 sm:text-sm"
                   />
                 </div>
 
@@ -374,7 +374,7 @@ export default function StockingPage() {
                       min="0"
                       value={formStock}
                       onChange={(e) => setFormStock(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                      className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500 sm:text-sm"
                     />
                   </div>
                   <div>
@@ -382,7 +382,7 @@ export default function StockingPage() {
                     <select
                       value={formCondition}
                       onChange={(e) => setFormCondition(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none bg-white"
+                      className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500 sm:text-sm"
                     > 
                      <option value="NEW">New</option>
                      <option value="USED">Used</option>
@@ -398,11 +398,11 @@ export default function StockingPage() {
                     value={formSku}
                     onChange={(e) => setFormSku(e.target.value)}
                     placeholder="e.g., MY-STORE-001"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                    className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500 sm:text-sm"
                   />
                 </div>
 
-                <div className="pt-2 flex gap-3">
+                <div className="sticky bottom-0 flex flex-col-reverse gap-2 bg-white pt-3 sm:flex-row sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}

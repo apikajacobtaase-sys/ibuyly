@@ -1,4 +1,4 @@
-import { LucideIcon } from "lucide-react";
+﻿import { LucideIcon } from "lucide-react";
 
 interface StatCardProps {
   title: string;
@@ -23,13 +23,13 @@ export default function StatCard({
   subtitle,
 }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-3 transition-shadow hover:shadow-md sm:p-5">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             {title}
           </p>
-          <p className={`text-2xl font-bold ${color} mt-2 truncate`}>
+          <p className={`mt-2 truncate text-xl font-bold sm:text-2xl ${color}`}>
             {value}
           </p>
           {subtitle && (
@@ -42,14 +42,14 @@ export default function StatCard({
                   trend.isPositive ? "text-green-600" : "text-red-600"
                 }`}
               >
-                {trend.isPositive ? "↑" : "↓"} {Math.abs(trend.value)}%
+                {trend.isPositive ? "â†‘" : "â†“"} {Math.abs(trend.value)}%
               </span>
               <span className="text-xs text-gray-500">vs last period</span>
             </div>
           )}
         </div>
-        <div className={`w-11 h-11 ${bg} rounded-lg flex items-center justify-center flex-shrink-0 ml-3`}>
-          <Icon className={`w-5 h-5 ${color}`} />
+        <div className={`ml-2 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg sm:ml-3 sm:h-11 sm:w-11 ${bg}`}>
+          <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${color}`} />
         </div>
       </div>
     </div>
