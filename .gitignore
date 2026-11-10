@@ -42,3 +42,9 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Local backup files
+*.bak
+*.before-*
+*.recovery
+*.truncated-backup
