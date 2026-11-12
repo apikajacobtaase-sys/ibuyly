@@ -1,6 +1,9 @@
 // src/emails/welcome-seller.ts
 
+import { getAppUrl } from "../lib/app-url";
+
 export function getSellerWelcomeEmail(businessName: string, ownerName: string): string {
+  const appUrl = getAppUrl();
   return `
 <!DOCTYPE html>
 <html>
@@ -41,7 +44,7 @@ export function getSellerWelcomeEmail(businessName: string, ownerName: string): 
               <table role="presentation" style="border-collapse: collapse; margin: 0 auto 32px auto;">
                 <tr>
                   <td style="border-radius: 8px; background-color: #f97316;">
-                    <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/seller" 
+                    <a href="${appUrl}/seller"
                        style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
                       Go to Seller Dashboard →
                     </a>

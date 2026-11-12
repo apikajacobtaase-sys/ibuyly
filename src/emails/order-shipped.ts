@@ -1,5 +1,7 @@
 // src/emails/order-shipped.ts
 
+import { getAppUrl } from "../lib/app-url";
+
 export function getOrderShippedEmail(params: {
   customerName: string;
   orderId: string;
@@ -8,7 +10,7 @@ export function getOrderShippedEmail(params: {
 }): string {
   const { customerName, orderId, trackingNumber, trackingCarrier } = params;
   const shortOrderId = orderId.slice(-8).toUpperCase();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+   const appUrl = getAppUrl();
 
   return `
 <!DOCTYPE html>

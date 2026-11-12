@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { z } from "zod";
 import { sendEmail } from "@/lib/email";
+import { getAppUrl } from "@/lib/app-url";
 
 const SendNotificationSchema = z
   .object({
@@ -225,10 +226,8 @@ export async function POST(req: Request) {
       if (!recipient.email) {
         emailStatus = "SKIPPED_NO_EMAIL";
       } else {
-        const appUrl = (
-          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-        ).replace(/\/+$/, "");
 
+        const appUrl = getAppUrl();
         const safeTitle = escapeHtml(title);
         const safeMessage = escapeHtml(message).replace(/\n/g, "<br>");
         const safeFirstName = escapeHtml(recipient.firstName || "there");
