@@ -1,12 +1,14 @@
 // src/emails/review-request.ts
 
+import { getAppUrl } from "../lib/app-url";
+
 export function getReviewRequestEmail(params: {
   customerName: string;
   orderId: string;
 }): string {
   const { customerName, orderId } = params;
   const shortOrderId = orderId.slice(-8).toUpperCase();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = getAppUrl();
 
   return `
 <!DOCTYPE html>

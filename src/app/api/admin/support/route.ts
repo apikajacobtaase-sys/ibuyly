@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { z } from "zod";
 import { sendEmail } from "@/lib/email";
+import { getAppUrl } from "@/lib/app-url";
 
 const ReplyTicketSchema = z.object({
   ticketId: z.string().cuid(),
@@ -86,7 +87,7 @@ export async function PATCH(req: Request) {
               <p style="margin: 0; color: #111827; line-height: 1.5;">${resolution}</p>
             </div>
             <p style="color: #4b5563; line-height: 1.6;">Status: <strong>${status.replace("_", " ")}</strong></p>
-            <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/seller/support" style="display: inline-block; margin-top: 16px; padding: 10px 20px; background: #111827; color: white; text-decoration: none; border-radius: 6px;">View Ticket</a>
+            <a href="${getAppUrl()}/seller/support" style="display: inline-block; margin-top: 16px; padding: 10px 20px; background: #111827; color: white; text-decoration: none; border-radius: 6px;">View Ticket</a>
           </div>
         </div>
       `;

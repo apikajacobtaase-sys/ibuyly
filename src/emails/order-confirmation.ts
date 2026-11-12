@@ -1,5 +1,7 @@
 ﻿// src/emails/order-confirmation.ts
 
+import { getAppUrl } from "../lib/app-url";
+
 interface OrderItem {
   title: string;
   quantity: number;
@@ -16,12 +18,7 @@ export function getOrderConfirmationEmail(params: {
 }): string {
   const { customerName, orderId, items, totalAmount, shippingAddress } = params;
   const shortOrderId = orderId.slice(-8).toUpperCase();
-  const appUrl = (
-  process.env.NEXTAUTH_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "https://ibuyly.vercel.app"
-).replace(/\/+$/, "");
- // âœ… NUCLEAR FIX: Hardcode the live Vercel URL to guarantee no localhost fallback
+  const appUrl = getAppUrl();
   const itemsHtml = items.map(item => `
     <tr>
       <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6;">
