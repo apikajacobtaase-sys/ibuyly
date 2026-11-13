@@ -1,4 +1,5 @@
  // src/app/products/[slug]/page.tsx
+ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -12,6 +13,75 @@ import ProductSellerOffers from "@/components/product/ProductSellerOffers";
 import ChatBox from "@/components/chat/ChatBox";
 import StartChatButton from "@/components/chat/StartChatButton";
 import RecentlyViewedTracker from "@/components/RecentlyViewedTracker";
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  const product = await db.product.findUnique({
+    where: { slug },
+    select: {
+      title: true,
+      description: true,
+      slug: true,
+      status: true,
+      images: {
+        orderBy: [
+          { isPrimary: "desc" },
+          { sortOrder: "asc" },
+        ],
+        take: 1,
+        select: {
+          url: true,
+          altText: true,
+        },
+      },
+    },
+  });
+
+  if (!product) {
+    return {
+      title: "Product Not Found",
+      robots: { index: false, follow: true },
+    };
+  }
+const description = (
+  product.description?.replace(/\s+/g, " ").trim() ||
+  `Discover ${product.title} on iBUY, Ghana's online shopping marketplace.`
+).slice(0, 160);
+
+  const image = product.images[0];
+
+  return {
+    title: product.title,
+    description,
+    alternates: {
+      canonical: `/products/${product.slug}`,
+    },
+    robots: {
+      index: product.status === "ACTIVE",
+      follow: true,
+    },
+    openGraph: {
+      type: "website",
+      title: product.title,
+      description,
+      url: `/products/${product.slug}`,
+      siteName: "iBUY",
+      images: image
+  ? [{ url: image.url, alt: product.title }]
+  : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: product.title,
+      description,
+      images: image ? [image.url] : [],
+    },
+  };
+}
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = await params;
   const slug = resolvedParams.slug;
