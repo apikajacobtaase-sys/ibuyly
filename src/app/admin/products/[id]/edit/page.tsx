@@ -404,6 +404,27 @@ export default function EditCatalogueProductPage() {
                 </div>
 
                 <div className="p-2 space-y-2">
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-gray-600">
+                      Image Alt Text
+                    </span>
+                    <input
+                      type="text"
+                      value={image.altText || ""}
+                      maxLength={300}
+                      placeholder={title || "Describe this image"}
+                      onChange={(e) =>
+                        setImages((current) =>
+                          current.map((item, i) =>
+                            i === index
+                              ? { ...item, altText: e.target.value }
+                              : item
+                          )
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-300 px-2 py-2 text-xs focus:border-indigo-500 focus:outline-none"
+                    />
+                  </label>
                   {index === 0 && (
                     <span className="text-xs font-semibold text-indigo-600">
                       Primary Image

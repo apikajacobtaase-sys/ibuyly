@@ -71,8 +71,8 @@ const description = (
       url: `/products/${product.slug}`,
       siteName: "iBUY",
       images: image
-        ? [{ url: image.url, alt: image.altText || product.title }]
-        : [],
+  ? [{ url: image.url, alt: product.title }]
+  : [],
     },
     twitter: {
       card: "summary_large_image",
