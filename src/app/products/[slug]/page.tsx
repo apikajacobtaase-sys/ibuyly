@@ -95,6 +95,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     include: {
       images: true,
       category: true,
+      reviews: {
+  select: {
+    rating: true,
+  },
+},
       variants: {
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
@@ -122,7 +127,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   });
 
   if (!product) notFound();
+   const reviewCount = product.reviews.length;
 
+  const averageRating =
+    reviewCount > 0
+      ? product.reviews.reduce((sum, review) => sum + review.rating, 0) /
+        reviewCount
+      : 0;
   const bestVariant = product.variants.find(
     (variant) => variant.sellerOffers.length > 0
   );
@@ -192,9 +203,63 @@ let initialMessages: {
       initialMessages = conv.messages;
     }
   }
+     const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.title,
+    description: product.description,
+    image: product.images.map((image) => image.url),
+    category: product.category?.name,
+    url: `https://www.ibuydeals.africa/products/${product.slug}`,
 
+    ...(reviewCount > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: Number(averageRating.toFixed(1)),
+            reviewCount,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
+
+    ...(product.status === "ACTIVE" && bestOffer
+      ? {
+          offers: {
+            "@type": "Offer",
+            url: `https://www.ibuydeals.africa/products/${product.slug}`,
+            priceCurrency: "GHS",
+            price: price.toFixed(2),
+            availability: "https://schema.org/InStock",
+            itemCondition:
+              bestOffer.condition === "USED"
+                ? "https://schema.org/UsedCondition"
+                : bestOffer.condition === "REFURBISHED"
+                  ? "https://schema.org/RefurbishedCondition"
+                  : "https://schema.org/NewCondition",
+          ...(seller?.businessName
+  ? {
+      seller: {
+        "@type": "Organization",
+        name: seller.businessName,
+      },
+    }
+  : {}),
+          },
+        }
+      : {}),
+  };
 return (
   <div className="bg-white min-h-screen">
+        {product.status === "ACTIVE" && (
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+    )}
     <RecentlyViewedTracker
       id={product.id}
       title={product.title}
@@ -251,15 +316,26 @@ return (
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-3">{product.title}</h1>
 
             <div className="flex items-center gap-4 mb-6 border-b border-gray-100 pb-6">
-              <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md">
-                <Star className="w-4 h-4 text-green-600 fill-current" />
-                <span className="text-sm font-bold text-green-700">4.8</span>
-              </div>
-              <span className="text-sm text-gray-500">120 Reviews</span>
-              <span className={`text-sm font-medium px-2 py-1 rounded-full ${stock > 0 ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
-                {stock > 0 ? "In Stock" : "Out of Stock"}
-              </span>
-            </div>
+  {reviewCount > 0 ? (
+    <>
+      <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md">
+        <Star className="w-4 h-4 text-green-600 fill-current" />
+        <span className="text-sm font-bold text-green-700">
+          {averageRating.toFixed(1)}
+        </span>
+      </div>
+      <span className="text-sm text-gray-500">
+        {reviewCount} {reviewCount === 1 ? "Review" : "Reviews"}
+      </span>
+    </>
+  ) : (
+    <span className="text-sm text-gray-500">No reviews yet</span>
+  )}
+
+  <span className={`text-sm font-medium px-2 py-1 rounded-full ${stock > 0 ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
+    {stock > 0 ? "In Stock" : "Out of Stock"}
+  </span>
+</div>
 
             {/* Price */}
             <div className="mb-6">
