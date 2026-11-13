@@ -7,7 +7,7 @@ import Header from "@/components/Header";
 import OnboardingBanner from "@/components/OnboardingBanner";
 import DraggableFAB from "@/components/DraggableFAB";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
-
+import CompareBar from "@/components/CompareBar";
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,8 +39,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           {children}
         </main>
       </div>
-
-      <DraggableFAB />
+     <DraggableFAB />
+<CompareBar />
     </div>
   );
 }

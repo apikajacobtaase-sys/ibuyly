@@ -1,111 +1,91 @@
-﻿  // src/app/api/products/route.ts
-import { db } from "@/lib/db";
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
+import { discoverProducts, ProductSort } from "@/lib/product-discovery";
+
+const VALID_SORTS: ProductSort[] = [
+  "newest",
+  "price_asc",
+  "price_desc",
+  "rating",
+];
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "12");
-    const skip = (page - 1) * limit;
 
-    const products = await db.product.findMany({
-      include: {
-        variants: {
-          include: {
-            sellerOffers: {
-              include: {
-                seller: { select: { id: true, businessName: true, logoUrl: true } }
-              }
-            }, 
-          },
-        },
-        images: { 
-          take: 1,
-          select: { url: true } 
-        }, 
-        category: { select: { name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
+    const page = Math.max(
+      1,
+      parseInt(searchParams.get("page") || "1", 10) || 1
+    );
+
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(searchParams.get("limit") || "12", 10) || 12)
+    );
+
+    const query =
+      searchParams.get("q") ||
+      searchParams.get("search") ||
+      "";
+
+    const categoryId = searchParams.get("categoryId") || undefined;
+
+    const categorySlug =
+      searchParams.get("categorySlug") ||
+      searchParams.get("category") ||
+      undefined;
+
+    const minPriceParam = searchParams.get("minPrice");
+    const maxPriceParam = searchParams.get("maxPrice");
+
+    const minPrice =
+      minPriceParam !== null ? Number(minPriceParam) : undefined;
+
+    const maxPrice =
+      maxPriceParam !== null ? Number(maxPriceParam) : undefined;
+
+    if (
+      (minPrice !== undefined &&
+        (!Number.isFinite(minPrice) || minPrice < 0)) ||
+      (maxPrice !== undefined &&
+        (!Number.isFinite(maxPrice) || maxPrice < 0))
+    ) {
+      return NextResponse.json(
+        { error: "Invalid price filter" },
+        { status: 400 }
+      );
+    }
+
+    const requestedSort = searchParams.get("sort") as ProductSort | null;
+
+    const sort: ProductSort =
+      requestedSort && VALID_SORTS.includes(requestedSort)
+        ? requestedSort
+        : "newest";
+
+    const result = await discoverProducts({
+      query,
+      categoryId,
+      categorySlug,
+      minPrice,
+      maxPrice,
+      sort,
+      page,
+      limit,
     });
-
-    const formattedProducts = products.map((p) => {
-      let lowestPrice: number | null = null;
-      let isAnyInStock = false;
-      
-      let bestOfferId: string | null = null;
-      let bestVariantId: string | null = null;
-      let bestSellerId: string | null = null;
-      let bestSellerName: string | null = null;
-      let bestSellerLogoUrl: string | null = null;
-      let bestStockQuantity: number = 0;
-
-      for (const v of p.variants) {
-        const offers = v.sellerOffers || [];
-        const inStockOffers = offers.filter((o: any) => o.stockQuantity > 0);
-        
-        if (inStockOffers.length > 0) {
-          isAnyInStock = true;
-          // Find the cheapest IN-STOCK offer
-          const cheapestOffer = inStockOffers.reduce((min: any, o: any) => 
-            parseFloat(o.price.toString()) < parseFloat(min.price.toString()) ? o : min
-          );
-          
-          const offerPrice = parseFloat(cheapestOffer.price.toString());
-          if (lowestPrice === null || offerPrice < lowestPrice) {
-            lowestPrice = offerPrice;
-            bestOfferId = cheapestOffer.id;
-            bestVariantId = v.id;
-            bestSellerId = cheapestOffer.seller.id;
-            bestSellerName = cheapestOffer.seller.businessName;
-            bestSellerLogoUrl = cheapestOffer.seller.logoUrl;
-            bestStockQuantity = cheapestOffer.stockQuantity;
-          }
-        } else if (v.stockQuantity > 0) {
-          // Fallback to global variant if no seller offers are in stock
-          isAnyInStock = true;
-          const vPrice = parseFloat(v.price.toString());
-          if (lowestPrice === null || vPrice < lowestPrice) {
-            lowestPrice = vPrice;
-            bestVariantId = v.id;
-            bestStockQuantity = v.stockQuantity;
-            bestSellerId = p.sellerId || "global";
-            bestSellerName = "iBUY Marketplace";
-          }
-        }
-      }
-
-      const firstImage = p.images?.[0];
-      const imageUrl = firstImage?.url || null;
-
-      return {
-        id: p.id,
-        title: p.title || "Untitled Product",
-        slug: p.slug || "",
-        price: lowestPrice ?? 0,
-        imageUrl: imageUrl,
-        stockQuantity: bestStockQuantity, // ðŸ‘ˆ The accurate "Buy Box" stock
-        inStock: isAnyInStock,
-        categoryName: p.category?.name || "General",
-        sellerId: bestSellerId,
-        sellerName: bestSellerName,
-        sellerLogoUrl: bestSellerLogoUrl,
-        bestOfferId: bestOfferId,   // ðŸ‘ˆ CRITICAL for Add to Cart
-        bestVariantId: bestVariantId, // ðŸ‘ˆ CRITICAL for Add to Cart
-      };
-    });
-
-    const total = await db.product.count();
 
     return NextResponse.json({
-      products: formattedProducts,
-      hasMore: skip + formattedProducts.length < total,
-      total,
+      products: result.products,
+      total: result.total,
+      page,
+      limit,
+      hasMore: page * limit < result.total,
     });
-  } catch (error: any) {
-    console.error("ðŸš¨ PRODUCTS API CRASHED:", error.message);
-    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+  } catch (error) {
+    console.error("Products API Error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch products" },
+      { status: 500 }
+    );
   }
 }

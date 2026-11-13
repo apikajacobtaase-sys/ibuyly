@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { logAudit } from "@/lib/audit";
 import { sendSellerApplicationEmail } from "@/lib/email";
-
+import { getAppUrl } from "@/lib/app-url";
 const QuestionSchema = z.object({
   id: z.string().min(1).max(80),
   question: z.string().trim().min(3).max(500),

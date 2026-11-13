@@ -1,5 +1,4 @@
-// src/tests/security/auth.test.ts
-import { describe, it, expect, vi } from 'vitest';
+ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -11,7 +10,7 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('bcryptjs', () => ({
   default: {
-    compare: vi.fn().mockResolvedValue(true), // Password always matches
+    compare: vi.fn().mockResolvedValue(true),
   },
 }));
 
@@ -24,19 +23,20 @@ describe('Authentication Security', () => {
       id: 'user1',
       email: 'suspended@example.com',
       passwordHash: 'hashed',
-      accountStatus: 'SUSPENDED', // 👈 Suspended
+      accountStatus: 'SUSPENDED',
+      isActive: true,
       firstName: 'Bad',
       lastName: 'Actor',
     } as any);
 
     const authorize = authOptions.providers[0].options.authorize;
-    
+
     await expect(
       authorize!(
         { email: 'suspended@example.com', password: 'Password123!' },
         {} as any
       )
-    ).rejects.toThrow('suspended');
+    ).rejects.toThrow('unavailable');
   });
 
   it('should BLOCK login for DISABLED accounts', async () => {
@@ -44,19 +44,20 @@ describe('Authentication Security', () => {
       id: 'user1',
       email: 'disabled@example.com',
       passwordHash: 'hashed',
-      accountStatus: 'DISABLED', // 👈 Disabled
+      accountStatus: 'DISABLED',
+      isActive: true,
       firstName: 'Disabled',
       lastName: 'User',
     } as any);
 
     const authorize = authOptions.providers[0].options.authorize;
-    
+
     await expect(
       authorize!(
         { email: 'disabled@example.com', password: 'Password123!' },
         {} as any
       )
-    ).rejects.toThrow('disabled');
+    ).rejects.toThrow('unavailable');
   });
 
   it('should ALLOW login for ACTIVE accounts with correct password', async () => {
@@ -64,13 +65,14 @@ describe('Authentication Security', () => {
       id: 'user1',
       email: 'active@example.com',
       passwordHash: 'hashed',
-      accountStatus: 'ACTIVE', // 👈 Active
+      accountStatus: 'ACTIVE',
+      isActive: true,
       firstName: 'Good',
       lastName: 'User',
     } as any);
 
     const authorize = authOptions.providers[0].options.authorize;
-    
+
     const result = await authorize!(
       { email: 'active@example.com', password: 'Password123!' },
       {} as any
@@ -86,16 +88,16 @@ describe('Authentication Security', () => {
       email: 'user@example.com',
       passwordHash: 'hashed',
       accountStatus: 'ACTIVE',
+      isActive: true,
       firstName: 'Test',
       lastName: 'User',
     } as any);
 
-    // Override bcrypt to return false for this test
     const bcrypt = await import('bcryptjs');
     vi.mocked(bcrypt.default.compare).mockResolvedValueOnce(false);
 
     const authorize = authOptions.providers[0].options.authorize;
-    
+
     await expect(
       authorize!(
         { email: 'user@example.com', password: 'WrongPassword!' },

@@ -9,6 +9,11 @@ type GroupedOrderItem = {
   quantity: number;
   price: number;
   sku: string;
+  status: string;
+  trackingNumber: string | null;
+  trackingCarrier: string | null;
+  shippedAt: Date | null;
+  deliveredAt: Date | null;
 };
 
 type SellerOrderGroup = {
@@ -39,6 +44,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           },
         },
         payment: true,
+        refundOperations: {
+  orderBy: { createdAt: "desc" },
+  select: {
+    id: true,
+    reason: true,
+    amount: true,
+    currency: true,
+    status: true,
+    providerReference: true,
+    createdAt: true,
+    completedAt: true,
+  },
+},
         shipment: true,
       },
     });
@@ -74,15 +92,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       // Prisma Decimal must be converted before arithmetic.
       const price = Number(item.price.toString());
       const itemTotal = price * item.quantity;
-
-      existing.items.push({
-        id: item.id,
-        title: item.title,
-        quantity: item.quantity,
-        price,
-        sku: item.variant?.sku ?? "N/A",
-      });
-
+existing.items.push({
+  id: item.id,
+  title: item.title,
+  quantity: item.quantity,
+  price,
+  sku: item.variant?.sku ?? "N/A",
+  status: item.status,
+  trackingNumber: item.trackingNumber,
+  trackingCarrier: item.trackingCarrier,
+  shippedAt: item.shippedAt,
+  deliveredAt: item.deliveredAt,
+});
       existing.subtotal += itemTotal;
     }
 
@@ -125,6 +146,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           providerTransactionId: order.payment.providerTransactionId,
           createdAt: order.payment.createdAt,
         } : null,
+        refundOperations: order.refundOperations.map((refund) => ({
+  ...refund,
+  amount: Number(refund.amount.toString()),
+})),
         shipment: order.shipment ? {
           carrier: order.shipment.carrier,
           trackingNumber: order.shipment.trackingNumber,
@@ -141,47 +166,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+
+export async function PATCH() {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session || session.user?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
-    const { id } = await params;
-    const { status } = await req.json();
-
-    if (status === "REFUNDED") {
       return NextResponse.json(
-        { error: "Use the dedicated refund process to refund an order." },
-        { status: 400 }
+        { error: "Unauthorized" },
+        { status: 403 }
       );
     }
 
-    const validStatuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-    }
-
-    await db.order.update({
-      where: { id },
-      data: { status },
-    });
-
-    // Log the action
-    await db.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "ORDER_STATUS_UPDATED",
-        resourceType: "Order",
-        resourceId: id,
-        metadata: { newStatus: status },
+    return NextResponse.json(
+      {
+        error:
+          "Order status is system-managed. Use the dedicated payment, fulfilment, or refund workflow.",
       },
-    });
-
-    return NextResponse.json({ success: true });
+      { status: 403 }
+    );
   } catch (error) {
-    console.error("Order update error:", error);
-    return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
+    console.error("Admin order update error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to process request" },
+      { status: 500 }
+    );
   }
 }

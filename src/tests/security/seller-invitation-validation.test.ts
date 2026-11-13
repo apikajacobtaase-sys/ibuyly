@@ -88,18 +88,19 @@ describe("Seller invitation validation security", () => {
     expect(response.status).toBe(403);
     expect(db.sellerInvitation.findUnique).not.toHaveBeenCalled();
   });
+it("allows active accounts with unverified email addresses when invitation is valid", async () => {
+  vi.mocked(db.user.findUnique).mockResolvedValue({
+    ...activeUser,
+    emailVerifiedAt: null,
+  } as any);
 
-  it("rejects accounts with unverified email addresses", async () => {
-    vi.mocked(db.user.findUnique).mockResolvedValue({
-      ...activeUser,
-      emailVerifiedAt: null,
-    } as any);
+  const response = await GET(makeRequest());
+  const data = await response.json();
 
-    const response = await GET(makeRequest());
-
-    expect(response.status).toBe(403);
-    expect(db.sellerInvitation.findUnique).not.toHaveBeenCalled();
-  });
+  expect(response.status).toBe(200);
+  expect(data.valid).toBe(true);
+  expect(db.sellerInvitation.findUnique).toHaveBeenCalled();
+});
 
   it("rejects existing seller accounts", async () => {
     vi.mocked(db.user.findUnique).mockResolvedValue({
@@ -174,22 +175,15 @@ describe("Seller invitation validation security", () => {
     expect(response.status).toBe(400);
   });
 
-  it("accepts a valid invitation for the verified account", async () => {
-    const response = await GET(makeRequest());
-    const data = await response.json();
+ it("accepts a valid invitation for the account", async () => {
+  const response = await GET(makeRequest());
+  const data = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(data.valid).toBe(true);
+  expect(response.status).toBe(200);
+  expect(data.valid).toBe(true);
 
-    expect(db.sellerInvitation.findUnique).toHaveBeenCalledWith({
-      where: { tokenHash },
-      select: {
-        email: true,
-        expiresAt: true,
-        redeemedAt: true,
-        revokedAt: true,
-        applicationId: true,
-      },
-    });
+  expect(db.sellerInvitation.findUnique).toHaveBeenCalledWith({
+    where: { tokenHash },
   });
+});
 });

@@ -1,22 +1,18 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { confirmSuccessfulPayment } from "@/lib/payments/confirm-successful-payment";
 import crypto from "crypto";
-
+import { finalizeRefundOperation } from "@/lib/refunds/finalize-refund-operation";
 export const runtime = "nodejs";
 
 type PaystackEventData = {
   reference?: string;
   status?: string;
-  amount?: number;
+  amount?: string | number;
   currency?: string;
   gateway_response?: string;
   [key: string]: unknown;
-};
-
-type SellerTotal = {
-  grossCents: number;
-  commissionRate: number;
 };
 
 function jsonError(message: string, status: number) {
@@ -103,17 +99,18 @@ async function handleChargeSuccess(data: PaystackEventData) {
   }
 
   const order = await db.order.findUnique({
-    where: { paymentReference: reference },
+    where: {
+      paymentReference: reference,
+    },
     include: {
       payment: true,
-      items: true,
     },
   });
 
   if (!order || !order.payment) {
-    // The checkout may not have saved the reference yet.
-    // Return an error so Paystack can retry.
-    throw new Error(`Order or payment not found for reference ${reference}.`);
+    throw new Error(
+      `Order or payment not found for reference ${reference}.`
+    );
   }
 
   if (order.payment.status === "SUCCESSFUL") {
@@ -126,142 +123,36 @@ async function handleChargeSuccess(data: PaystackEventData) {
     );
     return;
   }
- const paymentCurrency = order.payment.currency;
+
   if (
-    !validateSuccessfulTransaction(data, order.payment, reference)
+    !validateSuccessfulTransaction(
+      data,
+      order.payment,
+      reference
+    )
   ) {
     console.error(
       `Paystack transaction validation failed for order ${order.id}.`
     );
-    throw new Error("Paystack transaction details did not match the order.");
+
+    throw new Error(
+      "Paystack transaction details did not match the order."
+    );
   }
 
-  await db.$transaction(async (tx) => {
-    // Only one confirmation path can claim a pending payment.
-    const claim = await tx.payment.updateMany({
-      where: {
-        orderId: order.id,
-        status: "PENDING",
-      },
-      data: {
-        status: "SUCCESSFUL",
-        providerTransactionId: reference,
-       metadata: {
-paystackResponse: JSON.parse(JSON.stringify(data)) as Prisma.InputJsonValue,
-verifiedAt: new Date().toISOString(),
-verifiedVia: "webhook",
-},
-
-      },
-    });
-
-    if (claim.count === 0) {
-      // Another request already changed the payment state.
-      return;
-    }
-
-    const orderUpdate = await tx.order.updateMany({
-      where: {
-        id: order.id,
-        status: "PENDING",
-      },
-      data: {
-        status: "CONFIRMED",
-      },
-    });
-
-    if (orderUpdate.count !== 1) {
-      // Throwing rolls back the payment claim as well.
-      throw new Error(
-        `Order ${order.id} was not pending when payment confirmation was attempted.`
-      );
-    }
-
-    const sellerTotals = new Map<string, SellerTotal>();
-
-    for (const item of order.items) {
-      if (!item.sellerId) {
-        throw new Error(
-          `Order item ${item.id} has no sellerId; financial allocation cannot proceed.`
-        );
-      }
-
-      if (!item.offerId) {
-        throw new Error(
-          `Order item ${item.id} has no offerId; seller allocation cannot proceed.`
-        );
-      }
-
-      const offer = await tx.sellerOffer.findUnique({
-        where: { id: item.offerId },
-        select: {
-          id: true,
-          sellerId: true,
-          seller: {
-            select: {
-              id: true,
-              commissionRate: true,
-            },
-          },
-        },
-      });
-
-      if (!offer || offer.sellerId !== item.sellerId) {
-        throw new Error(
-          `Seller offer mismatch for order item ${item.id}.`
-        );
-      }
-
-      const sellerId = offer.seller.id;
-      const commissionRate = offer.seller.commissionRate.toNumber();
-      const lineCents = Math.round(item.price.toNumber() * 100) * item.quantity;
-
-      if (!Number.isSafeInteger(lineCents) || lineCents < 0) {
-        throw new Error(`Invalid line amount for order item ${item.id}.`);
-      }
-
-      const existing = sellerTotals.get(sellerId);
-
-      if (existing) {
-        existing.grossCents += lineCents;
-      } else {
-        sellerTotals.set(sellerId, {
-          grossCents: lineCents,
-          commissionRate,
-        });
-      }
-    }
-
-    for (const [sellerId, sellerData] of sellerTotals) {
-      const commissionCents = Math.round(
-        (sellerData.grossCents * sellerData.commissionRate) / 100
-      );
-
-      await tx.sellerFinancialRecord.create({
-        data: {
-          sellerId,
-          orderId: order.id,
-          type: "SALE",
-          amount: sellerData.grossCents / 100,
-         currency: paymentCurrency,
-          description: `Order #${order.id.slice(-8).toUpperCase()} - Gross sale`,
-        },
-      });
-
-      await tx.sellerFinancialRecord.create({
-        data: {
-          sellerId,
-          orderId: order.id,
-          type: "FEE",
-          amount: -commissionCents / 100,
-          currency: paymentCurrency,
-          description: `Platform commission (${sellerData.commissionRate}%)`,
-        },
-      });
-    }
+  const result = await confirmSuccessfulPayment({
+    reference,
+    verifiedVia: "webhook",
+    paystackResponse: JSON.parse(
+      JSON.stringify(data)
+    ) as Prisma.InputJsonValue,
   });
 
-  console.info(`Paystack success event processed for order ${order.id}.`);
+  if (result.claimed) {
+    console.info(
+      `Paystack success event processed for order ${result.orderId}.`
+    );
+  }
 }
 
 /**
@@ -534,29 +425,44 @@ export async function POST(req: Request) {
     } catch {
       return jsonError("Invalid JSON payload.", 400);
     }
+     if (
+  !event ||
+  typeof event.event !== "string" ||
+  !event.data ||
+  typeof event.data !== "object"
+) {
+  return jsonError("Invalid webhook payload.", 400);
+}
 
-    if (
-      !event ||
-      typeof event.event !== "string" ||
-      !event.data ||
-      typeof event.data !== "object"
-    ) {
-      return jsonError("Invalid webhook payload.", 400);
+const data = event.data as PaystackEventData;
+
+switch (event.event) {
+  case "charge.success":
+    await handleChargeSuccess(data);
+    break;
+
+  case "charge.failed":
+    await handleChargeFailed(data);
+    break;
+
+   case "refund.pending":
+  case "refund.processing":
+  case "refund.processed":
+  case "refund.failed":
+  case "refund.needs-attention": {
+    const expectedStatus = event.event.slice("refund.".length);
+
+    if (data.status?.toLowerCase() !== expectedStatus) {
+      throw new Error("Paystack refund event/status mismatch.");
     }
 
-    switch (event.event) {
-      case "charge.success":
-        await handleChargeSuccess(event.data);
-        break;
+    await finalizeRefundOperation(data);
+    break;
+  }
 
-      case "charge.failed":
-        await handleChargeFailed(event.data);
-        break;
-
-      default:
-        // Unhandled events are acknowledged to avoid pointless retries.
-        return NextResponse.json({ received: true });
-    }
+  default:
+    return NextResponse.json({ received: true });
+}
 
     return NextResponse.json({ received: true });
   } catch (error) {

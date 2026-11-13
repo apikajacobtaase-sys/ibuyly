@@ -6,11 +6,30 @@ import { z } from "zod";
 
 const UpdatePayoutSchema = z.object({
   payoutId: z.string().cuid("Invalid payout ID"),
-  status: z.enum(["APPROVED", "PROCESSING", "PAID", "REJECTED", "FAILED"]),
-  paymentReference: z.string().optional(),
-  adminNotes: z.string().optional(),
-  rejectionReason: z.string().optional(),
+  status: z.enum([
+    "APPROVED",
+    "PROCESSING",
+    "PAID",
+    "REJECTED",
+    "FAILED",
+  ]),
+  paymentReference: z
+    .string()
+    .trim()
+    .max(120, "Payment reference cannot exceed 120 characters")
+    .optional(),
+  adminNotes: z
+    .string()
+    .trim()
+    .max(1000, "Admin notes cannot exceed 1000 characters")
+    .optional(),
+  rejectionReason: z
+    .string()
+    .trim()
+    .max(1000, "Rejection reason cannot exceed 1000 characters")
+    .optional(),
 });
+
 
 export async function GET(req: Request) {
   try {
@@ -153,6 +172,30 @@ export async function PATCH(req: Request) {
         } as const;
       }
 
+      // Prevent the same payment reference from being used for multiple payouts.
+if (status === "PAID" && paymentReference?.trim()) {
+  const reference = paymentReference.trim();
+
+  // Serialize checks for the same reference.
+  await tx.$queryRaw`
+    SELECT pg_advisory_xact_lock(hashtext(${reference})::bigint)
+  `;
+
+  const duplicate = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM payouts
+    WHERE payment_details->>'paymentReference' = ${reference}
+      AND id <> ${payoutId}
+    LIMIT 1
+  `;
+
+  if (duplicate.length > 0) {
+    return {
+      error: "This payment reference has already been used for another payout.",
+      statusCode: 409,
+    } as const;
+  }
+}
       const now = new Date();
 
       // Preserve all existing payment details.
@@ -224,7 +267,23 @@ export async function PATCH(req: Request) {
           },
         });
       }
-
+      await tx.auditLog.create({
+  data: {
+    userId: user.id,
+    action: `PAYOUT_${status}`,
+    resourceType: "PAYOUT",
+    resourceId: payout.id,
+    metadata: {
+      previousStatus: payout.status,
+      newStatus: status,
+      amount: Number(payout.amount),
+      currency: payout.currency,
+      paymentReference: trimmedReference ?? null,
+      rejectionReason: rejectionReason?.trim() ?? null,
+      adminNotes: adminNotes?.trim() ?? null,
+    },
+  },
+});
       return {
         updatedPayout,
         sellerId: payout.sellerId,
@@ -284,27 +343,35 @@ export async function PATCH(req: Request) {
   savedAdminNotes ||
   "Please contact support for more information.";
     }
+   
 
     // Notify only after the status change has committed successfully.
-    if (title && message) {
-      const seller = await db.sellerProfile.findUnique({
-        where: { id: sellerId },
-        select: { userId: true },
-      });
+if (title && message) {
+  try {
+    const seller = await db.sellerProfile.findUnique({
+      where: { id: sellerId },
+      select: { userId: true },
+    });
 
-      if (seller?.userId) {
-        await db.notification.create({
-          data: {
-            userId: seller.userId,
-            sellerId,
-            type: "SYSTEM",
-            title,
-            message,
-            link: "/seller/payouts",
-          },
-        });
-      }
+    if (seller?.userId) {
+      await db.notification.create({
+        data: {
+          userId: seller.userId,
+          sellerId,
+          type: "SYSTEM",
+          title,
+          message,
+          link: "/seller/payouts",
+        },
+      });
     }
+  } catch (notificationError) {
+    console.error(
+      "Payout updated, but seller notification failed:",
+      notificationError
+    );
+  }
+}
 
     return NextResponse.json({
       success: true,

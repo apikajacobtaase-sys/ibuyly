@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { confirmSuccessfulPayment } from "@/lib/payments/confirm-successful-payment";
 
 export const runtime = "nodejs";
 
@@ -16,11 +17,6 @@ type PaystackVerificationResponse = {
     currency?: string;
     [key: string]: unknown;
   };
-};
-
-type SellerTotal = {
-  grossCents: number;
-  commissionRate: number;
 };
 
 function jsonError(message: string, status: number) {
@@ -260,155 +256,13 @@ export async function POST(req: Request) {
       JSON.stringify(transaction)
     ) as Prisma.InputJsonValue;
 
-    // 6. Atomically claim the pending payment and confirm the order.
-    //
-    // The webhook uses the same PENDING -> SUCCESSFUL transition.
-    // Only the request that successfully claims the payment may
-    // create seller financial records.
-    const result = await db.$transaction(async (tx) => {
-      const claim = await tx.payment.updateMany({
-        where: {
-          orderId: order.id,
-          status: "PENDING",
-        },
-        data: {
-          status: "SUCCESSFUL",
-          providerTransactionId: paymentReference,
-          metadata: {
-            paystackResponse: responseJson,
-            verifiedAt: new Date().toISOString(),
-            verifiedVia: "verify",
-          },
-        },
-      });
-
-      if (claim.count === 0) {
-        // The webhook or another verification request won the race.
-        return {
-          claimed: false,
-        };
-      }
-
-      const orderUpdate = await tx.order.updateMany({
-        where: {
-          id: order.id,
-          status: "PENDING",
-        },
-        data: {
-          status: "CONFIRMED",
-        },
-      });
-
-      if (orderUpdate.count !== 1) {
-        // Throwing rolls back the payment claim as well.
-        throw new Error(
-          `Could not confirm pending order ${order.id}.`
-        );
-      }
-
-      // 7. Aggregate sales by the actual seller offer.
-      const sellerTotals = new Map<string, SellerTotal>();
-
-      for (const item of order.items) {
-        if (!item.sellerId || !item.offerId || !item.offer) {
-          throw new Error(
-            `Order item ${item.id} is missing its seller offer.`
-          );
-        }
-
-        const offer = await tx.sellerOffer.findUnique({
-          where: {
-            id: item.offerId,
-          },
-          select: {
-            id: true,
-            sellerId: true,
-            seller: {
-              select: {
-                id: true,
-                commissionRate: true,
-              },
-            },
-          },
-        });
-
-        if (
-          !offer ||
-          offer.sellerId !== item.sellerId ||
-          offer.seller.id !== item.sellerId
-        ) {
-          throw new Error(
-            `Seller ownership validation failed for order item ${item.id}.`
-          );
-        }
-
-        const unitPriceCents = toCents(item.price.toNumber());
-        const lineCents = unitPriceCents * item.quantity;
-
-        if (
-          !Number.isSafeInteger(lineCents) ||
-          lineCents < 0
-        ) {
-          throw new Error(
-            `Invalid line total for order item ${item.id}.`
-          );
-        }
-
-        const commissionRate = offer.seller.commissionRate.toNumber();
-        const existing = sellerTotals.get(item.sellerId);
-
-        if (existing) {
-          existing.grossCents += lineCents;
-
-          if (!Number.isSafeInteger(existing.grossCents)) {
-            throw new Error(
-              `Invalid aggregated seller total for ${item.sellerId}.`
-            );
-          }
-        } else {
-          sellerTotals.set(item.sellerId, {
-            grossCents: lineCents,
-            commissionRate,
-          });
-        }
-      }
-
-      // 8. Create financial records within the same transaction.
-      for (const [sellerId, sellerData] of sellerTotals) {
-        const commissionCents = Math.round(
-          (sellerData.grossCents * sellerData.commissionRate) /
-            100
-        );
-
-        await tx.sellerFinancialRecord.create({
-          data: {
-            sellerId,
-            orderId: order.id,
-            type: "SALE",
-            amount: sellerData.grossCents / 100,
-            currency: order.payment!.currency,
-            description: `Order #${order.id
-              .slice(-8)
-              .toUpperCase()} - Gross sale`,
-          },
-        });
-
-        await tx.sellerFinancialRecord.create({
-          data: {
-            sellerId,
-            orderId: order.id,
-            type: "FEE",
-            amount: -commissionCents / 100,
-            currency: order.payment!.currency,
-            description: `Platform commission (${sellerData.commissionRate}%)`,
-          },
-        });
-      }
-
-      return {
-        claimed: true,
-      };
+       // 6. Confirm payment and create seller accounting records.
+    const result = await confirmSuccessfulPayment({
+      reference: paymentReference,
+      verifiedVia: "verify",
+      paystackResponse: responseJson,
     });
+   
 
     // 9. Handle a concurrent request safely.
     if (!result.claimed) {

@@ -7,7 +7,7 @@ import { Plus, Search, Eye, Archive, RotateCcw, Package, Trash2, Save, X, Edit2 
 import { StatusBadge, DataTable, Column } from "@/components/dashboard";
 import { useSellerPermissions } from "@/hooks/usePermissions";
 import { Skeleton } from "@/components/ui/Skeleton";
-
+import ProductSubmissionsPanel from "@/components/seller/ProductSubmissionsPanel";
 interface Product {
   id: string;
   title: string;
@@ -222,14 +222,24 @@ export default function SellerProductsPage() {
           </p>
         </div>
         {permissions?.canManageProducts && (
-          <Link
-            href="/seller/products/new"
-            className="inline-flex items-center gap-2 bg-teal-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-teal-700 transition self-start shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Add from Catalogue
-          </Link>
-        )}
+  <div className="flex flex-wrap gap-2">
+    <Link
+      href="/seller/products/submit"
+      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700"
+    >
+      <Plus className="h-4 w-4" />
+      Submit New Product
+    </Link>
+
+    <Link
+      href="/seller/products/new"
+      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+    >
+      <Package className="h-4 w-4" />
+      Add from Catalogue
+    </Link>
+  </div>
+)}
       </div>
 
       {requiresStoreSelection && (
@@ -243,6 +253,9 @@ export default function SellerProductsPage() {
           </p>
         </div>
       )}
+      {permissions?.canManageProducts && !requiresStoreSelection && (
+  <ProductSubmissionsPanel />
+)}
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
         <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">

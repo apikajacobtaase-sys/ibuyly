@@ -53,13 +53,6 @@ interface Order {
   items: OrderItem[];
 }
 
-const TIMELINE_STEPS = [
-  { status: "PENDING", label: "Order Placed", icon: Clock, color: "amber" },
-  { status: "CONFIRMED", label: "Confirmed", icon: CheckCircle, color: "blue" },
-  { status: "PROCESSING", label: "Processing", icon: Package, color: "indigo" },
-  { status: "SHIPPED", label: "Shipped", icon: Truck, color: "purple" },
-  { status: "DELIVERED", label: "Delivered", icon: CheckCircle, color: "emerald" },
-];
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -139,10 +132,7 @@ const handleReorder = async () => {
     return colors[status] || colors.PENDING;
   };
 
-  const getTimelineStepIndex = (status: string) => {
-    const index = TIMELINE_STEPS.findIndex((step) => step.status === status);
-    return index >= 0 ? index : 0;
-  };
+
 
   if (loading) {
     return (
@@ -165,9 +155,25 @@ const handleReorder = async () => {
         </button>
       </div>
     );
-  }
+    }
 
-  const currentStepIndex = getTimelineStepIndex(order.status);
+  const totalQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const shippedQuantity = order.items
+    .filter((item) => ["SHIPPED", "DELIVERED"].includes(item.status))
+    .reduce((sum, item) => sum + item.quantity, 0);
+
+  const deliveredQuantity = order.items
+    .filter((item) => item.status === "DELIVERED")
+    .reduce((sum, item) => sum + item.quantity, 0);
+
+  const cancelledQuantity = order.items
+    .filter((item) => item.status === "CANCELLED")
+    .reduce((sum, item) => sum + item.quantity, 0);
+
+  const shippingProgress = totalQuantity
+    ? Math.round((shippedQuantity / totalQuantity) * 100)
+    : 0;
 
   return (
     <div className="max-w-4xl mx-auto pb-12 space-y-6 px-4">
@@ -199,63 +205,58 @@ const handleReorder = async () => {
           </span>
         </div>
       </div>
+     {/* Fulfilment Tracking */}
+<div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
+  <div className="flex items-center gap-2 mb-4">
+    <Truck className="w-5 h-5 text-indigo-600" />
+    <h3 className="text-base font-semibold text-gray-900">
+      Delivery Progress
+    </h3>
+  </div>
 
-      {/* Tracking Timeline */}
-      {order.status !== "CANCELLED" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-6 flex items-center gap-2">
-            <Truck className="w-5 h-5 text-indigo-600" />
-            Order Tracking
-          </h3>
-          
-          <div className="relative">
-            {TIMELINE_STEPS.map((step, index) => {
-              const isCompleted = index <= currentStepIndex;
-              const isCurrent = index === currentStepIndex;
-              const Icon = step.icon;
-              
-              return (
-                <div key={step.status} className="relative flex items-start gap-4 pb-8 last:pb-0">
-                  {/* Vertical Line */}
-                  {index < TIMELINE_STEPS.length - 1 && (
-                    <div className={`absolute left-5 top-10 w-0.5 h-full ${
-                      index < currentStepIndex ? "bg-emerald-500" : "bg-gray-200"
-                    }`} />
-                  )}
-                  
-                  {/* Icon Circle */}
-                  <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border-2 ${
-                    isCompleted
-                      ? isCurrent
-                        ? "bg-indigo-600 border-indigo-600 text-white"
-                        : "bg-emerald-500 border-emerald-500 text-white"
-                      : "bg-white border-gray-300 text-gray-400"
-                  }`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  
-                  {/* Content */}
-                  <div className="flex-1 pt-1.5">
-                    <p className={`text-sm font-semibold ${
-                      isCompleted ? "text-gray-900" : "text-gray-400"
-                    }`}>
-                      {step.label}
-                    </p>
-                    {isCurrent && step.status === "SHIPPED" && order.items[0]?.trackingNumber && (
-                      <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                        <p className="text-xs text-purple-900">
-                          <strong>Tracking:</strong> {order.items[0].trackingNumber}
-                          {order.items[0].trackingCarrier && ` via ${order.items[0].trackingCarrier}`}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+  <div className="flex items-center justify-between text-sm mb-2">
+    <span className="font-medium text-gray-700">
+      {shippedQuantity} of {totalQuantity} units dispatched
+    </span>
+    <span className="font-semibold text-indigo-600">
+      {shippingProgress}%
+    </span>
+  </div>
+
+  <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+    <div
+      className="h-full bg-indigo-600 rounded-full transition-all"
+      style={{ width: `${shippingProgress}%` }}
+    />
+  </div>
+
+  <div className="grid grid-cols-3 gap-3 mt-5">
+    <div className="bg-gray-50 rounded-lg p-3">
+      <p className="text-xs text-gray-500">Total</p>
+      <p className="text-lg font-bold text-gray-900">{totalQuantity}</p>
+    </div>
+
+    <div className="bg-purple-50 rounded-lg p-3">
+      <p className="text-xs text-purple-600">Shipped</p>
+      <p className="text-lg font-bold text-purple-700">{shippedQuantity}</p>
+    </div>
+
+    <div className="bg-emerald-50 rounded-lg p-3">
+      <p className="text-xs text-emerald-600">Delivered</p>
+      <p className="text-lg font-bold text-emerald-700">{deliveredQuantity}</p>
+    </div>
+  </div>
+
+  {cancelledQuantity > 0 && (
+    <p className="text-sm text-rose-600 mt-4">
+      {cancelledQuantity} unit(s) cancelled.
+    </p>
+  )}
+
+  <p className="text-xs text-gray-500 mt-4">
+    Each product is tracked independently according to its seller's fulfilment progress.
+  </p>
+</div>
 
       {/* Order Items */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -308,14 +309,35 @@ const handleReorder = async () => {
                     <span className="text-gray-600">Subtotal: <strong className="text-indigo-600">GH₵ {item.subtotal.toFixed(2)}</strong></span>
                   </div>
 
-                  {item.trackingNumber && (
-                    <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                      <p className="text-xs text-purple-900">
-                        <strong>Tracking:</strong> {item.trackingNumber}
-                        {item.trackingCarrier && ` via ${item.trackingCarrier}`}
-                      </p>
-                    </div>
-                  )}
+                  {(item.trackingNumber || item.shippedAt || item.deliveredAt) && (
+  <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+    {item.trackingNumber && (
+      <p className="text-xs text-purple-900 break-all">
+        <strong>Tracking Number:</strong> {item.trackingNumber}
+      </p>
+    )}
+
+    {item.trackingCarrier && (
+      <p className="text-xs text-purple-900">
+        <strong>Carrier:</strong> {item.trackingCarrier}
+      </p>
+    )}
+
+    {item.shippedAt && (
+      <p className="text-xs text-purple-900">
+        <strong>Shipped:</strong>{" "}
+        {new Date(item.shippedAt).toLocaleDateString("en-GH")}
+      </p>
+    )}
+
+    {item.deliveredAt && (
+      <p className="text-xs text-emerald-700">
+        <strong>Delivered:</strong>{" "}
+        {new Date(item.deliveredAt).toLocaleDateString("en-GH")}
+      </p>
+    )}
+  </div>
+)}
                 </div>
               </div>
             </div>

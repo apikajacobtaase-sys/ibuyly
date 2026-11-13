@@ -157,17 +157,20 @@ describe("Seller application submission security", () => {
     expect(response.status).toBe(403);
   });
 
-  it("rejects unverified email addresses", async () => {
-    mocks.userFindUnique.mockResolvedValue({
-      ...activeUser,
-      emailVerifiedAt: null,
-    });
-
-    const response = await POST(makeRequest());
-
-    expect(response.status).toBe(403);
-    expect(mocks.invitationFindUnique).not.toHaveBeenCalled();
+  it("allows active accounts with unverified email addresses when invitation is valid", async () => {
+  mocks.userFindUnique.mockResolvedValue({
+    ...activeUser,
+    emailVerifiedAt: null,
   });
+
+  const response = await POST(makeRequest());
+  const data = await response.json();
+
+  expect(response.status).toBe(201);
+  expect(data.success).toBe(true);
+  expect(mocks.invitationFindUnique).toHaveBeenCalled();
+  expect(mocks.transaction).toHaveBeenCalled();
+});
 
   it("rejects existing seller accounts", async () => {
     mocks.userFindUnique.mockResolvedValue({

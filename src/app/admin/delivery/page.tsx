@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import AddDeliveryZoneModal from "@/components/AddDeliveryZoneModal";
-
+import { toast } from "sonner";
 import { 
   MapPin, Package, AlertTriangle, CheckCircle, XCircle, 
   Clock, Plus, Loader2, ChevronDown, ChevronUp, Edit // 👈 Added Edit icon
@@ -102,22 +102,33 @@ export default function AdminDeliveryPage() {
     return styles[status] || styles.INACTIVE;
   };
 
-  const updateRequestStatus = async (id: string, newStatus: string) => {
-    try {
-      const res = await fetch("/api/admin/delivery/requests", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status: newStatus }),
-      });
-      if (res.ok) {
-        fetchData();
-        alert("Status updated successfully");
-      }
-    } catch (error) {
-      alert("Failed to update status");
-    }
-  };
+   const updateRequestStatus = async (id: string, newStatus: string) => {
+  try {
+    const res = await fetch("/api/admin/delivery/requests", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: newStatus }),
+    });
 
+    if (res.ok) {
+      toast.success("Coverage request updated", {
+        description: `Request status changed to ${newStatus.replace("_", " ")}.`,
+      });
+
+      fetchData();
+    } else {
+      const data = await res.json();
+
+      toast.error("Status update failed", {
+        description: data.error || "Unable to update coverage request.",
+      });
+    }
+  } catch {
+    toast.error("Network error", {
+      description: "Please check your connection and try again.",
+    });
+  }
+};
   // 👇 Handle opening the modal in Edit mode
   const handleEditZone = (zone: DeliveryZone) => {
     setEditingZone(zone);

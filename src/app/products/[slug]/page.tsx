@@ -11,7 +11,7 @@ import AddToCartButton from "@/components/product/AddToCartButton";
 import ProductSellerOffers from "@/components/product/ProductSellerOffers";
 import ChatBox from "@/components/chat/ChatBox";
 import StartChatButton from "@/components/chat/StartChatButton";
-
+import RecentlyViewedTracker from "@/components/RecentlyViewedTracker";
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = await params;
   const slug = resolvedParams.slug;
@@ -123,8 +123,15 @@ let initialMessages: {
     }
   }
 
-  return (
-    <div className="bg-white min-h-screen">
+return (
+  <div className="bg-white min-h-screen">
+    <RecentlyViewedTracker
+      id={product.id}
+      title={product.title}
+      slug={product.slug}
+      imageUrl={product.images[0]?.url ?? null}
+      price={price}
+    />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Breadcrumbs */}

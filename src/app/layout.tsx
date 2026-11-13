@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import ClientLayout from "@/components/ClientLayout";
-
+import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -45,8 +45,14 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} bg-white text-gray-900`}>
         <Providers>
-          <ClientLayout>{children}</ClientLayout>
-        </Providers>
+  <Toaster
+    position="top-center"
+    richColors
+    closeButton
+    duration={3000}
+  />
+  <ClientLayout>{children}</ClientLayout>
+</Providers>
       </body>
     </html>
   );

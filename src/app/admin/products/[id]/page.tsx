@@ -86,7 +86,15 @@ export default function AdminProductDetailPage() {
             {product.category.name} • {product._count.reviews} reviews
           </p>
         </div>
-        <StatusBadge status={product.status} size="md" />
+        <div className="flex items-center gap-3">
+  <StatusBadge status={product.status} size="md" />
+  <Link
+    href={`/admin/products/${product.id}/edit`}
+    className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+  >
+    Edit Product
+  </Link>
+</div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,52 +1,49 @@
- // src/lib/email.ts
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY || "re_placeholder_for_build");
+ import nodemailer from "nodemailer";
 
 interface SendEmailOptions {
   to: string | string[];
   subject: string;
   html: string;
 }
+
 export async function sendEmail({
   to,
   subject,
   html,
 }: SendEmailOptions) {
   try {
-    const fromEmail =
-      process.env.FROM_EMAIL || "iBUY <onboarding@resend.dev>";
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
 
-    const { data, error } = await resend.emails.send({
+    if (!gmailUser || !gmailPassword) {
+      throw new Error("Gmail SMTP credentials are not configured.");
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: gmailUser,
+        pass: gmailPassword.replace(/\s/g, ""),
+      },
+    });
+
+    const fromEmail =
+      process.env.FROM_EMAIL || `iBUY <${gmailUser}>`;
+
+    const info = await transporter.sendMail({
       from: fromEmail,
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
     });
 
-    if (error) {
-      console.error("Email delivery failed:", error.message);
-
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-
-    if (!data?.id) {
-      console.error("Email provider returned no email ID.");
-
-      return {
-        success: false,
-        error: "Email provider returned no confirmation ID",
-      };
-    }
-
-    console.log("Email accepted by Resend:", data.id);
+    console.log("Email accepted by Gmail:", info.messageId);
 
     return {
       success: true,
-      id: data.id,
+      id: info.messageId,
     };
   } catch (error: unknown) {
     const message =
@@ -63,8 +60,6 @@ export async function sendEmail({
   }
 }
 
-
-// 👇 ADD THIS: Customer Order Confirmation
 export async function sendOrderConfirmationEmail({
   to,
   customerName,
@@ -78,53 +73,30 @@ export async function sendOrderConfirmationEmail({
   totalAmount: number;
   items: { title: string; quantity: number; price: number }[];
 }) {
-  const itemsHtml = items
-    .map(
-      (item) => `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.title}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">GH₵ ${item.price.toFixed(2)}</td>
-        </tr>
-      `
-    )
-    .join("");
+  const itemsHtml = items.map(item => `
+    <tr>
+      <td>${item.title}</td>
+      <td>${item.quantity}</td>
+      <td>GH₵ ${item.price.toFixed(2)}</td>
+    </tr>
+  `).join("");
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #16a34a;">Hi ${customerName},</h2>
-      <p>Thank you for your order! Your payment has been successfully verified.</p>
-      <p><strong>Order ID:</strong> ${orderId}</p>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="padding: 8px; text-align: left;">Item</th>
-            <th style="padding: 8px; text-align: center;">Qty</th>
-            <th style="padding: 8px; text-align: right;">Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHtml}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="2" style="padding: 8px; text-align: right; font-weight: bold;">Total:</td>
-            <td style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a;">GH₵ ${totalAmount.toFixed(2)}</td>
-          </tr>
-        </tfoot>
-      </table>
-      <p>You can track your order status in your iBUY account.</p>
-    </div>
-  `;
-
-  return sendEmail({ 
-    to, 
-    subject: `Order Confirmed: #${orderId.slice(-8).toUpperCase()}`, 
-    html 
+  return sendEmail({
+    to,
+    subject: `Order Confirmed: #${orderId.slice(-8).toUpperCase()}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;">
+        <h2>Hi ${customerName},</h2>
+        <p>Your payment has been successfully verified.</p>
+        <p><strong>Order ID:</strong> ${orderId}</p>
+        <table>${itemsHtml}</table>
+        <h3>Total: GH₵ ${totalAmount.toFixed(2)}</h3>
+        <p>You can track your order in your iBUY account.</p>
+      </div>
+    `,
   });
 }
 
-// 👇 ADD THIS: Seller Notification
 export async function sendSellerNotificationEmail({
   to,
   sellerName,
@@ -136,47 +108,28 @@ export async function sendSellerNotificationEmail({
   orderId: string;
   items: { title: string; quantity: number; price: number }[];
 }) {
-  const itemsHtml = items
-    .map(
-      (item) => `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.title}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">GH₵ ${item.price.toFixed(2)}</td>
-        </tr>
-      `
-    )
-    .join("");
+  const itemsHtml = items.map(item => `
+    <tr>
+      <td>${item.title}</td>
+      <td>${item.quantity}</td>
+      <td>GH₵ ${item.price.toFixed(2)}</td>
+    </tr>
+  `).join("");
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #16a34a;">Hello ${sellerName},</h2>
-      <p>You have a new confirmed order!</p>
-      <p><strong>Order ID:</strong> ${orderId}</p>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="padding: 8px; text-align: left;">Item</th>
-            <th style="padding: 8px; text-align: center;">Qty</th>
-            <th style="padding: 8px; text-align: right;">Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHtml}
-        </tbody>
-      </table>
-      <p>Please log in to your seller dashboard to prepare this order for shipment.</p>
-    </div>
-  `;
-
-  return sendEmail({ 
-    to, 
-    subject: `New Order Received: #${orderId.slice(-8).toUpperCase()}`, 
-    html 
+  return sendEmail({
+    to,
+    subject: `New Order Received: #${orderId.slice(-8).toUpperCase()}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;">
+        <h2>Hello ${sellerName},</h2>
+        <p>You have a new confirmed order!</p>
+        <p>Order ID: ${orderId}</p>
+        <table>${itemsHtml}</table>
+        <p>Please log in to your seller dashboard.</p>
+      </div>
+    `,
   });
 }
-
-// src/lib/email.ts (Add to the bottom)
 
 export async function sendShippingUpdateEmail({
   to,
@@ -193,28 +146,25 @@ export async function sendShippingUpdateEmail({
   carrier?: string;
   items: { title: string; quantity: number }[];
 }) {
-  const itemsList = items.map((item) => `<li>${item.quantity}x ${item.title}</li>`).join("");
-  const trackingInfo = trackingNumber 
-    ? `<p><strong>Tracking Number:</strong> ${trackingNumber} ${carrier ? `(via ${carrier})` : ""}</p>`
-    : "<p>Your seller is preparing your shipment. Tracking info will be updated soon.</p>";
+  const itemsList = items
+    .map(item => `<li>${item.quantity}x ${item.title}</li>`)
+    .join("");
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #16a34a;">Hi ${customerName},</h2>
-      <p>Great news! Your order <strong>#${orderId.slice(-8).toUpperCase()}</strong> has been shipped.</p>
-      <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+  const trackingInfo = trackingNumber
+    ? `<p>Tracking Number: ${trackingNumber} ${carrier ? `(via ${carrier})` : ""}</p>`
+    : "<p>Your seller is preparing your shipment.</p>";
+
+  return sendEmail({
+    to,
+    subject: `Your order #${orderId.slice(-8).toUpperCase()} has been shipped!`,
+    html: `
+      <div style="font-family:Arial,sans-serif;">
+        <h2>Hi ${customerName},</h2>
+        <p>Your order has been shipped.</p>
         ${trackingInfo}
+        <ul>${itemsList}</ul>
       </div>
-      <p><strong>Items in this shipment:</strong></p>
-      <ul>${itemsList}</ul>
-      <p>You can track your order status anytime in your iBUY account.</p>
-    </div>
-  `;
-
-  return sendEmail({ 
-    to, 
-    subject: `Your order #${orderId.slice(-8).toUpperCase()} has been shipped! 🚚`, 
-    html 
+    `,
   });
 }
 
@@ -227,24 +177,16 @@ export async function sendDeliveryConfirmationEmail({
   customerName: string;
   orderId: string;
 }) {
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #16a34a;">Hi ${customerName},</h2>
-      <p>Your order <strong>#${orderId.slice(-8).toUpperCase()}</strong> has been marked as <strong>Delivered</strong>! 🎉</p>
-      <p>We hope you love your purchase. If you have any issues, please contact the seller or our support team.</p>
-      <p style="margin-top: 20px;">
-        <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/orders" 
-           style="background-color: #16a34a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-          View Order & Leave a Review
-        </a>
-      </p>
-    </div>
-  `;
-
-  return sendEmail({ 
-    to, 
-    subject: `Your order #${orderId.slice(-8).toUpperCase()} has been delivered! ✅`, 
-    html 
+  return sendEmail({
+    to,
+    subject: `Your order #${orderId.slice(-8).toUpperCase()} has been delivered!`,
+    html: `
+      <div style="font-family:Arial,sans-serif;">
+        <h2>Hi ${customerName},</h2>
+        <p>Your order #${orderId.slice(-8).toUpperCase()} has been delivered!</p>
+        <p>Thank you for shopping with iBUY.</p>
+      </div>
+    `,
   });
 }
 
@@ -263,53 +205,32 @@ export async function sendSellerApplicationEmail({
     APPROVED: {
       subject: "Your iBUY Seller Application Has Been Approved",
       heading: "Congratulations! Your application is approved.",
-      message:
-        "Your seller application has been approved. You can now proceed with setting up your seller account.",
+      message: "Your seller application has been approved.",
     },
     REJECTED: {
       subject: "Update on Your iBUY Seller Application",
       heading: "Your application was not approved.",
-      message:
-        "Unfortunately, we are unable to approve your seller application at this time.",
+      message: "Unfortunately, we cannot approve your application at this time.",
     },
     MORE_INFORMATION_REQUIRED: {
       subject: "Additional Information Required for Your iBUY Application",
       heading: "We need additional information.",
-      message:
-        "Please review the additional information requested by our team and provide the necessary details.",
+      message: "Please provide the additional information requested by our team.",
     },
   } as const;
 
   const notification = messages[status];
 
-  const escapeHtml = (value: string) =>
-    value.replace(/[&<>"']/g, (character) => {
-      const entities: Record<string, string> = {
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      };
-
-      return entities[character];
-    });
-
-  const reasonHtml = reason
-    ? `<p><strong>Additional details:</strong> ${escapeHtml(reason)}</p>`
-    : "";
-
   return sendEmail({
     to,
     subject: notification.subject,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #111827;">
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;">
         <h2>${notification.heading}</h2>
-        <p>Hello ${escapeHtml(businessName)},</p>
+        <p>Hello ${businessName},</p>
         <p>${notification.message}</p>
-        ${reasonHtml}
+        ${reason ? `<p><strong>Additional details:</strong> ${reason}</p>` : ""}
         <p>Thank you for choosing iBUY.</p>
-        <p>The iBUY Team</p>
       </div>
     `,
   });
@@ -357,19 +278,12 @@ export async function sendEmailVerificationEmail({
     to,
     subject: "Verify Your iBUY Email Address",
     html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;color:#111827;">
-        <h2 style="color:#0f766e;">Verify your iBUY account</h2>
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;">
+        <h2>Verify your iBUY account</h2>
         <p>Welcome to iBUY!</p>
-        <p>Please verify your email address to activate your account.</p>
-        <p style="margin:28px 0;">
-          <a href="${verificationUrl.toString()}"
-             style="background:#0f766e;color:white;padding:13px 22px;text-decoration:none;border-radius:8px;font-weight:bold;">
-            Verify Email Address
-          </a>
-        </p>
-        <p>This verification link expires in 24 hours.</p>
-        <p>If you did not create an iBUY account, you can ignore this email.</p>
-        <p>The iBUY Team</p>
+        <p>Please verify your email address using the link below.</p>
+        <a href="${verificationUrl.toString()}">Verify Email Address</a>
+        <p>This link expires in 24 hours.</p>
       </div>
     `,
   });

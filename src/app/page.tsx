@@ -1,16 +1,16 @@
  // src/app/page.tsx
 "use client";
-
-import React, { useEffect, useState, useRef, useCallback, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Heart, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingCart, GitCompare } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { useWishlistStore } from "@/store/wishlistStore"; // âœ… Correct Import
 import { triggerFlyToCart, getElementRect } from "@/lib/cartAnimation";
 import QuantitySelector from "@/components/QuantitySelector";
-
+import RecentlyViewed from "@/components/RecentlyViewed";
+import { useCompareStore } from "@/store/compareStore";
+import { toast } from "sonner";
 interface Product {
   id: string;
   title: string;
@@ -28,66 +28,81 @@ interface Product {
 }
 
 export default function HomePage() {
-  const router = useRouter();
 
   // âœ… Use Cart Store for Cart logic
   const { addItem: addCartItem, updateQuantity, removeItem: removeCartItem, items: cartItems } = useCartStore();
 
   // âœ… Use Wishlist Store for Wishlist logic
   const { addItem: addWishlistItem, removeItem: removeWishlistItem, isInWishlist } = useWishlistStore();
-
-  const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-
+const {
+  addItem: addCompareItem,
+  removeItem: removeCompareItem,
+  isInCompare,
+} = useCompareStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState("");
 
-  const observer = useRef<IntersectionObserver | null>(null);
-  const lastProductRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (loading) return;
-      if (observer.current) observer.current.disconnect();
+  const [loadMoreError, setLoadMoreError] = useState("");
+ const observer = useRef<IntersectionObserver | null>(null);
+ const loadingMoreRef = useRef(false);
 
-      observer.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && hasMore) {
-          loadMoreProducts();
-        }
-      });
+const lastProductRef = useCallback(
+  (node: HTMLDivElement | null) => {
+    if (loading || loadingMore || !hasMore || loadMoreError) return;
 
-      if (node) observer.current.observe(node);
-    },
-    [loading, hasMore]
-  );
+    if (observer.current) {
+      observer.current.disconnect();
+    }
+
+    observer.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore && !loadingMore && !loadMoreError) {
+        loadMoreProducts();
+      }
+    });
+
+    if (node) {
+      observer.current.observe(node);
+    }
+  },
+  [loading, loadingMore, hasMore, page, loadMoreError]
+);
 
   useEffect(() => {
     loadInitialProducts();
   }, []);
 
   const loadInitialProducts = async () => {
-    setLoading(true);
+  setLoading(true);
+  setError("");
     try {
       await loadProducts(1, true);
     } catch (error) {
-      console.error("Failed to load products:", error);
-    } finally {
+  console.error("Failed to load products:", error);
+  setError("Unable to load products. Please try again.");
+  setHasMore(false);
+} finally {
       setLoading(false);
     }
   };
 
-  const loadMoreProducts = async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      await loadProducts(page + 1, false);
-    } catch (error) {
-      console.error("Failed to load more products:", error);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+const loadMoreProducts = async () => {
+  if (loadingMoreRef.current || loadingMore || !hasMore) return;
+
+  loadingMoreRef.current = true;
+  setLoadingMore(true);
+
+  try {
+    setLoadMoreError("");
+    await loadProducts(page + 1, false);
+  } finally {
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+  }
+};
 
   const loadProducts = async (pageNum: number, reset: boolean) => {
     try {
@@ -111,18 +126,19 @@ export default function HomePage() {
       setHasMore(data.hasMore || false);
       setPage(pageNum);
     } catch (error) {
-      console.error("ðŸ’¥ Failed to load products:", error);
-      setHasMore(false);
-    }
+  console.error("Failed to load products:", error);
+
+  if (reset) {
+    setError("Unable to load products. Please try again.");
+    setHasMore(false);
+  }
+
+  throw error;
+}
   };
 
-  const handleSearch = (e: FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    }
-  };
-  const formatCurrency = (amount: number | null | undefined) => amount == null ? "Price unavailable" : "GH " + amount.toFixed(2);
+ const formatCurrency = (amount: number | null | undefined) =>
+  amount == null ? "Price unavailable" : `GH₵${amount.toFixed(2)}`;
 
   return (
     <div className="min-h-full min-w-0 bg-gray-50 pb-20 md:pb-0">
@@ -145,6 +161,19 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
+            ) : error && products.length === 0 ? (
+  <div className="rounded-xl border border-red-200 bg-white px-5 py-12 text-center">
+    <h3 className="mb-2 text-lg font-bold text-gray-900">
+      Unable to load products
+    </h3>
+    <p className="mb-5 text-sm text-gray-500">{error}</p>
+    <button
+      onClick={loadInitialProducts}
+      className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700"
+    >
+      Try Again
+    </button>
+  </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
               {products.map((product, index) => {
@@ -152,6 +181,7 @@ export default function HomePage() {
 
                 // âœ… Check wishlist status INSIDE the map
                 const isWishlisted = isInWishlist(product.id);
+                const isCompared = isInCompare(product.id);
 
                 const cartItem = cartItems.find((i) => i.offerId === product.bestOfferId);
                 const cartQuantity = cartItem?.quantity || 0;
@@ -163,33 +193,67 @@ export default function HomePage() {
                     className="product-card min-w-0 bg-white rounded-lg p-2 sm:p-3 shadow-sm hover:shadow-md transition group relative flex flex-col"
                   >
                     {/* âœ… WISHLIST BUTTON */}
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (isWishlisted) {
-                          removeWishlistItem(product.id);
-                        } else {
-                          if (product.price == null) {
-                            alert("This product currently has no available price.");
-                            return;
-                          }
-                          addWishlistItem({
-                            id: product.id,
-                            title: product.title,
-                            price: product.price,
-                            imageUrl: product.imageUrl ?? null,
-                            slug: product.slug,
-                            sellerName: product.sellerName || "iBUY",
-                          });
-                        }
-                      }}
-                      className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:shadow-md transition z-10"
-                    >
-                      <Heart
-                        className={`w-4 h-4 transition ${isWishlisted ? "fill-rose-500 text-rose-500" : "text-gray-400"}`}
-                      />
-                    </button>
+                  <div className="absolute top-2 right-2 z-10 flex flex-col gap-2">
+  <button
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isWishlisted) {
+        removeWishlistItem(product.id);
+      } else {
+        if (product.price == null) {
+          toast.error("This product currently has no available price.");
+          return;
+        }
+
+        addWishlistItem({
+          id: product.id,
+          title: product.title,
+          price: product.price,
+          imageUrl: product.imageUrl ?? null,
+          slug: product.slug,
+          sellerName: product.sellerName || "iBUY",
+        });
+      }
+    }}
+    aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+    className="w-9 h-9 flex items-center justify-center bg-white rounded-full shadow-md"
+  >
+    <Heart className={`w-4 h-4 ${isWishlisted ? "fill-rose-500 text-rose-500" : "text-gray-500"}`} />
+  </button>
+
+  <button
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isCompared) {
+        removeCompareItem(product.id);
+      } else {
+        if (product.price == null) {
+          toast.error("This product has no available price.");
+          return;
+        }
+
+        addCompareItem({
+          id: product.id,
+          title: product.title,
+          slug: product.slug,
+          imageUrl: product.imageUrl ?? null,
+          price: product.price,
+        });
+      }
+    }}
+    aria-label={isCompared ? "Remove from comparison" : "Add to comparison"}
+    title={isCompared ? "Remove from comparison" : "Add to comparison"}
+    className={`w-9 h-9 flex items-center justify-center rounded-full shadow-md ${
+      isCompared ? "bg-indigo-600 text-white" : "bg-white text-indigo-600"
+    }`}
+  >
+    <GitCompare className="w-4 h-4" />
+  </button>
+</div>
 
                     <Link href={`/products/${product.slug}`} className="flex-1 flex flex-col">
                       <div className="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden relative">
@@ -257,7 +321,7 @@ export default function HomePage() {
                           }
 
                           if (!product.bestOfferId || !product.bestVariantId) {
-                            alert("Error: This product is missing seller information.");
+                            toast.error("This product is missing seller information. Please try again later.");
                             return;
                           }
 
@@ -300,11 +364,52 @@ export default function HomePage() {
                 );
               })}
             </div>
+            
           )}
 
+{!loading && !error && products.length === 0 && (
+  <div className="rounded-xl border border-gray-200 bg-white px-5 py-12 text-center">
+    <ShoppingCart className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+    <h3 className="mb-2 text-lg font-bold text-gray-900">
+      No products available yet
+    </h3>
+    <p className="text-sm text-gray-500">
+      We're working on bringing you great products. Please check back soon.
+    </p>
+    <Link
+      href="/categories"
+      className="mt-5 inline-block rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
+    >
+      Explore Categories
+    </Link>
+  </div>
+)}
+
+
+ {loadingMore && (
+  <div className="flex justify-center py-6">
+    <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
+      Loading more products...
+    </div>
+  </div>
+)}
+{loadMoreError && (
+  <div className="flex flex-col items-center gap-3 py-6 text-center">
+    <p className="text-sm text-red-600">{loadMoreError}</p>
+    <button
+      onClick={loadMoreProducts}
+      disabled={loadingMore}
+      className="rounded-lg border border-green-600 px-5 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-50 disabled:opacity-50"
+    >
+      Try Loading Again
+    </button>
+  </div>
+)}
           {!hasMore && products.length > 0 && (
             <div className="text-center py-6 text-gray-500 text-sm">You've reached the end</div>
           )}
+          <RecentlyViewed />
         </section>
       </main>
 

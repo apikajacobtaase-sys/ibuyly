@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getServerSession: vi.fn(),
   userFindUnique: vi.fn(),
+ notificationCreate: vi.fn(),
   applicationFindUnique: vi.fn(),
   applicationUpdateMany: vi.fn(),
   applicationUpdate: vi.fn(),
@@ -27,11 +28,18 @@ vi.mock("@/lib/db", () => ({
   db: {
     user: {
       findUnique: mocks.userFindUnique,
+      notification: {
+  create: mocks.notificationCreate,
+},
+
     },
     sellerApplication: {
       findMany: vi.fn(),
     },
     $transaction: mocks.transaction,
+    notification: {
+  create: mocks.notificationCreate,
+},
   },
 }));
 
@@ -103,9 +111,8 @@ function setAdmin(role: "ADMIN" | "SUPER_ADMIN") {
 describe("Admin seller application review security", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     setAdmin("SUPER_ADMIN");
-
+    mocks.notificationCreate.mockResolvedValue({});
     mocks.applicationFindUnique.mockResolvedValue(application);
     mocks.applicationUpdateMany.mockResolvedValue({ count: 1 });
     mocks.applicationUpdate.mockResolvedValue({});
@@ -132,11 +139,18 @@ describe("Admin seller application review security", () => {
     mocks.getServerSession.mockResolvedValue(null);
 
     const response = await POST(
-      makeRequest({
-        applicationId: "application-1",
-        action: "NEEDS_INFO",
-        notes: "Please provide more information.",
-      })
+     makeRequest({
+  applicationId: "application-1",
+  action: "NEEDS_INFO",
+  notes: "Please provide your business registration documents.",
+  questions: [
+    {
+      id: "business-registration",
+      question: "Please provide your business registration details.",
+      type: "LONG_ANSWER",
+    },
+  ],
+})
     );
 
     expect(response.status).toBe(401);
@@ -180,45 +194,64 @@ describe("Admin seller application review security", () => {
     expect(response.status).toBe(403);
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
+it("allows ADMIN to request additional information", async () => {
+  setAdmin("ADMIN");
 
-  it("allows ADMIN to request additional information", async () => {
-    setAdmin("ADMIN");
+  const response = await POST(
+    makeRequest({
+      applicationId: "application-1",
+      action: "NEEDS_INFO",
+      notes: "Please provide your business registration documents.",
+      questions: [
+        {
+          id: "business-registration",
+          question: "Please provide your business registration details.",
+          type: "LONG_ANSWER",
+        },
+      ],
+    })
+  );
 
-    const response = await POST(
-      makeRequest({
-        applicationId: "application-1",
-        action: "NEEDS_INFO",
-        notes: "Please provide your business registration documents.",
-      })
-    );
+  const data = await response.json();
 
-    const data = await response.json();
+  expect(response.status).toBe(200);
+  expect(data.success).toBe(true);
 
-    expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
+  expect(mocks.applicationUpdateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({
+        id: "application-1",
+        status: {
+          in: ["PENDING", "UNDER_REVIEW", "NEEDS_INFO"],
+        },
+      }),
+      data: expect.objectContaining({
+        status: "NEEDS_INFO",
+        reviewedBy: "admin-1",
+      }),
+    })
+  );
 
-    expect(mocks.applicationUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          id: "application-1",
-          status: {
-            in: ["PENDING", "UNDER_REVIEW", "NEEDS_INFO"],
-          },
-        }),
-        data: expect.objectContaining({
-          status: "NEEDS_INFO",
-          reviewedBy: "admin-1",
-        }),
-      })
-    );
+  expect(mocks.logAudit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      userId: "admin-1",
+      action: "SELLER_APPLICATION_INFO_REQUESTED",
+    })
+  );
+});
 
-    expect(mocks.logAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "admin-1",
-        action: "SELLER_APPLICATION_INFO_REQUESTED",
-      })
-    );
-  });
+   makeRequest({
+  applicationId: "application-1",
+  action: "NEEDS_INFO",
+  notes: "Please provide your business registration documents.",
+  questions: [
+    {
+      id: "business-registration",
+      question: "Please provide your business registration details.",
+      type: "LONG_ANSWER",
+    },
+  ],
+})
 
   it("prevents ADMIN from approving applications", async () => {
     setAdmin("ADMIN");

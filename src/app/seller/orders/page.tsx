@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+
 import Link from "next/link";
 import {
   Package, Clock, Truck, CheckCircle, XCircle,
@@ -241,10 +242,18 @@ export default function SellerOrdersPage() {
 
             return (
               <div key={order.id} className="min-w-0">
-                <Link
-                href={`/seller/orders/${order.id}`}
-                className={`block min-w-0 rounded-xl border p-3.5 sm:p-4 transition-all hover:shadow-md ${statusCounts.PENDING > 0 ? "border-amber-300 bg-amber-50/40 active:bg-amber-50" : "border-gray-200 bg-white active:bg-gray-50 hover:border-indigo-300"}`}
-              >
+             <div
+  role="link"
+  tabIndex={0}
+  onClick={() => router.push(`/seller/orders/${order.id}`)}
+  onKeyDown={(event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      router.push(`/seller/orders/${order.id}`);
+    }
+  }}
+         className={`block min-w-0 cursor-pointer rounded-xl border p-3.5 sm:p-4 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${statusCounts.PENDING > 0 ? "border-amber-300 bg-amber-50/40 active:bg-amber-50" : "border-gray-200 bg-white active:bg-gray-50 hover:border-indigo-300"}`}
+>
                 {/* Top Row: Order ID + Status */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
@@ -298,7 +307,14 @@ export default function SellerOrdersPage() {
                   {order.customerPhone && (
                     <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
                       <Phone className="h-3.5 w-3.5 shrink-0" />
-                      <a href={`tel:${order.customerPhone}`} className="min-h-8 inline-flex items-center underline underline-offset-2 hover:text-indigo-700" onClick={(event) => event.stopPropagation()}>{order.customerPhone}</a>
+                      <a
+  href={`tel:${order.customerPhone}`}
+  className="min-h-8 inline-flex items-center underline underline-offset-2 hover:text-indigo-700"
+  onClick={(event) => event.stopPropagation()}
+  onKeyDown={(event) => event.stopPropagation()}
+>
+  {order.customerPhone}
+</a>
                     </p>
                   )}
                   {order.shippingAddress && order.shippingAddress !== "No address provided" && (
@@ -347,8 +363,7 @@ export default function SellerOrdersPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400" />
                 </div>
-              </Link>
-
+              </div>
               {order.items.filter((item) => item.status === "PENDING").length === 1 && (
                 <button
                   type="button"

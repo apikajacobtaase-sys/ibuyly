@@ -15,16 +15,20 @@ interface Product {
   imageUrl?: string | null;
   sellerName?: string;
   stockQuantity: number;
-  category: { name: string; slug: string };
+  categoryName?: string | null;
+categorySlug?: string | null;
+category?: { name: string; slug: string } | null;
 }
 
 export default function CategoryProductsPage() {
   const params = useParams();
   const slug = params.slug as string;
-
+const [appliedMinPrice, setAppliedMinPrice] = useState("");
+const [appliedMaxPrice, setAppliedMaxPrice] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [categoryName, setCategoryName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [sort, setSort] = useState("newest");
   const [minPrice, setMinPrice] = useState("");
@@ -37,27 +41,42 @@ export default function CategoryProductsPage() {
         const queryParams = new URLSearchParams({
           category: slug,
           sort,
-          ...(minPrice && { minPrice }),
-          ...(maxPrice && { maxPrice }),
+          ...(appliedMinPrice && { minPrice: appliedMinPrice }),
+...(appliedMaxPrice && { maxPrice: appliedMaxPrice }),
         });
 
-        const res = await fetch(`/api/products?${queryParams}`);
-        const data = await res.json();
+       const res = await fetch(`/api/products?${queryParams}`);
+const data = await res.json();
 
-        if (res.ok) {
-          setProducts(data.products || []);
-          if (data.products?.length > 0) {
-            setCategoryName(data.products[0].category.name);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch products", error);
-      } finally {
+if (!res.ok) {
+  throw new Error(data.error || "Failed to load category products.");
+}
+
+setProducts(data.products || []);
+setError("");
+
+if (data.products?.length > 0) {
+  setCategoryName(
+    data.products[0].categoryName ||
+    data.products[0].category?.name ||
+    slug
+  );
+} else {
+  setCategoryName(slug.replace(/-/g, " "));
+}
+     } catch (error) {
+  console.error("Failed to fetch products", error);
+  setError(
+    error instanceof Error
+      ? error.message
+      : "Something went wrong. Please try again."
+  );
+}finally {
         setIsLoading(false);
       }
     }
     fetchProducts();
-  }, [slug, sort, minPrice, maxPrice]);
+  }, [slug, sort, appliedMinPrice, appliedMaxPrice]);
 
   return (
     <div className="min-h-screen bg-ibuy-bg pb-20 md:pb-0">
@@ -65,7 +84,7 @@ export default function CategoryProductsPage() {
       <header className="sticky top-0 z-40 bg-ibuy-card border-b border-ibuy-border">
         <div className="max-w-7xl mx-auto px-4 py-3">
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-2 text-sm text-ibuy-text-secondary mb-2">
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-ibuy-text-secondary sm:text-sm">
             <Link href="/" className="hover:text-ibuy-orange">Home</Link>
             <ChevronRight className="w-4 h-4" />
             <Link href="/categories" className="hover:text-ibuy-orange">Categories</Link>
@@ -75,10 +94,12 @@ export default function CategoryProductsPage() {
 
           {/* Controls */}
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-ibuy-text">{categoryName}</h1>
+            <h1 className="text-xl font-extrabold capitalize text-ibuy-text sm:text-2xl">
+  {categoryName || "Category Products"}
+</h1>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="md:hidden flex items-center gap-2 px-3 py-2 bg-ibuy-bg rounded-lg text-sm font-medium"
+              className="md:hidden flex items-center gap-2 rounded-lg border border-ibuy-border bg-ibuy-card px-4 py-2.5 text-sm font-semibold text-ibuy-text shadow-sm"
             >
               <SlidersHorizontal className="w-4 h-4" />
               Filters
@@ -89,7 +110,7 @@ export default function CategoryProductsPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Filters Panel */}
-        <div className={`${showFilters ? "block" : "hidden"} md:block mb-6 bg-ibuy-card rounded-lg border border-ibuy-border p-4`}>
+        <div className={`${showFilters ? "block" : "hidden"} md:block mb-6 bg-ibuy-card rounded-xl border border-ibuy-border p-4 sm:p-5 shadow-sm`}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-ibuy-text mb-2">Sort By</label>
@@ -124,10 +145,43 @@ export default function CategoryProductsPage() {
               />
             </div>
           </div>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+  <button
+    onClick={() => {
+      if (
+        minPrice &&
+        maxPrice &&
+        Number(minPrice) > Number(maxPrice)
+      ) {
+        return;
+      }
+
+      setAppliedMinPrice(minPrice);
+      setAppliedMaxPrice(maxPrice);
+      setShowFilters(false);
+    }}
+    className="rounded-lg bg-ibuy-orange px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+  >
+    Apply Filters
+  </button>
+
+  <button
+    onClick={() => {
+      setMinPrice("");
+      setMaxPrice("");
+      setAppliedMinPrice("");
+      setAppliedMaxPrice("");
+      setShowFilters(false);
+    }}
+    className="rounded-lg border border-ibuy-border bg-white px-5 py-2.5 text-sm font-semibold text-ibuy-text transition hover:bg-gray-50"
+  >
+    Clear Filters
+  </button>
+</div>
         </div>
 
-        {/* Products Grid */}
-        {isLoading ? (
+       {/* Products Grid */}
+{isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="bg-ibuy-card rounded-lg border border-ibuy-border animate-pulse">
@@ -139,12 +193,34 @@ export default function CategoryProductsPage() {
               </div>
             ))}
           </div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-12 bg-ibuy-card rounded-lg border border-ibuy-border">
-            <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-xl font-bold text-ibuy-text mb-2">No products found</h3>
-            <p className="text-ibuy-text-secondary">Try adjusting your filters or browse other categories</p>
-          </div>
+        ) : error ? (
+  <div className="rounded-xl border border-red-200 bg-white px-5 py-12 text-center">
+    <h3 className="mb-2 text-lg font-bold text-gray-900">
+      Unable to load products
+    </h3>
+    <p className="mb-5 text-sm text-gray-500">{error}</p>
+    <button
+      onClick={() => window.location.reload()}
+      className="rounded-lg bg-ibuy-orange px-5 py-2.5 text-sm font-semibold text-white"
+    >
+      Try Again
+    </button>
+  </div>
+) : products.length === 0 ? (
+          <div className="rounded-xl border border-ibuy-border bg-ibuy-card py-12 text-center">
+  <h3 className="mb-2 text-xl font-bold text-ibuy-text">
+    No products found
+  </h3>
+  <p className="text-ibuy-text-secondary">
+    Try adjusting your filters or browse other categories.
+  </p>
+  <Link
+    href="/categories"
+    className="mt-4 inline-block rounded-lg bg-ibuy-orange px-5 py-2 text-sm font-semibold text-white"
+  >
+    Browse Categories
+  </Link>
+</div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
             {products.map((product) => (

@@ -53,6 +53,64 @@ function centsToAmount(cents: number): number {
   return Number((cents / 100).toFixed(2));
 }
 
+function allocateDiscountCents(
+  items: { id: string; amountCents: number }[],
+  discountCents: number
+): Map<string, number> {
+  const allocations = new Map<string, number>();
+
+  if (discountCents <= 0 || items.length === 0) {
+    return allocations;
+  }
+
+  const totalCents = items.reduce(
+    (sum, item) => sum + item.amountCents,
+    0
+  );
+
+  if (
+    !Number.isSafeInteger(totalCents) ||
+    discountCents > totalCents
+  ) {
+    throw new CheckoutError("Invalid discount allocation.");
+  }
+
+  const total = BigInt(totalCents);
+  const discount = BigInt(discountCents);
+
+  const shares = items.map((item) => {
+    const numerator = discount * BigInt(item.amountCents);
+
+    return {
+      id: item.id,
+      amount: Number(numerator / total),
+      remainder: numerator % total,
+    };
+  });
+
+  const allocated = shares.reduce(
+    (sum, share) => sum + share.amount,
+    0
+  );
+
+  const remaining = discountCents - allocated;
+
+  shares
+    .sort((a, b) => {
+      if (a.remainder > b.remainder) return -1;
+      if (a.remainder < b.remainder) return 1;
+      return a.id.localeCompare(b.id);
+    })
+    .forEach((share, index) => {
+      allocations.set(
+        share.id,
+        share.amount + (index < remaining ? 1 : 0)
+      );
+    });
+
+  return allocations;
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
@@ -351,6 +409,26 @@ export async function POST(req: Request) {
         usedCount: discountRecord.usedCount,
       };
     }
+    
+    const itemDiscountCents = new Map<string, number>();
+
+if (discount && discountCents > 0) {
+  const eligibleItems = cartItems
+    .filter((item) => item.offer!.sellerId === discount!.sellerId)
+    .map((item) => ({
+      id: item.id,
+      amountCents: toCents(item.offer!.price) * item.quantity,
+    }));
+
+  const allocations = allocateDiscountCents(
+    eligibleItems,
+    discountCents
+  );
+
+  for (const [itemId, amount] of allocations) {
+    itemDiscountCents.set(itemId, amount);
+  }
+}
 
     // Delivery is not discounted by a seller merchandise discount.
     const finalTotalCents =
@@ -447,6 +525,7 @@ export async function POST(req: Request) {
               status: "PENDING",
               amount: finalTotal,
               currency: "GHS",
+              
             },
           },
           items: {
@@ -458,6 +537,7 @@ export async function POST(req: Request) {
                 title: offer.variant.product.title,
                 price: Number(offer.price),
                 quantity: item.quantity,
+                discountAmount: centsToAmount(itemDiscountCents.get(item.id) ?? 0),
                 sellerId: offer.sellerId,
                 offer: { connect: { id: offer.id } },
                 status: "PENDING",

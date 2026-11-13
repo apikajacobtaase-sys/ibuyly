@@ -283,8 +283,13 @@ export async function PATCH(req: Request) {
       },
       include: {
         order: {
-          include: {
-            user: {
+  include: {
+    payment: {
+      select: {
+        status: true,
+      },
+    },
+    user: {
               select: {
                 id: true,
                 email: true,
@@ -312,6 +317,17 @@ export async function PATCH(req: Request) {
         { status: 404 }
       );
     }
+    if (
+  status === "CANCELLED" &&
+  orderItem.order.payment?.status !== "SUCCESSFUL"
+) {
+  return NextResponse.json(
+    {
+      error: "This item cannot be cancelled because its payment has not been confirmed.",
+    },
+    { status: 409 }
+  );
+}
 
     const statusChanged =
       status !== undefined && status !== orderItem.status;
@@ -405,6 +421,31 @@ export async function PATCH(req: Request) {
       if (updated.count !== 1) {
         return false;
       }
+      if (statusChanged && status === "CANCELLED") {
+  if (!orderItem.offerId) {
+    throw new Error(
+      `Order item ${orderItem.id} has no offerId; inventory restoration requires reconciliation.`
+    );
+  }
+
+  const restored = await tx.sellerOffer.updateMany({
+    where: {
+      id: orderItem.offerId,
+      sellerId: access.sellerId,
+    },
+    data: {
+      stockQuantity: {
+        increment: orderItem.quantity,
+      },
+    },
+  });
+
+  if (restored.count !== 1) {
+    throw new Error(
+      `Could not restore inventory for order item ${orderItem.id}.`
+    );
+  }
+}
 
       if (statusChanged) {
         const orderShortId = orderItem.order.id
@@ -455,6 +496,70 @@ export async function PATCH(req: Request) {
             message,
             link: `/account/orders/${orderItem.order.id}`,
             isRead: false,
+          },
+              });
+      }
+
+      // Synchronize the parent order with fulfilment progress.
+      const orderForAggregation = await tx.order.findUnique({
+        where: { id: orderItem.order.id },
+        select: {
+          status: true,
+          items: {
+            select: {
+              status: true,
+            },
+          },
+        },
+      });
+
+      // Never override payment-pending, cancelled, or refunded orders.
+      if (
+        orderForAggregation &&
+        ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(
+          orderForAggregation.status
+        )
+      ) {
+        const activeItems = orderForAggregation.items.filter(
+          (item) => item.status !== "CANCELLED"
+        );
+
+        let aggregateStatus:
+          | "CONFIRMED"
+          | "PROCESSING"
+          | "SHIPPED"
+          | "DELIVERED"
+          | "CANCELLED";
+
+        if (activeItems.length === 0) {
+          aggregateStatus = "CANCELLED";
+        } else if (
+          activeItems.every((item) => item.status === "DELIVERED")
+        ) {
+          aggregateStatus = "DELIVERED";
+        } else if (
+          activeItems.every((item) =>
+            ["SHIPPED", "DELIVERED"].includes(item.status)
+          )
+        ) {
+          aggregateStatus = "SHIPPED";
+        } else if (
+          activeItems.every((item) =>
+            ["PROCESSING", "SHIPPED", "DELIVERED"].includes(item.status)
+          )
+        ) {
+          aggregateStatus = "PROCESSING";
+        } else {
+          aggregateStatus = "CONFIRMED";
+        }
+
+        await tx.order.updateMany({
+          where: {
+            id: orderItem.order.id,
+            status: orderForAggregation.status,
+          },
+          data: {
+            status: aggregateStatus,
           },
         });
       }

@@ -1,81 +1,225 @@
-// src/app/api/compare/route.ts
-import { db } from "@/lib/db";
+ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-
+import { generateComparisonAnalysis } from "@/lib/concierge-ai";
 export async function POST(req: Request) {
   try {
-    const { productIds } = await req.json();
+    const body = await req.json();
+    const productIds = body?.productIds;
 
-    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-      return NextResponse.json({ error: "Product IDs required" }, { status: 400 });
+    if (
+      !Array.isArray(productIds) ||
+      productIds.length < 2 ||
+      productIds.length > 4 ||
+      !productIds.every(
+        (id: unknown) => typeof id === "string" && id.trim().length > 0
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Provide between 2 and 4 valid product IDs." },
+        { status: 400 }
+      );
     }
 
-    if (productIds.length > 4) {
-      return NextResponse.json({ error: "Maximum 4 products" }, { status: 400 });
+    const uniqueIds = [...new Set(
+      productIds.map((id: string) => id.trim())
+    )];
+
+    if (uniqueIds.length < 2) {
+      return NextResponse.json(
+        { error: "Select at least 2 different products." },
+        { status: 400 }
+      );
     }
 
-    const products = await db.product.findMany({
+    const records = await db.product.findMany({
       where: {
-        id: { in: productIds },
+        id: { in: uniqueIds },
         status: "ACTIVE",
       },
       include: {
-        variants: true,
-        images: { where: { isPrimary: true }, take: 1 },
-        seller: { 
-          select: { 
-            businessName: true,
-            verificationStatus: true,
-            trustMetric: {
-              select: {
-                overallTrustScore: true,
-                averageRating: true,
-              }
-            }
-          } 
+        variants: {
+          where: { isActive: true },
+          include: {
+            sellerOffers: {
+              where: {
+                status: "ACTIVE",
+                stockQuantity: { gt: 0 },
+                seller: { isActive: true },
+              },
+              include: {
+                seller: {
+                  select: {
+                    id: true,
+                    businessName: true,
+                    logoUrl: true,
+                    verificationStatus: true,
+                    trustMetric: {
+                      select: {
+                        overallTrustScore: true,
+                        averageRating: true,
+                        fulfillmentRate: true,
+                        returnRate: true,
+                        totalOrders: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-        category: { select: { name: true, slug: true } },
+        images: {
+          where: { isPrimary: true },
+          take: 1,
+        },
+        category: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
         reviews: {
-          select: { rating: true },
+          select: {
+            rating: true,
+          },
         },
       },
     });
 
-    const comparisonData = products.map((p) => {
-      const variant = p.variants[0];
-      const avgRating = p.reviews.length > 0
-        ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / p.reviews.length
-        : null;
+    const productMap = new Map(
+      records.map((product) => {
+        const offers = product.variants
+          .flatMap((variant) =>
+            variant.sellerOffers.map((offer) => ({
+              offer,
+              variant,
+            }))
+          )
+          .sort((a, b) => {
+            const priceDifference =
+              Number(a.offer.price) - Number(b.offer.price);
 
-      return {
-        id: p.id,
-        title: p.title,
-        slug: p.slug,
-        description: p.description,
-        imageUrl: p.images[0]?.url || null,
-        price: variant?.price ? parseFloat(variant.price.toString()) : 0,
-        compareAtPrice: variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.toString()) : null,
-        stockQuantity: variant?.stockQuantity || 0,
-        attributes: p.attributes || {},
-        sellerName: p.seller?.businessName || "Unknown",
-        sellerVerified: p.seller?.verificationStatus === "VERIFIED",
-        sellerTrustScore: p.seller?.trustMetric?.overallTrustScore 
-          ? parseFloat(p.seller.trustMetric.overallTrustScore.toString()) 
-          : null,
-        sellerRating: p.seller?.trustMetric?.averageRating 
-          ? parseFloat(p.seller.trustMetric.averageRating.toString()) 
-          : null,
-        categoryName: p.category.name,
-        categorySlug: p.category.slug,
-        avgRating: avgRating ? Math.round(avgRating * 10) / 10 : null,
-        reviewCount: p.reviews.length,
-        createdAt: p.createdAt,
-      };
+            return priceDifference !== 0
+              ? priceDifference
+              : a.offer.createdAt.getTime() - b.offer.createdAt.getTime();
+          });
+
+        const best = offers[0];
+
+        const avgRating =
+          product.reviews.length > 0
+            ? product.reviews.reduce(
+                (sum, review) => sum + review.rating,
+                0
+              ) / product.reviews.length
+            : null;
+
+        const seller = best?.offer.seller;
+        const trust = seller?.trustMetric;
+
+        return [
+          product.id,
+          {
+            id: product.id,
+            title: product.title,
+            slug: product.slug,
+            description: product.description,
+            imageUrl: product.images[0]?.url ?? null,
+
+            price: best ? Number(best.offer.price) : null,
+
+            compareAtPrice: best?.variant.compareAtPrice
+              ? Number(best.variant.compareAtPrice)
+              : null,
+
+            stockQuantity: best?.offer.stockQuantity ?? 0,
+
+            bestOfferId: best?.offer.id ?? null,
+            bestVariantId: best?.variant.id ?? null,
+
+            attributes: product.attributes ?? {},
+
+            sellerName: seller?.businessName ?? null,
+            sellerLogoUrl: seller?.logoUrl ?? null,
+            sellerId: seller?.id ?? null,
+
+            sellerVerified:
+              seller?.verificationStatus === "VERIFIED",
+
+            sellerTrustScore: trust
+              ? Number(trust.overallTrustScore)
+              : null,
+
+            sellerRating: trust
+              ? Number(trust.averageRating)
+              : null,
+
+            sellerFulfillmentRate: trust
+              ? Number(trust.fulfillmentRate)
+              : null,
+
+            sellerReturnRate: trust
+              ? Number(trust.returnRate)
+              : null,
+
+            sellerTotalOrders: trust?.totalOrders ?? 0,
+
+            categoryName: product.category.name,
+            categorySlug: product.category.slug,
+
+            avgRating:
+              avgRating === null
+                ? null
+                : Math.round(avgRating * 10) / 10,
+
+            reviewCount: product.reviews.length,
+            createdAt: product.createdAt,
+          },
+        ] as const;
+      })
+    );
+
+    const products = uniqueIds
+      .map((id) => productMap.get(id))
+      .filter((product) => product !== undefined);
+
+ if (body?.includeAnalysis === true) {
+  if (products.length < 2) {
+    return NextResponse.json({
+      products,
+      analysis: null,
+      analysisError: "At least 2 active products are required for analysis.",
+    });
+  }
+
+  try {
+    const analysis = await generateComparisonAnalysis({
+      products,
     });
 
-    return NextResponse.json({ products: comparisonData });
+    return NextResponse.json({
+      products,
+      analysis,
+      analysisError: null,
+    });
+  } catch (error) {
+    console.error("AI comparison analysis error:", error);
+
+    return NextResponse.json({
+      products,
+      analysis: null,
+      analysisError: "AI analysis is temporarily unavailable. You can still compare the products below.",
+    });
+  }
+}
+
+return NextResponse.json({ products });
   } catch (error) {
     console.error("Compare API error:", error);
-    return NextResponse.json({ error: "Failed to fetch comparison data" }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "Failed to fetch comparison data." },
+      { status: 500 }
+    );
   }
 }

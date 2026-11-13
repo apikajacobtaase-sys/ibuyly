@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Users, Shield, Ban, CheckCircle, AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/dashboard";
-
+import { toast } from "sonner";
 interface User {
   id: string;
   email: string;
@@ -41,33 +41,43 @@ export default function AdminCustomersPage() {
   };
 
   const handleStatusChange = async (userId: string, newStatus: string) => {
-    const action = newStatus === "ACTIVE" ? "activate" : newStatus.toLowerCase();
-    const reason = newStatus !== "ACTIVE" 
-      ? prompt(`Reason for ${action}ing this user:`) 
+  const action = newStatus === "ACTIVE" ? "activate" : newStatus.toLowerCase();
+
+  const reason =
+    newStatus !== "ACTIVE"
+      ? prompt(`Reason for ${action}ing this user:`)
       : null;
-      
-    if (newStatus !== "ACTIVE" && reason === null) return; // User cancelled prompt
 
-    if (!confirm(`Are you sure you want to ${action} this user?`)) return;
+  if (newStatus !== "ACTIVE" && reason === null) return;
 
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountStatus: newStatus, reason }),
+  if (!confirm(`Are you sure you want to ${action} this user?`)) return;
+
+  try {
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountStatus: newStatus, reason }),
+    });
+
+    if (res.ok) {
+      toast.success("Account status updated", {
+        description: `User account successfully ${action}d.`,
       });
 
-      if (res.ok) {
-        fetchUsers();
-      } else {
-        const data = await res.json();
-        alert(`❌ ${data.error}`);
-      }
-    } catch (error) {
-      alert("❌ Network error");
-    }
-  };
+      fetchUsers();
+    } else {
+      const data = await res.json();
 
+      toast.error("Update failed", {
+        description: data.error || "Unable to update user account.",
+      });
+    }
+  } catch {
+    toast.error("Network error", {
+      description: "Please check your connection and try again.",
+    });
+  }
+};
   if (session?.user?.role !== "SUPER_ADMIN") {
     return (
       <div className="text-center py-16">

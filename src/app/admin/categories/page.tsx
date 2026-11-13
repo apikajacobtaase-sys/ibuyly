@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import {
   FolderTree,
@@ -69,61 +70,79 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const handleToggleActive = async (category: Category) => {
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/admin/categories", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          categoryId: category.id,
-          isActive: !category.isActive,
-        }),
+const handleToggleActive = async (category: Category) => {
+  setSubmitting(true);
+
+  try {
+    const res = await fetch("/api/admin/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        categoryId: category.id,
+        isActive: !category.isActive,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      toast.success("Category status updated");
+      fetchCategories();
+    } else {
+      toast.error("Update failed", {
+        description: data.error || "Unable to update category status.",
+      });
+    }
+  } catch {
+    toast.error("Network error", {
+      description: "Please check your connection and try again.",
+    });
+  } finally {
+    setSubmitting(false);
+  }
+};
+
+ const handleDelete = async (reassignToCategoryId: string | null) => {
+  if (!selectedCategory) return;
+
+  setSubmitting(true);
+
+  try {
+    const res = await fetch("/api/admin/categories", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        categoryId: selectedCategory.id,
+        reassignToCategoryId,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      toast.success("Category deleted successfully", {
+        description:
+          data.reassignedProducts > 0
+            ? `${data.reassignedProducts} products reassigned.`
+            : undefined,
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        fetchCategories();
-      } else {
-        alert(`❌ ${data.error}`);
-      }
-    } catch (error) {
-      alert("❌ Network error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (reassignToCategoryId: string | null) => {
-    if (!selectedCategory) return;
-
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/admin/categories", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          categoryId: selectedCategory.id,
-          reassignToCategoryId,
-        }),
+      setShowDeleteModal(false);
+      setSelectedCategory(null);
+      fetchCategories();
+    } else {
+      toast.error("Deletion failed", {
+        description: data.error || "Unable to delete category.",
       });
-
-      const data = await res.json();
-      if (res.ok) {
-        alert(`✅ Category deleted successfully${data.reassignedProducts > 0 ? ` (${data.reassignedProducts} products reassigned)` : ""}`);
-        setShowDeleteModal(false);
-        setSelectedCategory(null);
-        fetchCategories();
-      } else {
-        alert(`❌ ${data.error}`);
-      }
-    } catch (error) {
-      alert("❌ Network error");
-    } finally {
-      setSubmitting(false);
     }
-  };
-
+  } catch {
+    toast.error("Network error", {
+      description: "Please check your connection and try again.",
+    });
+  } finally {
+    setSubmitting(false);
+  }
+};
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
