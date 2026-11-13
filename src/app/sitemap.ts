@@ -11,26 +11,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       select: { slug: true, updatedAt: true },
     }),
 
-    db.product.findMany({
-      where: {
-        status: "ACTIVE",
-        variants: {
-          some: {
-            isActive: true,
-            sellerOffers: {
-              some: {
-                status: "ACTIVE",
-                stockQuantity: { gt: 0 },
-              },
-            },
-          },
-        },
-      },
-      select: {
-        slug: true,
-        updatedAt: true,
-      },
-    }),
+   db.product.findMany({
+  where: { status: "ACTIVE" },
+  select: {
+    slug: true,
+    updatedAt: true,
+  },
+}),
   ]);
 
   return [

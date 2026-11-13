@@ -7,18 +7,43 @@ import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.ibuydeals.africa"),
+
   title: {
-    default: "iBUY Marketplace",
+    default: "iBUY | Online Shopping Marketplace in Ghana",
     template: "%s | iBUY",
   },
-  description: "Shop from trusted sellers across Ghana.",
+
+  description:
+    "Discover products, compare prices and shop from sellers across Ghana on iBUY.",
+
   applicationName: "iBUY",
+
+  openGraph: {
+    type: "website",
+    siteName: "iBUY",
+    locale: "en_GH",
+    title: "iBUY | Online Shopping Marketplace in Ghana",
+    description:
+      "Discover products, compare prices and shop from sellers across Ghana on iBUY.",
+    url: "https://www.ibuydeals.africa",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "iBUY | Online Shopping Marketplace in Ghana",
+    description:
+      "Discover products, compare prices and shop from sellers across Ghana on iBUY.",
+  },
+
   manifest: "/manifest.webmanifest",
+
   appleWebApp: {
     capable: true,
     title: "iBUY",
     statusBarStyle: "default",
   },
+
   icons: {
     icon: [
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
