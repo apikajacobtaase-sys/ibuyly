@@ -63,12 +63,17 @@ interface ComparisonAnalysis {
 }
 
 export default function ComparePage() {
-  const { items, removeItem, clearCompare } = useCompareStore();
+const { items, removeItem, clearCompare } = useCompareStore();
 const [products, setProducts] = useState<ProductData[]>([]);
 const [analysis, setAnalysis] = useState<ComparisonAnalysis | null>(null);
 const [analysisError, setAnalysisError] = useState("");
 const [isLoading, setIsLoading] = useState(true);
 const [isAnalyzing, setIsAnalyzing] = useState(false);
+const [comparisonMessage, setComparisonMessage] = useState("");
+const [isSearching, setIsSearching] = useState(false);
+const [comparisonError, setComparisonError] = useState("");
+const [clarification, setClarification] = useState("");
+const [comparisonCriteria, setComparisonCriteria] = useState<string[]>([]);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -142,35 +147,64 @@ const fetchComparisonData = async () => {
     setIsAnalyzing(false);
   }
 };
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-ibuy-bg flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ibuy-orange"></div>
-      </div>
+
+  const handleNaturalComparison = async (
+  e: React.FormEvent<HTMLFormElement>
+) => {
+  e.preventDefault();
+
+  if (!comparisonMessage.trim() || isSearching) return;
+
+  setIsSearching(true);
+  setComparisonError("");
+  setClarification("");
+  setAnalysis(null);
+  setProducts([]);
+  setIsLoading(true);
+
+  try {
+    const res = await fetch("/api/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: comparisonMessage.trim(),
+        includeAnalysis: true,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Comparison failed.");
+    }
+
+    setProducts(data.products || []);
+    setAnalysis(data.analysis || null);
+    setAnalysisError(data.analysisError || "");
+    setComparisonCriteria(data.criteria || []);
+    setClarification(data.clarification || "");
+
+    if (!data.products?.length && !data.clarification) {
+      setComparisonError("No matching products were found.");
+    }
+  } catch (error) {
+    setComparisonError(
+      error instanceof Error ? error.message : "Unable to compare products."
     );
+  } finally {
+    setIsSearching(false);
+    setIsLoading(false);
+  }
+};
+const handleRemoveProduct = (productId: string) => {
+  if (items.some((item) => item.id === productId)) {
+    removeItem(productId);
   }
 
-  if (items.length === 0) {
-    return (
-      <div className="min-h-screen bg-ibuy-bg pb-20 md:pb-0">
-        <header className="sticky top-0 z-40 bg-ibuy-card border-b border-ibuy-border">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
-            <Link href="/" className="text-ibuy-orange hover:underline">← Back</Link>
-            <h1 className="text-xl font-bold text-ibuy-text">Compare Products</h1>
-          </div>
-        </header>
-        <div className="max-w-7xl mx-auto px-4 py-12 text-center">
-          <div className="text-6xl mb-4">🔍</div>
-          <h2 className="text-xl font-bold text-ibuy-text mb-2">No products to compare</h2>
-          <p className="text-ibuy-text-secondary mb-6">Add products to compare by clicking the purple compare icon on product cards</p>
-          <Link href="/" className="inline-block bg-ibuy-orange text-white px-6 py-3 rounded-lg font-semibold hover:bg-ibuy-orange-hover transition">
-            Browse Products
-          </Link>
-        </div>
-        
-      </div>
-    );
-  }
+  setProducts((current) =>
+    current.filter((product) => product.id !== productId)
+  );
+};
 
    const allAttributeKeys = new Set<string>();
 
@@ -239,23 +273,109 @@ const fetchComparisonData = async () => {
             <h1 className="text-lg font-bold text-ibuy-text">Compare Products</h1>
           </div>
           <button
-            onClick={clearCompare}
+            onClick={() => {
+  clearCompare();
+  setProducts([]);
+  setAnalysis(null);
+  setComparisonCriteria([]);
+  setClarification("");
+}}
             className="text-xs text-red-600 hover:text-red-700 font-medium"
           >
             Clear All
           </button>
         </div>
       </header>
+      {/* Natural Language Comparison */}
+<div className="max-w-7xl mx-auto px-4 pt-5">
+  <section className="bg-ibuy-card border border-ibuy-border rounded-xl p-4 md:p-6">
+    <div className="flex items-center gap-2 mb-2">
+      <BrainCircuit className="w-5 h-5 text-ibuy-intelligence" />
+      <h2 className="font-bold text-ibuy-text text-base">
+        Compare with AI
+      </h2>
+      <Sparkles className="w-4 h-4 text-ibuy-intelligence" />
+    </div>
 
+    <p className="text-sm text-ibuy-text-secondary mb-4">
+      Describe what you want to compare. iBUY will find matching products
+      from the marketplace and analyse them.
+    </p>
+
+    <form onSubmit={handleNaturalComparison} className="space-y-3">
+      <textarea
+        value={comparisonMessage}
+        onChange={(e) => setComparisonMessage(e.target.value)}
+        placeholder="E.g. Compare the best two laptops for programming under GH₵10,000 based on performance, battery life and price."
+        maxLength={1000}
+        rows={3}
+        className="w-full rounded-lg border border-ibuy-border bg-ibuy-bg text-ibuy-text p-3 text-sm outline-none focus:ring-2 focus:ring-ibuy-intelligence resize-y"
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs text-ibuy-text-secondary">
+          Compare 2–4 products using natural language.
+        </span>
+
+        <button
+          type="submit"
+          disabled={!comparisonMessage.trim() || isSearching}
+          className="bg-ibuy-intelligence text-white px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+        >
+          {isSearching ? (
+            <>
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              Finding products...
+            </>
+          ) : (
+            <>
+              <BrainCircuit className="w-4 h-4" />
+              Compare Products
+            </>
+          )}
+        </button>
+      </div>
+    </form>
+
+    {comparisonError && (
+      <p className="text-sm text-red-600 mt-3">{comparisonError}</p>
+    )}
+
+    {clarification && (
+      <p className="text-sm text-amber-600 mt-3">{clarification}</p>
+    )}
+
+    {comparisonCriteria.length > 0 && (
+      <div className="mt-3 flex flex-wrap gap-2">
+        {comparisonCriteria.map((criterion) => (
+          <span
+            key={criterion}
+            className="text-xs bg-ibuy-intelligence/10 text-ibuy-intelligence px-3 py-1 rounded-full"
+          >
+            {criterion}
+          </span>
+        ))}
+      </div>
+    )}
+  </section>
+</div>
       <div className="max-w-7xl mx-auto px-2 md:px-4 py-4">
-        {/* Product Headers - Compact */}
+        {isLoading && (
+  <div className="flex items-center justify-center gap-3 py-10 text-ibuy-text-secondary">
+    <span className="animate-spin rounded-full h-6 w-6 border-2 border-ibuy-orange border-t-transparent" />
+    <span className="text-sm">Loading comparison...</span>
+  </div>
+)}
+        {products.length > 0 && (
+  <>
+     {/* Product Headers - Compact */}
         <div className="bg-ibuy-card rounded-lg border border-ibuy-border overflow-hidden mb-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-0">
             {products.map((product) => (
               <div key={product.id} className="relative p-3 border-r border-ibuy-border last:border-r-0">
                 <button
   type="button"
-  onClick={() => removeItem(product.id)}
+  onClick={() => handleRemoveProduct(product.id)}
   aria-label={`Remove ${product.title} from comparison`}
   title="Remove product"
                   className="absolute top-2 right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition z-10"
@@ -706,6 +826,9 @@ const fetchComparisonData = async () => {
             </div>
           </div>
         </div>
+  </>
+)}
+       
       </div>
 
     </div>

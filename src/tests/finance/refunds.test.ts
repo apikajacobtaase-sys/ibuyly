@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   transaction: vi.fn(),
+  returnUpdateMany: vi.fn(),
   queryRaw: vi.fn(),
   findUnique: vi.fn(),
   operationUpdate: vi.fn(),
@@ -46,6 +47,9 @@ const tx = {
   order: {
     update: mocks.orderUpdate,
   },
+  return: {
+  updateMany: mocks.returnUpdateMany,
+},
 };
 
 function makeOperation(paymentAmount = "100.00") {
@@ -93,8 +97,9 @@ function makeEvent(status = "processed") {
 
 describe("Refund finalization", () => {
   beforeEach(() => {
+    mocks.returnUpdateMany.mockResolvedValue({ count: 0 });
     vi.clearAllMocks();
-
+     
     const operation = makeOperation();
 
     mocks.findFirst.mockResolvedValue(operation);

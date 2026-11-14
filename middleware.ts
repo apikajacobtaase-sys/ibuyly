@@ -72,12 +72,11 @@ export default withAuth(
         }
       }
 
-      // Seller routes
       if (pathname.startsWith("/seller") || pathname.startsWith("/api/seller")) {
-        if (!["SELLER", "ADMIN", "SUPER_ADMIN"].includes(userRole)) {
-          return NextResponse.redirect(new URL("/", req.url));
-        }
-      }
+  if (!["SELLER_OWNER", "SELLER_STAFF", "ADMIN", "SUPER_ADMIN"].includes(userRole)) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+}
 
       // Account routes — any authenticated user
       if (pathname.startsWith("/account") || pathname.startsWith("/api/user")) {

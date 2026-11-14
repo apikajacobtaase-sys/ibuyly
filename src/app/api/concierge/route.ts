@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { authOptions } from "@/lib/auth";
+import {
+  hasBudgetMatchingOffer,
+  isWithinBudget,
+  prioritizeOffers,
+  resolveBudget,
+} from "@/lib/concierge-ranking";
+
 import { generateConciergeResponse } from "@/lib/concierge-ai";
 
 export const dynamic = "force-dynamic";
@@ -74,64 +81,6 @@ function expandKeywords(words: string[]) {
   }
 
   return [...expanded];
-}
-
-function extractBudget(message: string) {
-  const normalized = message
-    .toLowerCase()
-    .replace(/,/g, "")
-    .replace(/(\d+(?:\.\d+)?)\s*k\b/g, (_, value) =>
-      String(Number(value) * 1000)
-    );
-
-  const numbers = [...normalized.matchAll(/\d+(?:\.\d+)?/g)]
-    .map((match) => Number(match[0]))
-    .filter((number) => Number.isFinite(number));
-
-  if (numbers.length === 0) {
-    return { minPrice: null, maxPrice: null };
-  }
-
-  const rangeMatch = normalized.match(
-    /between\s+(\d+(?:\.\d+)?)\s+(?:and|to|-)\s+(\d+(?:\.\d+)?)/i
-  );
-
-  if (rangeMatch) {
-    return {
-      minPrice: Math.min(Number(rangeMatch[1]), Number(rangeMatch[2])),
-      maxPrice: Math.max(Number(rangeMatch[1]), Number(rangeMatch[2])),
-    };
-  }
-
-  const isMaximum =
-    /\b(under|below|less than|maximum|max|at most|up to|within)\b/.test(
-      normalized
-    );
-
-  const isMinimum =
-    /\b(over|above|more than|minimum|min|at least)\b/.test(
-      normalized
-    );
-
-  const isApproximate =
-    /\b(around|about|approximately|roughly)\b/.test(normalized);
-
-  if (isMaximum) {
-    return { minPrice: null, maxPrice: numbers[0] };
-  }
-
-  if (isMinimum) {
-    return { minPrice: numbers[0], maxPrice: null };
-  }
-
-  if (isApproximate) {
-    return {
-      minPrice: numbers[0] * 0.8,
-      maxPrice: numbers[0] * 1.2,
-    };
-  }
-
-  return { minPrice: null, maxPrice: null };
 }
 
 function extractKeywords(message: string) {
@@ -234,7 +183,8 @@ export async function POST(req: Request) {
       message,
     ].join(" ");
 
-    const budget = extractBudget(contextualMessage);
+const budget = resolveBudget(message, previousUserMessages);
+
 
     const keywords = expandKeywords(
       extractKeywords(contextualMessage)
@@ -332,12 +282,15 @@ export async function POST(req: Request) {
   variants: {
           some: {
             isActive: true,
-            sellerOffers: {
-              some: {
-                status: "ACTIVE",
-                stockQuantity: { gt: 0 },
-              },
-            },
+          sellerOffers: {
+  some: {
+    status: "ACTIVE",
+    stockQuantity: { gt: 0 },
+    seller: {
+      isActive: true,
+    },
+  },
+},
           },
         },
       },
@@ -350,34 +303,40 @@ export async function POST(req: Request) {
               some: {
                 status: "ACTIVE",
                 stockQuantity: { gt: 0 },
+                seller: {
+  isActive: true,
+},
               },
             },
           },
           include: {
-            sellerOffers: {
-              where: {
-                status: "ACTIVE",
-                stockQuantity: { gt: 0 },
-              },
-              orderBy: { price: "asc" },
-              include: {
-               seller: {
-  select: {
-    id: true,
-    businessName: true,
-    trustMetric: {
+           sellerOffers: {
+  where: {
+    status: "ACTIVE",
+    stockQuantity: { gt: 0 },
+    seller: {
+      isActive: true,
+    },
+  },
+  orderBy: { price: "asc" },
+  include: {
+    seller: {
       select: {
-        overallTrustScore: true,
-        fulfillmentRate: true,
-        averageRating: true,
-        returnRate: true,
-        totalOrders: true,
+        id: true,
+        businessName: true,
+        trustMetric: {
+          select: {
+            overallTrustScore: true,
+            fulfillmentRate: true,
+            averageRating: true,
+            returnRate: true,
+            totalOrders: true,
+          },
+        },
       },
     },
   },
 },
-              },
-            },
           },
         },
 
@@ -487,19 +446,41 @@ const candidates = products
       // treating the cheapest product as the best product.
       let budgetScore = 65;
 
-      if (intent.maxPrice && intent.maxPrice > 0) {
-        const ratio = price / intent.maxPrice;
+const hasMinPrice =
+  intent.minPrice !== null && intent.minPrice > 0;
 
-        if (ratio <= 1) {
-          budgetScore = 100 - ratio * 25;
-        } else {
-          budgetScore = Math.max(
-            0,
-            75 - (ratio - 1) * 150
-          );
-        }
-      }
+const hasMaxPrice =
+  intent.maxPrice !== null && intent.maxPrice > 0;
 
+if (hasMinPrice && hasMaxPrice) {
+  if (price >= intent.minPrice! && price <= intent.maxPrice!) {
+    budgetScore = 100;
+  } else {
+    const distance =
+      price < intent.minPrice!
+        ? intent.minPrice! - price
+        : price - intent.maxPrice!;
+
+    const range = intent.maxPrice! - intent.minPrice!;
+
+    budgetScore = Math.max(
+      0,
+      100 - (distance / Math.max(range, 1)) * 100
+    );
+  }
+} else if (hasMaxPrice) {
+  const ratio = price / intent.maxPrice!;
+
+  budgetScore =
+    ratio <= 1
+      ? 100 - ratio * 25
+      : Math.max(0, 75 - (ratio - 1) * 150);
+} else if (hasMinPrice) {
+  budgetScore =
+    price >= intent.minPrice!
+      ? 100
+      : Math.max(0, (price / intent.minPrice!) * 100);
+}
       // Prefer reliable sellers while considering affordability.
       const offerScore =
         trustScore * 0.65 +
@@ -518,11 +499,9 @@ const candidates = products
       };
     });
 
-    // Best offer balances seller reliability and price.
-    evaluatedOffers.sort((a, b) => b.offerScore - a.offerScore);
+  const prioritizedOffers = prioritizeOffers(evaluatedOffers, intent);
 
-    const bestOffer = evaluatedOffers[0];
-
+const bestOffer = prioritizedOffers[0];
     const sellerTrustScore = bestOffer.trustScore;
     const fulfillmentScore = bestOffer.fulfillmentScore;
     const budgetScore = bestOffer.budgetScore;
@@ -534,7 +513,7 @@ const candidates = products
 
     return {
       product,
-      availableOffers: evaluatedOffers,
+      availableOffers: prioritizedOffers,
       relevance,
       ratingScore,
       averageRating,
@@ -547,14 +526,27 @@ const candidates = products
     };
   })
   .filter((item): item is NonNullable<typeof item> => item !== null);
+  const hasBudgetConstraint =
+  intent.minPrice !== null || intent.maxPrice !== null;
+
+const budgetMatchedCandidates = candidates.filter((item) =>
+  hasBudgetMatchingOffer(item.availableOffers, intent)
+);
+
+// Prefer products that satisfy the budget.
+// If none match, retain alternatives rather than returning nothing.
+const recommendationCandidates =
+  hasBudgetConstraint && budgetMatchedCandidates.length > 0
+    ? budgetMatchedCandidates
+    : candidates;
 
 // Normalize relevance across retrieved products.
 const maxRelevance = Math.max(
   1,
-  ...candidates.map((item) => item.relevance)
+  ...recommendationCandidates.map((item) => item.relevance)
 );
 
-const rankedProducts = candidates
+const rankedProducts = recommendationCandidates
   .map((item) => {
     const relevanceScore =
       (item.relevance / maxRelevance) * 100;
@@ -579,8 +571,16 @@ const rankedProducts = candidates
 // Prepare products for Gemini and the frontend.
 const formattedProducts = rankedProducts.map((item) => {
   const product = item.product;
+  const matchingOffers = item.availableOffers.filter(({ price }) =>
+  isWithinBudget(price, intent)
+);
 
-  const variantOffers = item.availableOffers.map(
+const offersToFormat =
+  matchingOffers.length > 0
+    ? matchingOffers
+    : item.availableOffers;
+
+  const variantOffers = offersToFormat.map(
   ({ variant, offer }) => {
     const trust = offer.seller.trustMetric;
 
@@ -686,14 +686,21 @@ try {
   ),
 ].filter((id) => validProductIds.has(id));
 
-  recommendedProducts = selectedIds
-    .map((id) =>
-      formattedProducts.find((product) => product.id === id)
-    )
-    .filter(
-      (product): product is (typeof formattedProducts)[number] =>
-        product !== undefined
-    );
+ const aiSelectedProducts = selectedIds
+  .map((id) =>
+    formattedProducts.find((product) => product.id === id)
+  )
+  .filter(
+    (product): product is (typeof formattedProducts)[number] =>
+      product !== undefined
+  );
+
+// Gemini enhances recommendations but never controls availability.
+recommendedProducts =
+  aiSelectedProducts.length > 0
+    ? aiSelectedProducts
+    : formattedProducts.slice(0, 10);
+    
 
   reply = aiResult.reply;
   engine = "GEMINI_HYBRID_SEARCH";

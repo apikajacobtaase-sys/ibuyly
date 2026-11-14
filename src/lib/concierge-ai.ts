@@ -427,3 +427,112 @@ Return the required JSON analysis.
       : [],
   };
 }
+
+export async function resolveComparisonProducts({
+  message,
+  candidates,
+}: {
+  message: string;
+  candidates: Record<string, unknown>[];
+}): Promise<{
+  productIds: string[];
+  criteria: string[];
+  clarification: string | null;
+}> {
+  if (!message.trim() || candidates.length === 0) {
+    return {
+      productIds: [],
+      criteria: [],
+      clarification: "I couldn't find suitable products. Try specifying the product names or category.",
+    };
+  }
+
+  const response = await ai.chat.completions.create({
+    model: MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `
+You are iBUY's product comparison resolver.
+
+Identify products from the supplied catalogue that best match
+the customer's natural-language comparison request.
+
+RULES:
+- Select ONLY products from the supplied catalogue.
+- Never invent product IDs or product names.
+- Understand exact product names, brands, models and categories.
+- Support requests involving 2 to 4 products.
+- Understand budget constraints and intended use.
+- Prefer exact matches when the customer names specific products.
+- For category requests, select the most relevant products.
+- Never select unrelated products just to reach two.
+- Extract the customer's requested comparison criteria.
+- If fewer than two suitable products exist, return an empty productIds array.
+- Ask a concise clarification when the request is ambiguous.
+
+Return ONLY valid JSON:
+
+{
+  "productIds": ["actual catalogue ID"],
+  "criteria": ["price", "performance"],
+  "clarification": null
+}
+`,
+      },
+      {
+        role: "user",
+        content: `Customer request: ${message}\n\nAvailable catalogue products:\n${JSON.stringify(candidates)}`,
+      },
+    ],
+    temperature: 0.1,
+  });
+
+  const content = response.choices[0]?.message?.content;
+
+  if (!content || typeof content !== "string") {
+    throw new Error("Unable to resolve comparison products.");
+  }
+
+  const cleaned = content
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  const parsed = JSON.parse(cleaned);
+
+  const validIds = new Set(
+    candidates
+      .map((product) => product.id)
+      .filter((id): id is string => typeof id === "string")
+  );
+
+  const productIds: string[] = [];
+
+  if (Array.isArray(parsed.productIds)) {
+    for (const id of parsed.productIds as unknown[]) {
+      if (
+        typeof id === "string" &&
+        validIds.has(id) &&
+        !productIds.includes(id) &&
+        productIds.length < 4
+      ) {
+        productIds.push(id);
+      }
+    }
+  }
+
+  return {
+    productIds,
+    criteria: Array.isArray(parsed.criteria)
+      ? parsed.criteria.filter(
+          (item: unknown): item is string =>
+            typeof item === "string"
+        ).slice(0, 8)
+      : [],
+    clarification:
+      typeof parsed.clarification === "string"
+        ? parsed.clarification
+        : null,
+  };
+}
