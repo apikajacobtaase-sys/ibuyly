@@ -381,7 +381,7 @@ model Return {
   id                String       @id @default(cuid())
   orderId           String       @map("order_id")
   orderItemId       String       @map("order_item_id")
-  createdById       String       @map("created_by_id")
+  createdById       String?      @map("created_by_id")
   reviewedById      String?      @map("reviewed_by_id")
   refundOperationId String?      @unique @map("refund_operation_id")
   reason            String
