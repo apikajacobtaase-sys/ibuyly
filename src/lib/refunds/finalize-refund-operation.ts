@@ -134,10 +134,10 @@ export async function finalizeRefundOperation(event: RefundEvent) {
           },
         },
       });
-
       if (!locked) {
-        throw new Error("Refund operation disappeared.");
-      }
+  throw new Error("Refund operation disappeared.");
+}
+
 
       if (locked.status === "SUCCEEDED") {
         return {
@@ -310,7 +310,21 @@ export async function finalizeRefundOperation(event: RefundEvent) {
           completedAt: new Date(),
         },
       });
+      const linkedReturn = await tx.return.updateMany({
+        where: {
+          refundOperationId: locked.id,
+          status: "RECEIVED",
+        },
+        data: {
+          status: "REFUNDED",
+          refundAmount: locked.amount,
+          refundedAt: new Date(),
+        },
+      });
 
+      if (linkedReturn.count > 1) {
+        throw new Error("Multiple returns linked to one refund operation.");
+      }
       // Recalculate cumulative successful refunds.
       const successfulOperations = await tx.refundOperation.findMany({
         where: {

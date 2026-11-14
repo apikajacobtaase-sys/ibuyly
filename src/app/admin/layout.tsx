@@ -28,6 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         children: [
           { label: "Overview", href: "/admin", iconName: "LayoutDashboard" },
           { label: "Analytics", href: "/admin/analytics", iconName: "BarChart3" },
+
         ],
       },
       {
@@ -75,6 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           { label: "Locations", href: "/admin/locations", iconName: "Globe" },
           { label: "Disputes", href: "/admin/disputes", iconName: "AlertTriangle" },
           { label: "Support", href: "/admin/support", iconName: "LifeBuoy" },
+          { label: "Returns", href: "/admin/returns", iconName: "PackageCheck" },
         ],
       },
       {
@@ -104,20 +106,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     return groups
       .map((group) => {
-        const visibleChildren = (group.children ?? []).filter((item) => {
-          if (isSuperAdmin) return true;
+const visibleChildren = (group.children ?? []).filter((item) => {
+  if (item.href === "/admin/returns") return isSuperAdmin;
 
-          if (session?.user?.role === "SUPPORT") {
-            return supportPages.includes(item.href ?? "");
-          }
+  if (isSuperAdmin) return true;
 
-          if (isAdmin) {
-            return item.href !== "/admin/staff";
-          }
+  if (session?.user?.role === "SUPPORT") {
+    return supportPages.includes(item.href ?? "");
+  }
 
-          return false;
-        });
+  if (isAdmin) {
+    return item.href !== "/admin/staff";
+  }
 
+  return false;
+});
         return {
           ...group,
           children: visibleChildren,

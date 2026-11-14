@@ -378,17 +378,30 @@ model Shipment {
 }
 
 model Return {
-  id           String       @id @default(cuid())
-  orderId      String       @map("order_id")
-  orderItemId  String       @map("order_item_id")
-  reason       String
-  status       ReturnStatus @default(REQUESTED)
-  refundAmount Decimal?     @map("refund_amount") @db.Decimal(10, 2)
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-  order        Order        @relation(fields: [orderId], references: [id])
-  orderItem    OrderItem    @relation(fields: [orderItemId], references: [id])
+  id                String       @id @default(cuid())
+  orderId           String       @map("order_id")
+  orderItemId       String       @map("order_item_id")
+  createdById       String       @map("created_by_id")
+  reviewedById      String?      @map("reviewed_by_id")
+  refundOperationId String?      @unique @map("refund_operation_id")
+  reason            String
+  quantity          Int          @default(1)
+  reviewNote        String?      @map("review_note")
+  refundAmount      Decimal?     @map("refund_amount") @db.Decimal(10, 2)
+  status            ReturnStatus @default(REQUESTED)
+  reviewedAt        DateTime?    @map("reviewed_at")
+  receivedAt        DateTime?    @map("received_at")
+  refundedAt        DateTime?    @map("refunded_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
+  order           Order            @relation(fields: [orderId], references: [id])
+  orderItem       OrderItem        @relation(fields: [orderItemId], references: [id])
+  refundOperation RefundOperation? @relation(fields: [refundOperationId], references: [id])
+
+  @@index([orderId])
+  @@index([orderItemId])
+  @@index([status])
   @@map("returns")
 }
 
@@ -417,6 +430,7 @@ model RefundOperation {
   initiatedBy      User?                   @relation("RefundInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
   items            RefundOperationItem[]
   financialRecords SellerFinancialRecord[]
+  returns          Return[]
 
   @@unique([provider, providerReference])
   @@index([orderId])
