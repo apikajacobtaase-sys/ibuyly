@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { discoverProducts, ProductSort } from "@/lib/product-discovery";
 
 const VALID_SORTS: ProductSort[] = [

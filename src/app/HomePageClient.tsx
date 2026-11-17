@@ -11,6 +11,7 @@ import QuantitySelector from "@/components/QuantitySelector";
 import RecentlyViewed from "@/components/RecentlyViewed";
 import { useCompareStore } from "@/store/compareStore";
 import { toast } from "sonner";
+
 interface Product {
   id: string;
   title: string;
@@ -26,6 +27,36 @@ interface Product {
   bestVariantId?: string;
   bestOfferId?: string | null;
 }
+interface Banner {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  imageUrl: string;
+  mobileImageUrl: string | null;
+  altText: string | null;
+  buttonText: string | null;
+  buttonUrl: string | null;
+  placement: string;
+}
+
+interface FlashDeal {
+  id: string;
+  offerId: string;
+  variantId: string;
+  productId: string;
+  title: string;
+  slug: string;
+  imageUrl: string | null;
+  price: number;
+  originalPrice: number;
+  discountPercent: number;
+  stockQuantity: number;
+  sellerId: string;
+  sellerName: string;
+  sellerLogoUrl: string | null;
+  startsAt: string;
+  endsAt: string;
+}
 
 export default function HomePage() {
 
@@ -39,6 +70,11 @@ const {
   removeItem: removeCompareItem,
   isInCompare,
 } = useCompareStore();
+const [banners, setBanners] = useState<Banner[]>([]);
+const [currentBanner, setCurrentBanner] = useState(0);
+const [flashDeals, setFlashDeals] = useState<FlashDeal[]>([]);
+const [currentDealIndex, setCurrentDealIndex] = useState(0);
+const [currentTime, setCurrentTime] = useState(Date.now());
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -74,6 +110,78 @@ const lastProductRef = useCallback(
   useEffect(() => {
     loadInitialProducts();
   }, []);
+
+  useEffect(() => {
+  const fetchBanners = async () => {
+    try {
+      const res = await fetch("/api/banners", { cache: "no-store" });
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      setBanners(
+        (data.banners || []).filter(
+          (banner: Banner) => banner.placement === "HOME_HERO"
+        )
+      );
+    } catch (error) {
+      console.error("Failed to load homepage banners:", error);
+    }
+  };
+
+  fetchBanners();
+}, []);
+
+useEffect(() => {
+  if (banners.length <= 1) return;
+
+  const interval = setInterval(() => {
+    setCurrentBanner((prev) => (prev + 1) % banners.length);
+  }, 6000);
+
+  return () => clearInterval(interval);
+}, [banners]);
+
+useEffect(() => {
+  const fetchFlashDeals = async () => {
+    try {
+      const res = await fetch("/api/flash-deals", {
+        cache: "no-store",
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setFlashDeals(data.deals || []);
+    } catch (error) {
+      console.error("Failed to load Flash Deals:", error);
+    }
+  };
+
+  fetchFlashDeals();
+
+  const refreshInterval = setInterval(fetchFlashDeals, 60000);
+
+  return () => clearInterval(refreshInterval);
+}, []);
+
+useEffect(() => {
+  const timer = setInterval(() => {
+    setCurrentTime(Date.now());
+  }, 1000);
+
+  return () => clearInterval(timer);
+}, []);
+
+useEffect(() => {
+  if (flashDeals.length <= 1) return;
+
+  const rotation = setInterval(() => {
+    setCurrentDealIndex((prev) => (prev + 1) % flashDeals.length);
+  }, 60000);
+
+  return () => clearInterval(rotation);
+}, [flashDeals.length]);
 
   const loadInitialProducts = async () => {
   setLoading(true);
@@ -139,10 +247,219 @@ const loadMoreProducts = async () => {
 
  const formatCurrency = (amount: number | null | undefined) =>
   amount == null ? "Price unavailable" : `GH₵${amount.toFixed(2)}`;
+ const formatCountdown = (endsAt: string) => {
+  const remaining = Math.max(
+    0,
+    new Date(endsAt).getTime() - currentTime
+  );
+
+  const hours = Math.floor(remaining / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+
+  return [
+    String(hours).padStart(2, "0"),
+    String(minutes).padStart(2, "0"),
+    String(seconds).padStart(2, "0"),
+  ].join(":");
+};
 
   return (
     <div className="min-h-full min-w-0 bg-gray-50 pb-20 md:pb-0">
       <main className="mx-auto w-full max-w-7xl min-w-0">
+        {banners.length > 0 && banners[currentBanner] && (
+  <section className="px-2 pt-3 sm:px-1 sm:pt-4">
+    <div className="relative w-full overflow-hidden rounded-xl sm:rounded-2xl bg-gray-200 aspect-[16/7] sm:aspect-[16/5]">
+
+      <Image
+        key={banners[currentBanner].id}
+        src={banners[currentBanner].imageUrl}
+        alt={banners[currentBanner].altText || banners[currentBanner].title}
+        fill
+        priority
+        unoptimized
+        className={`object-cover ${
+          banners[currentBanner].mobileImageUrl ? "hidden sm:block" : ""
+        }`}
+      />
+
+      {banners[currentBanner].mobileImageUrl && (
+        <Image
+          src={banners[currentBanner].mobileImageUrl}
+          alt={banners[currentBanner].altText || banners[currentBanner].title}
+          fill
+          priority
+          unoptimized
+          className="object-cover sm:hidden"
+        />
+      )}
+
+      {(banners[currentBanner].buttonText ||
+        banners[currentBanner].subtitle) && (
+        <div className="absolute inset-0 flex flex-col items-start justify-end sm:justify-center p-4 sm:p-10 bg-gradient-to-t from-black/60 via-black/10 to-transparent">
+          {banners[currentBanner].subtitle && (
+            <p className="text-white text-xs sm:text-lg max-w-md mb-3">
+              {banners[currentBanner].subtitle}
+            </p>
+          )}
+
+          {banners[currentBanner].buttonText &&
+            banners[currentBanner].buttonUrl && (
+              <Link
+                href={banners[currentBanner].buttonUrl}
+                className="bg-green-700 hover:bg-green-800 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-lg transition"
+              >
+                {banners[currentBanner].buttonText}
+              </Link>
+            )}
+        </div>
+      )}
+
+      {banners.length > 1 && (
+        <>
+          <button
+            onClick={() =>
+              setCurrentBanner(
+                (prev) => (prev - 1 + banners.length) % banners.length
+              )
+            }
+            aria-label="Previous banner"
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center"
+          >
+            ‹
+          </button>
+
+          <button
+            onClick={() =>
+              setCurrentBanner((prev) => (prev + 1) % banners.length)
+            }
+            aria-label="Next banner"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center"
+          >
+            ›
+          </button>
+
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
+            {banners.map((banner, index) => (
+              <button
+                key={banner.id}
+                onClick={() => setCurrentBanner(index)}
+                aria-label={`Show banner ${index + 1}`}
+                className={`h-2 rounded-full transition-all ${
+                  index === currentBanner
+                    ? "w-6 bg-white"
+                    : "w-2 bg-white/60"
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  </section>
+)}
+               {flashDeals.filter(
+  (deal) =>
+    new Date(deal.endsAt).getTime() > currentTime &&
+    deal.stockQuantity > 0
+).length > 0 && (
+  <section className="mx-2 my-4 overflow-hidden rounded-xl bg-white shadow-sm sm:mx-1 sm:rounded-2xl">
+    <div className="flex items-center justify-between bg-red-600 px-4 py-3 text-white">
+      <div>
+        <h2 className="text-lg font-extrabold">⚡ Flash Deals</h2>
+        <p className="text-xs text-red-100">
+          Limited-time offers. Grab yours before they're gone!
+        </p>
+      </div>
+
+      <span className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-bold">
+        LIVE DEALS
+      </span>
+    </div>
+
+    <div className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-2 sm:gap-3 sm:p-4 lg:grid-cols-4">
+      {Array.from({
+        length: Math.min(
+          4,
+          flashDeals.filter(
+            (deal) =>
+              new Date(deal.endsAt).getTime() > currentTime &&
+              deal.stockQuantity > 0
+          ).length
+        ),
+      }).map((_, index) => {
+        const availableDeals = flashDeals.filter(
+          (deal) =>
+            new Date(deal.endsAt).getTime() > currentTime &&
+            deal.stockQuantity > 0
+        );
+
+        const deal =
+          availableDeals[
+            (currentDealIndex + index) % availableDeals.length
+          ];
+
+        return (
+          <Link
+            key={deal.id}
+            href={`/products/${deal.slug}`}
+            className="group min-w-0 overflow-hidden rounded-xl border border-gray-100 transition hover:border-red-200 hover:shadow-md"
+          >
+            <div className="relative aspect-square overflow-hidden bg-gray-100">
+              {deal.imageUrl ? (
+                <Image
+                  src={deal.imageUrl}
+                  alt={deal.title}
+                  fill
+                  unoptimized
+                  className="object-cover transition group-hover:scale-105"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-gray-400">
+                  No image
+                </div>
+              )}
+
+              <span className="absolute left-2 top-2 rounded-md bg-red-600 px-2 py-1 text-[10px] font-extrabold text-white">
+                -{deal.discountPercent}%
+              </span>
+            </div>
+
+            <div className="p-2 sm:p-3">
+              <h3 className="mb-2 line-clamp-2 min-h-9 text-xs font-semibold text-gray-800 sm:text-sm">
+                {deal.title}
+              </h3>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-extrabold text-red-600 sm:text-base">
+                  {formatCurrency(deal.price)}
+                </span>
+
+                <span className="text-xs text-gray-400 line-through">
+                  {formatCurrency(deal.originalPrice)}
+                </span>
+              </div>
+
+              <div className="mt-3 rounded-lg bg-red-50 p-2">
+                <p className="text-[10px] font-semibold text-red-600">
+                  ENDS IN
+                </p>
+
+                <p className="font-mono text-sm font-extrabold tracking-wider text-red-700">
+                  {formatCountdown(deal.endsAt)}
+                </p>
+              </div>
+
+              <p className="mt-2 text-[10px] text-gray-500">
+                {deal.stockQuantity} available
+              </p>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  </section>
+)}
         <section className="px-0 py-3 sm:px-1 sm:py-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900">Popular Products</h2>

@@ -1,4 +1,4 @@
-﻿// src/app/admin/orders/[id]/page.tsx
+// src/app/admin/orders/[id]/page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";

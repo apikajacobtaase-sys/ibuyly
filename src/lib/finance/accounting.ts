@@ -1,4 +1,4 @@
-﻿export type FinancialRecordType =
+export type FinancialRecordType =
   | "SALE"
   | "FEE"
   | "DISCOUNT"

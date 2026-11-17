@@ -1,4 +1,4 @@
-﻿// src/app/api/admin/notifications/route.ts
+// src/app/api/admin/notifications/route.ts
 
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";

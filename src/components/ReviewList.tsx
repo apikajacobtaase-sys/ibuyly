@@ -60,7 +60,7 @@ export default function ReviewList({ productId }: ReviewListProps) {
       <div className="bg-ibuy-card rounded-lg border border-ibuy-border p-6">
         <div className="flex items-center gap-6">
           <div className="text-center">
-            <div className="text-4xl font-bold text-ibuy-orange">{averageRating.toFixed(1)}</div>
+            <div className="text-4xl font-bold text-ibuy-primary">{averageRating.toFixed(1)}</div>
             <div className="flex items-center gap-0.5 mt-1 justify-center">
               {[1, 2, 3, 4, 5].map((star) => (
                 <Star
@@ -84,7 +84,7 @@ export default function ReviewList({ productId }: ReviewListProps) {
                   <span className="text-xs text-ibuy-text w-3">{star}</span>
                   <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
                   <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-ibuy-orange" style={{ width: `${percent}%` }}></div>
+                    <div className="h-full bg-ibuy-primary" style={{ width: `${percent}%` }}></div>
                   </div>
                   <span className="text-xs text-ibuy-text-secondary w-8">{count}</span>
                 </div>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState } from "react";
 import { ShoppingCart, Zap } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
@@ -74,7 +74,7 @@ export default function ProductBuyBox({
       <div className="mb-4">
         <p className="text-sm text-ibuy-text-secondary mb-1">Price</p>
         <div className="flex items-baseline gap-3 flex-wrap">
-          <span className="text-3xl font-bold text-ibuy-orange">
+          <span className="text-3xl font-bold text-ibuy-primary">
             GH₵ {price.toFixed(2)}
           </span>
           {stock > 0 ? (
@@ -102,8 +102,8 @@ export default function ProductBuyBox({
                 }}
                 className={`px-4 py-2 rounded-lg border text-sm font-medium transition ${
                   selectedVariantIndex === idx
-                    ? "border-ibuy-orange bg-ibuy-orange/10 text-ibuy-orange"
-                    : "border-ibuy-border text-ibuy-text hover:border-ibuy-orange"
+                    ? "border-ibuy-primary bg-ibuy-primary/10 text-ibuy-primary"
+                    : "border-ibuy-border text-ibuy-text hover:border-ibuy-primary"
                 }`}
               >
                 {v.attributes
@@ -149,7 +149,7 @@ export default function ProductBuyBox({
             stock <= 0 ||
             quantity > stock
           }
-          className="w-full flex items-center justify-center gap-2 bg-ibuy-orange text-white py-3.5 rounded-lg font-bold text-lg hover:bg-ibuy-orange-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-2 bg-ibuy-primary text-white py-3.5 rounded-lg font-bold text-lg hover:bg-ibuy-primary-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ShoppingCart className="w-5 h-5" />
           Add to Cart

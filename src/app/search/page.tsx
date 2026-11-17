@@ -124,7 +124,7 @@ useEffect(() => {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="px-3 py-1.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                className="px-3 py-1.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
               >
                 <option value="newest">Newest</option>
                 <option value="price_asc">Price: Low to High</option>
@@ -159,7 +159,7 @@ useEffect(() => {
 
     <button
       onClick={fetchProducts}
-      className="rounded-lg bg-ibuy-orange px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-ibuy-orange-hover"
+      className="rounded-lg bg-ibuy-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-ibuy-primary-hover"
     >
       Try Again
     </button>
@@ -178,7 +178,7 @@ useEffect(() => {
 
   <Link
     href="/categories"
-    className="inline-block rounded-lg bg-ibuy-orange px-6 py-3 font-semibold text-white transition hover:bg-ibuy-orange-hover"
+    className="inline-block rounded-lg bg-ibuy-primary px-6 py-3 font-semibold text-white transition hover:bg-ibuy-primary-hover"
   >
     Browse Categories
   </Link>
@@ -223,7 +223,7 @@ export default function SearchPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-ibuy-bg flex items-center justify-center pb-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ibuy-orange"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ibuy-primary"></div>
         <p className="ml-3 text-ibuy-text-secondary">Searching...</p>
       </div>
     }>

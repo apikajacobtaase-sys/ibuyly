@@ -1,9 +1,10 @@
-import { db } from "@/lib/db";
+ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { confirmSuccessfulPayment } from "@/lib/payments/confirm-successful-payment";
 import crypto from "crypto";
 import { finalizeRefundOperation } from "@/lib/refunds/finalize-refund-operation";
+
 export const runtime = "nodejs";
 
 type PaystackEventData = {
@@ -19,17 +20,12 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
-/**
- * Verify Paystack's HMAC-SHA512 signature against the exact raw request body.
- */
 function verifySignature(
   body: string,
   signature: string,
   secret: string
 ): boolean {
-  if (!/^[a-f0-9]{128}$/i.test(signature)) {
-    return false;
-  }
+  if (!/^[a-f0-9]{128}$/i.test(signature)) return false;
 
   const expected = crypto
     .createHmac("sha512", secret)
@@ -44,10 +40,6 @@ function verifySignature(
   );
 }
 
-/**
- * Validate the Paystack transaction against the persisted payment.
- * Paystack reports amounts in the currency's minor unit (pesewas for GHS).
- */
 function validateSuccessfulTransaction(
   data: PaystackEventData,
   payment: {
@@ -56,11 +48,7 @@ function validateSuccessfulTransaction(
   },
   reference: string
 ): boolean {
-  if (data.reference !== reference) {
-    return false;
-  }
-
-  if (data.status !== "success") {
+  if (data.reference !== reference || data.status !== "success") {
     return false;
   }
 
@@ -84,13 +72,6 @@ function validateSuccessfulTransaction(
   return data.amount === expectedCents;
 }
 
-/**
- * Confirm a successful transaction.
- *
- * The conditional payment update is the idempotency gate shared with
- * the payment verification endpoint. Order confirmation and financial
- * records are committed in the same transaction.
- */
 async function handleChargeSuccess(data: PaystackEventData) {
   const reference = data.reference;
 
@@ -99,23 +80,15 @@ async function handleChargeSuccess(data: PaystackEventData) {
   }
 
   const order = await db.order.findUnique({
-    where: {
-      paymentReference: reference,
-    },
-    include: {
-      payment: true,
-    },
+    where: { paymentReference: reference },
+    include: { payment: true },
   });
 
   if (!order || !order.payment) {
-    throw new Error(
-      `Order or payment not found for reference ${reference}.`
-    );
+    throw new Error(`Order or payment not found for reference ${reference}.`);
   }
 
-  if (order.payment.status === "SUCCESSFUL") {
-    return;
-  }
+  if (order.payment.status === "SUCCESSFUL") return;
 
   if (order.payment.status !== "PENDING") {
     console.warn(
@@ -124,13 +97,7 @@ async function handleChargeSuccess(data: PaystackEventData) {
     return;
   }
 
-  if (
-    !validateSuccessfulTransaction(
-      data,
-      order.payment,
-      reference
-    )
-  ) {
+  if (!validateSuccessfulTransaction(data, order.payment, reference)) {
     console.error(
       `Paystack transaction validation failed for order ${order.id}.`
     );
@@ -155,13 +122,6 @@ async function handleChargeSuccess(data: PaystackEventData) {
   }
 }
 
-/**
- * Handle a failed charge.
- *
- * Inventory is restored only if this transaction successfully claims
- * a payment that is still pending. Repeated failure events cannot restore
- * the same inventory twice.
- */
 async function handleChargeFailed(data: PaystackEventData) {
   const reference = data.reference;
 
@@ -185,7 +145,6 @@ async function handleChargeFailed(data: PaystackEventData) {
     order.payment.status !== "PENDING" ||
     order.status !== "PENDING"
   ) {
-    // Do not release inventory for a payment already handled elsewhere.
     return;
   }
 
@@ -195,8 +154,6 @@ async function handleChargeFailed(data: PaystackEventData) {
     throw new Error("PAYSTACK_SECRET_KEY is not configured.");
   }
 
-  // A signed webhook proves that Paystack sent the event, but checking
-  // the current transaction state protects against conflicting events.
   let verificationResponse: Response;
 
   try {
@@ -258,15 +215,11 @@ async function handleChargeFailed(data: PaystackEventData) {
     );
   }
 
-  // A success event may have been delivered after a failure event.
-  // Always let the existing success handler perform its full validation
-  // and use its established idempotent confirmation transaction.
   if (transaction.status === "success") {
     await handleChargeSuccess(transaction);
     return;
   }
 
-  // Do not release reservations for pending, abandoned, or unknown states.
   if (transaction.status !== "failed") {
     throw new Error(
       `Paystack transaction ${reference} is not confirmed failed; current status: ${
@@ -275,7 +228,6 @@ async function handleChargeFailed(data: PaystackEventData) {
     );
   }
 
-  // Even a confirmed failure must match the order's expected amount/currency.
   if (
     typeof transaction.amount !== "number" ||
     !Number.isSafeInteger(transaction.amount) ||
@@ -305,7 +257,6 @@ async function handleChargeFailed(data: PaystackEventData) {
   }
 
   await db.$transaction(async (tx) => {
-    // Only one failure handler can claim the pending payment.
     const claim = await tx.payment.updateMany({
       where: {
         orderId: order.id,
@@ -329,9 +280,7 @@ async function handleChargeFailed(data: PaystackEventData) {
       },
     });
 
-    if (claim.count === 0) {
-      return;
-    }
+    if (claim.count === 0) return;
 
     const orderUpdate = await tx.order.updateMany({
       where: {
@@ -373,10 +322,32 @@ async function handleChargeFailed(data: PaystackEventData) {
           `Could not restore seller-offer inventory for order item ${item.id}.`
         );
       }
+
+      // Release flash-deal reservation exactly once.
+      if (item.flashDealId) {
+        const released = await tx.flashDeal.updateMany({
+          where: {
+            id: item.flashDealId,
+            reservedQuantity: {
+              gte: item.quantity,
+            },
+          },
+          data: {
+            reservedQuantity: {
+              decrement: item.quantity,
+            },
+          },
+        });
+
+        if (released.count !== 1) {
+          throw new Error(
+            `Could not release flash-deal reservation for order item ${item.id}.`
+          );
+        }
+      }
     }
 
-    // Release the discount reservation made during checkout.
-    // This happens only when this transaction successfully cancels the order.
+    // Release discount usage reservation.
     if (order.discountCodeId) {
       await tx.discountCode.updateMany({
         where: {
@@ -394,6 +365,7 @@ async function handleChargeFailed(data: PaystackEventData) {
     `Paystack failure event verified and processed for order ${order.id}.`
   );
 }
+
 export async function POST(req: Request) {
   const secret = process.env.PAYSTACK_SECRET_KEY;
 
@@ -425,50 +397,49 @@ export async function POST(req: Request) {
     } catch {
       return jsonError("Invalid JSON payload.", 400);
     }
-     if (
-  !event ||
-  typeof event.event !== "string" ||
-  !event.data ||
-  typeof event.data !== "object"
-) {
-  return jsonError("Invalid webhook payload.", 400);
-}
 
-const data = event.data as PaystackEventData;
-
-switch (event.event) {
-  case "charge.success":
-    await handleChargeSuccess(data);
-    break;
-
-  case "charge.failed":
-    await handleChargeFailed(data);
-    break;
-
-   case "refund.pending":
-  case "refund.processing":
-  case "refund.processed":
-  case "refund.failed":
-  case "refund.needs-attention": {
-    const expectedStatus = event.event.slice("refund.".length);
-
-    if (data.status?.toLowerCase() !== expectedStatus) {
-      throw new Error("Paystack refund event/status mismatch.");
+    if (
+      !event ||
+      typeof event.event !== "string" ||
+      !event.data ||
+      typeof event.data !== "object"
+    ) {
+      return jsonError("Invalid webhook payload.", 400);
     }
 
-    await finalizeRefundOperation(data);
-    break;
-  }
+    const data = event.data as PaystackEventData;
 
-  default:
-    return NextResponse.json({ received: true });
-}
+    switch (event.event) {
+      case "charge.success":
+        await handleChargeSuccess(data);
+        break;
+
+      case "charge.failed":
+        await handleChargeFailed(data);
+        break;
+
+      case "refund.pending":
+      case "refund.processing":
+      case "refund.processed":
+      case "refund.failed":
+      case "refund.needs-attention": {
+        const expectedStatus = event.event.slice("refund.".length);
+
+        if (data.status?.toLowerCase() !== expectedStatus) {
+          throw new Error("Paystack refund event/status mismatch.");
+        }
+
+        await finalizeRefundOperation(data);
+        break;
+      }
+
+      default:
+        return NextResponse.json({ received: true });
+    }
 
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error("Paystack webhook processing failed:", error);
-
-    // A 5xx response allows Paystack to retry transient processing errors.
     return jsonError("Webhook processing failed.", 500);
   }
 }

@@ -13,6 +13,7 @@ import ProductSellerOffers from "@/components/product/ProductSellerOffers";
 import ChatBox from "@/components/chat/ChatBox";
 import StartChatButton from "@/components/chat/StartChatButton";
 import RecentlyViewedTracker from "@/components/RecentlyViewedTracker";
+import ProductImageGallery from "@/components/product/ProductImageGallery";
 export async function generateMetadata({
   params,
 }: {
@@ -89,11 +90,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!slug) notFound();
 
   const session = await getServerSession(authOptions);
+  const now = new Date();
 
   const product = await db.product.findUnique({
     where: { slug: slug },
     include: {
-      images: true,
+      images: {
+  orderBy: [
+    { isPrimary: "desc" },
+    { sortOrder: "asc" },
+  ],
+},
       category: true,
       reviews: {
   select: {
@@ -111,6 +118,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             },
             orderBy: { price: "asc" },
             include: {
+              flashDeals: {
+                  where: {
+                    isActive: true,
+                    startsAt: { lte: now },
+                    endsAt: { gt: now },
+                  },
+                  orderBy: { endsAt: "asc" },
+                  take: 1,
+                },
               seller: {
                 select: {
                   businessName: true,
@@ -142,31 +158,51 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const seller = bestOffer?.seller;
 
   const sellerOfferVariants = product.variants
-    .filter((variant) => variant.sellerOffers.length > 0)
-    .map((variant) => {
-      const attributes =
-        variant.attributes &&
-        typeof variant.attributes === "object" &&
-        !Array.isArray(variant.attributes)
-          ? Object.entries(variant.attributes as Record<string, unknown>)
-              .filter(([, value]) => value !== null && value !== undefined)
-              .map(([key, value]) => `${key}: ${String(value)}`)
-              .join(" | ")
-          : "";
+  .filter((variant) => variant.sellerOffers.length > 0)
+  .map((variant) => {
+    const attributes =
+      variant.attributes &&
+      typeof variant.attributes === "object" &&
+      !Array.isArray(variant.attributes)
+        ? Object.entries(variant.attributes as Record<string, unknown>)
+            .filter(([, value]) => value !== null && value !== undefined)
+            .map(([key, value]) => `${key}: ${String(value)}`)
+            .join(" | ")
+        : "";
 
-      return {
-        id: variant.id,
-        label: attributes || variant.sku || "Standard variant",
-        offers: variant.sellerOffers.map((offer) => ({
+    return {
+      id: variant.id,
+      label: attributes || variant.sku || "Standard variant",
+      offers: variant.sellerOffers.map((offer) => {
+        const deal = offer.flashDeals[0];
+        const remaining = deal
+          ? deal.dealQuantity - deal.soldQuantity - deal.reservedQuantity
+          : 0;
+
+        const hasValidDeal =
+          !!deal &&
+          remaining > 0 &&
+          Number(deal.promotionalPrice) > 0 &&
+          Number(deal.promotionalPrice) < Number(offer.price);
+
+        return {
           offerId: offer.id,
           sellerId: offer.seller.id,
           sellerName: offer.seller.businessName,
           sellerLogoUrl: offer.seller.logoUrl,
-          price: Number(offer.price),
-          stockQuantity: offer.stockQuantity,
-        })),
-      };
-    });
+          price: hasValidDeal
+            ? Number(deal.promotionalPrice)
+            : Number(offer.price),
+          originalPrice: hasValidDeal ? Number(offer.price) : null,
+          stockQuantity: hasValidDeal
+            ? Math.min(offer.stockQuantity, remaining)
+            : offer.stockQuantity,
+          dealEndsAt: hasValidDeal ? deal.endsAt.toISOString() : null,
+          flashDealId: hasValidDeal ? deal.id : null,
+        };
+      }),
+    };
+  });
 
   const price = bestOffer ? Number(bestOffer.price) : 0;
   const stock = bestOffer?.stockQuantity || 0;
@@ -280,34 +316,13 @@ return (
 
         <div className="lg:grid lg:grid-cols-12 lg:gap-12">
 
-          {/* LEFT COLUMN: Images (Span 7) */}
-          <div className="lg:col-span-7 mb-10 lg:mb-0">
-            <div className="main-product-image aspect-[4/3] md:aspect-square bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-100 shadow-sm group">
-              {product.images[0] ? (
-                <Image
-                  src={product.images[0].url}
-                  alt={product.title}
-                  fill
-                  className="object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-in-out"
-                  priority
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 60vw"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">No Image</div>
-              )}
-            </div>
-
-            {/* Thumbnail Grid (Optional: Map through product.images if you have more than 1) */}
-            {product.images.length > 1 && (
-              <div className="grid grid-cols-4 gap-4 mt-4">
-                {product.images.slice(0, 4).map((img, idx) => (
-                  <div key={idx} className="aspect-square bg-gray-50 rounded-lg overflow-hidden border border-gray-200 cursor-pointer hover:border-green-500 transition-colors">
-                    <Image src={img.url} alt="" width={100} height={100} className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+         {/* LEFT COLUMN: Product Image Gallery */}
+<div className="lg:col-span-7 mb-10 lg:mb-0">
+  <ProductImageGallery
+    images={product.images}
+    title={product.title}
+  />
+</div>
 
           {/* RIGHT COLUMN: Details (Span 5) */}
           <div className="lg:col-span-5 flex flex-col">

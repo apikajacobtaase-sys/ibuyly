@@ -23,7 +23,7 @@ function LoginFormContent() {
 
   const requestedCallback = searchParams.get("callbackUrl");
 
-  let callbackUrl = "/account";
+ let callbackUrl = "/";
 
   if (
     requestedCallback?.startsWith("/") &&
@@ -103,7 +103,7 @@ function LoginFormContent() {
       }
 
       const requestedCallback = searchParams.get("callbackUrl");
-      let callbackUrl = "/account";
+      let callbackUrl = "/";
 
       if (
         requestedCallback?.startsWith("/") &&
@@ -200,7 +200,7 @@ function LoginFormContent() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-ibuy-orange text-white py-3 px-4 rounded-lg font-semibold hover:bg-ibuy-orange-hover transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+            className="w-full bg-ibuy-primary text-white py-3 px-4 rounded-lg font-semibold hover:bg-ibuy-primary-hover transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
           >
             {isLoading ? (
               <>
@@ -218,14 +218,14 @@ function LoginFormContent() {
             Don&apos;t have an account?{" "}
           <Link
   href={`/register?callbackUrl=${encodeURIComponent(
-    searchParams.get("callbackUrl") || "/account"
+  searchParams.get("callbackUrl") || "/"
   )}`}
-             className="text-ibuy-orange font-semibold hover:underline">Create account</Link>
+             className="text-ibuy-primary font-semibold hover:underline">Create account</Link>
           </p>
 
           <Link
             href="/forgot-password"
-            className="text-sm text-ibuy-orange font-medium hover:underline block"
+            className="text-sm text-ibuy-primary font-medium hover:underline block"
           >
             Forgot Password?
           </Link>

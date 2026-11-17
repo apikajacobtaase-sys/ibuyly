@@ -1,6 +1,4 @@
- // src/app/api/payments/verify/route.ts
-
-import { db } from "@/lib/db";
+ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { confirmSuccessfulPayment } from "@/lib/payments/confirm-successful-payment";
@@ -15,6 +13,7 @@ type PaystackVerificationResponse = {
     status?: string;
     amount?: number;
     currency?: string;
+    gateway_response?: string;
     [key: string]: unknown;
   };
 };
@@ -31,9 +30,134 @@ function toCents(value: number): number {
   return Math.round(value * 100);
 }
 
+async function handleFailedPayment(
+  order: {
+    id: string;
+    discountCodeId: string | null;
+    items: Array<{
+      id: string;
+      offerId: string | null;
+      sellerId: string | null;
+      quantity: number;
+      flashDealId: string | null;
+    }>;
+  },
+  payment: {
+    amount: { toNumber(): number };
+    currency: string;
+  },
+  transaction: NonNullable<PaystackVerificationResponse["data"]>
+) {
+  await db.$transaction(async (tx) => {
+    const claim = await tx.payment.updateMany({
+      where: {
+        orderId: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "FAILED",
+        metadata: {
+          paystackResponse: JSON.parse(
+            JSON.stringify(transaction)
+          ) as Prisma.InputJsonValue,
+          failedAt: new Date().toISOString(),
+          failureReason:
+            typeof transaction.gateway_response === "string"
+              ? transaction.gateway_response
+              : "Payment failed",
+          verifiedVia: "verify",
+        },
+      },
+    });
+
+    if (claim.count === 0) {
+      return;
+    }
+
+    const orderUpdate = await tx.order.updateMany({
+      where: {
+        id: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CANCELLED",
+      },
+    });
+
+    if (orderUpdate.count !== 1) {
+      throw new Error(
+        `Order ${order.id} could not be cancelled after payment failure.`
+      );
+    }
+
+    for (const item of order.items) {
+      if (!item.offerId) {
+        throw new Error(
+          `Order item ${item.id} has no offerId; inventory restoration needs reconciliation.`
+        );
+      }
+
+      const restored = await tx.sellerOffer.updateMany({
+        where: {
+          id: item.offerId,
+          sellerId: item.sellerId ?? undefined,
+        },
+        data: {
+          stockQuantity: {
+            increment: item.quantity,
+          },
+        },
+      });
+
+      if (restored.count !== 1) {
+        throw new Error(
+          `Could not restore seller-offer inventory for order item ${item.id}.`
+        );
+      }
+
+      if (item.flashDealId) {
+        const released = await tx.flashDeal.updateMany({
+          where: {
+            id: item.flashDealId,
+            reservedQuantity: {
+              gte: item.quantity,
+            },
+          },
+          data: {
+            reservedQuantity: {
+              decrement: item.quantity,
+            },
+          },
+        });
+
+        if (released.count !== 1) {
+          throw new Error(
+            `Could not release flash-deal reservation for order item ${item.id}.`
+          );
+        }
+      }
+    }
+
+    if (order.discountCodeId) {
+      await tx.discountCode.updateMany({
+        where: {
+          id: order.discountCodeId,
+          usedCount: {
+            gt: 0,
+          },
+        },
+        data: {
+          usedCount: {
+            decrement: 1,
+          },
+        },
+      });
+    }
+  });
+}
+
 export async function POST(req: Request) {
   try {
-    // 1. Validate the request body.
     let body: unknown;
 
     try {
@@ -50,15 +174,11 @@ export async function POST(req: Request) {
       body.reference.trim().length === 0 ||
       body.reference.length > 200
     ) {
-      return jsonError(
-        "A valid payment reference is required.",
-        400
-      );
+      return jsonError("A valid payment reference is required.", 400);
     }
 
     const paymentReference = body.reference.trim();
 
-    // 2. Find the order and its payment.
     const order = await db.order.findUnique({
       where: {
         paymentReference,
@@ -78,20 +198,13 @@ export async function POST(req: Request) {
     });
 
     if (!order) {
-      return jsonError(
-        "Order not found for this payment reference.",
-        404
-      );
+      return jsonError("Order not found for this payment reference.", 404);
     }
 
     if (!order.payment) {
-      return jsonError(
-        "No payment record exists for this order.",
-        409
-      );
+      return jsonError("No payment record exists for this order.", 409);
     }
 
-    // 3. Idempotency check.
     if (order.payment.status === "SUCCESSFUL") {
       return NextResponse.json({
         success: true,
@@ -112,13 +225,9 @@ export async function POST(req: Request) {
     }
 
     if (order.status !== "PENDING") {
-      return jsonError(
-        "This order is no longer pending.",
-        409
-      );
+      return jsonError("This order is no longer pending.", 409);
     }
 
-    // 4. Verify the transaction directly with Paystack.
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
 
     if (!secretKey) {
@@ -150,11 +259,9 @@ export async function POST(req: Request) {
         }
       );
     } catch {
-      // Do not change the payment state if Paystack cannot be reached.
       return NextResponse.json(
         {
-          error:
-            "Unable to reach Paystack. Please retry verification.",
+          error: "Unable to reach Paystack. Please retry verification.",
         },
         { status: 503 }
       );
@@ -177,8 +284,6 @@ export async function POST(req: Request) {
       paystackResult.status !== true ||
       !paystackResult.data
     ) {
-      // Do not mark the payment failed just because verification
-      // could not confirm it. The transaction may still be pending.
       return NextResponse.json(
         {
           error:
@@ -190,14 +295,24 @@ export async function POST(req: Request) {
 
     const transaction = paystackResult.data;
 
-    // 5. Validate every critical transaction field.
-    if (
-      transaction.status !== "success" ||
-      transaction.reference !== paymentReference
-    ) {
+    if (transaction.reference !== paymentReference) {
       return jsonError(
-        "Paystack has not confirmed a successful matching transaction.",
+        "Paystack transaction reference does not match the order.",
         400
+      );
+    }
+
+    if (
+      transaction.status !== "success" &&
+      transaction.status !== "failed"
+    ) {
+      return NextResponse.json(
+        {
+          error: "Payment has not reached a final status.",
+          transactionStatus: transaction.status ?? "UNKNOWN",
+          message: "Please retry verification later.",
+        },
+        { status: 409 }
       );
     }
 
@@ -251,20 +366,67 @@ export async function POST(req: Request) {
       );
     }
 
-    // Serialize the external response into a Prisma-compatible JSON value.
+    // Handle confirmed failed transactions.
+    if (transaction.status === "failed") {
+      await handleFailedPayment(
+        {
+          id: order.id,
+          discountCodeId: order.discountCodeId,
+          items: order.items.map((item) => ({
+            id: item.id,
+            offerId: item.offerId,
+            sellerId: item.sellerId,
+            quantity: item.quantity,
+            flashDealId: item.flashDealId,
+          })),
+        },
+        order.payment,
+        transaction
+      );
+
+      const latestPayment = await db.payment.findUnique({
+        where: {
+          orderId: order.id,
+        },
+        select: {
+          status: true,
+        },
+      });
+
+      if (latestPayment?.status === "FAILED") {
+        console.info(
+          `[PAYMENT VERIFY] Failed payment processed and reservations released for order ${order.id}.`
+        );
+
+        return NextResponse.json({
+          success: false,
+          paymentStatus: "FAILED",
+          orderStatus: "CANCELLED",
+          orderId: order.id,
+          message:
+            "Payment failed. Inventory and flash-deal reservations have been restored.",
+        });
+      }
+
+      return NextResponse.json(
+        {
+          error: "Payment state changed during failure processing.",
+          paymentStatus: latestPayment?.status ?? "UNKNOWN",
+        },
+        { status: 409 }
+      );
+    }
+
     const responseJson = JSON.parse(
       JSON.stringify(transaction)
     ) as Prisma.InputJsonValue;
 
-       // 6. Confirm payment and create seller accounting records.
     const result = await confirmSuccessfulPayment({
       reference: paymentReference,
       verifiedVia: "verify",
       paystackResponse: responseJson,
     });
-   
 
-    // 9. Handle a concurrent request safely.
     if (!result.claimed) {
       const latestPayment = await db.payment.findUnique({
         where: {
@@ -305,7 +467,6 @@ export async function POST(req: Request) {
       message: "Payment verified and order confirmed.",
     });
   } catch (error: unknown) {
-    // Log server-side details without exposing internal errors to clients.
     console.error("[PAYMENT VERIFY] Verification error:", error);
 
     return jsonError(

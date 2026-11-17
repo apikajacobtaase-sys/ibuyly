@@ -1,6 +1,4 @@
-// src/emails/review-request.ts
-
-import { getAppUrl } from "../lib/app-url";
+ import { getAppUrl } from "../lib/app-url";
 
 export function getReviewRequestEmail(params: {
   customerName: string;
@@ -23,15 +21,15 @@ export function getReviewRequestEmail(params: {
     <tr>
       <td align="center" style="padding: 40px 0;">
         <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-          
+
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 32px; text-align: center;">
-              <div style="font-size: 48px; margin-bottom: 8px;">⭐</div>
+            <td style="background: linear-gradient(135deg, #014900 0%, #003600 100%); padding: 32px; text-align: center;">
+              <div style="font-size: 42px; margin-bottom: 8px;">★</div>
               <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 800;">
                 How was your experience?
               </h1>
-              <p style="margin: 8px 0 0 0; color: #fef3c7; font-size: 14px;">
+              <p style="margin: 8px 0 0 0; color: #e5f5e5; font-size: 14px;">
                 Order #${shortOrderId}
               </p>
             </td>
@@ -44,7 +42,7 @@ export function getReviewRequestEmail(params: {
                 Hi ${customerName},
               </p>
               <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-                Your order has been delivered! We hope you're enjoying your purchase. 
+                Your order has been delivered! We hope you're enjoying your purchase.
               </p>
               <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
                 Could you take a quick moment to leave a review? Your feedback helps other customers make great choices and helps our sellers improve.
@@ -53,8 +51,8 @@ export function getReviewRequestEmail(params: {
               <!-- Action Button -->
               <table role="presentation" style="border-collapse: collapse; margin: 0 auto 24px auto;">
                 <tr>
-                  <td style="border-radius: 8px; background-color: #f59e0b;">
-                    <a href="${appUrl}/account/orders/${orderId}#review" 
+                  <td style="border-radius: 8px; background-color: #014900;">
+                    <a href="${appUrl}/account/orders/${orderId}#review"
                        style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 8px;">
                       Leave a Review →
                     </a>
@@ -72,7 +70,7 @@ export function getReviewRequestEmail(params: {
           <tr>
             <td style="background-color: #f9fafb; padding: 24px 32px; text-align: center; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                © ${new Date().getFullYear()} iBUY Marketplace. All rights reserved.
+                &copy; ${new Date().getFullYear()} iBUY Africa. All rights reserved.
               </p>
             </td>
           </tr>

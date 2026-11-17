@@ -1,4 +1,4 @@
-﻿ // src/app/seller/stocking/page.tsx
+ // src/app/seller/stocking/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";

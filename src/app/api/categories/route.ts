@@ -1,39 +1,76 @@
-// src/app/api/categories/route.ts
-import { db } from "@/lib/db";
+ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
+
+const availableProductWhere = {
+  status: "ACTIVE" as const,
+  variants: {
+    some: {
+      isActive: true,
+      sellerOffers: {
+        some: {
+          status: "ACTIVE" as const,
+          stockQuantity: { gt: 0 },
+        },
+      },
+    },
+  },
+};
+
+const availableCategoryWhere = {
+  OR: [
+    {
+      products: {
+        some: availableProductWhere,
+      },
+    },
+    {
+      children: {
+        some: {
+          isActive: true,
+          products: {
+            some: availableProductWhere,
+          },
+        },
+      },
+    },
+  ],
+};
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const includeSubcategories = searchParams.get("include") === "subcategories";
+    const includeSubcategories =
+      searchParams.get("include") === "subcategories";
 
-    // 👇 PUBLIC API: Only fetch categories that are isActive: true (Public)
     const categories = await db.category.findMany({
       where: {
-        isActive: true, 
+        isActive: true,
+        ...availableCategoryWhere,
       },
       include: {
-        // Only include children if explicitly requested (e.g., by the Categories page)
-        // And only include children that are ALSO active
-        children: includeSubcategories ? {
-          where: { isActive: true },
-          select: { 
-            id: true, 
-            name: true, 
-            slug: true, 
-            iconUrl: true 
-          }
-        } : false,
+        children: includeSubcategories
+          ? {
+              where: {
+                isActive: true,
+                ...availableCategoryWhere,
+              },
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                iconUrl: true,
+              },
+            }
+          : false,
       },
       orderBy: { name: "asc" },
     });
 
-    // Format for the frontend
-    const formattedCategories = categories.map((c: any) => ({
+    const formattedCategories = categories.map((c) => ({
       id: c.id,
       name: c.name,
       slug: c.slug,
-      imageUrl: c.iconUrl || null, // Map iconUrl to imageUrl for frontend compatibility
+      imageUrl: c.iconUrl || null,
       isActive: c.isActive,
       parentId: c.parentId || null,
       children: c.children || [],
@@ -41,7 +78,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ categories: formattedCategories });
   } catch (error: any) {
-    console.error("🚨 Public categories fetch error:", error);
+    console.error("Public categories fetch error:", error);
+
     return NextResponse.json(
       { error: error.message || "Failed to fetch categories" },
       { status: 500 }

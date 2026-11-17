@@ -1,4 +1,4 @@
-﻿// src/app/api/seller/invitation/validate/route.ts
+// src/app/api/seller/invitation/validate/route.ts
 
 import { createHash } from "crypto";
 import { getServerSession } from "next-auth";

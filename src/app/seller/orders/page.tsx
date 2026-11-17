@@ -64,24 +64,22 @@ export default function SellerOrdersPage() {
       fetchOrders();
     }
   }, [status, router, activeTab]);
-
   const fetchOrders = async () => {
-    setLoading(true);
     try {
-      const params = new URLSearchParams({ page: "1", limit: "50" });
-      if (activeTab !== "ALL") params.set("itemStatus", activeTab);
-
-      const res = await fetch(`/api/seller/orders?${params}`);
+      const res = await fetch(
+        `/api/seller/orders?page=1&limit=50&itemStatus=${activeTab}`
+      );
       const data = await res.json();
 
-      if (res.ok) {
-        setOrders(data.orders);
-        setTotal(data.total);
-      } else {
-        console.error("Failed to fetch orders:", data.error);
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch orders");
       }
+
+      setOrders(data.orders ?? []);
+      setTotal(data.pagination?.total ?? data.total ?? 0);
     } catch (error) {
-      console.error("Network error:", error);
+      console.error("Failed to fetch orders:", error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -124,7 +122,7 @@ export default function SellerOrdersPage() {
         message: "Order confirmed successfully.",
       });
 
-      await fetchOrders();
+await fetchOrders();
     } catch (error) {
       console.error("Quick confirmation failed:", error);
       setConfirmationFeedback({

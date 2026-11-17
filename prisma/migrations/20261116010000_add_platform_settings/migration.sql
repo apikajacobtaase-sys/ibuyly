@@ -1,0 +1,1 @@
+CREATE TABLE platform_settings (id TEXT NOT NULL DEFAULT 'platform', maintenance_mode BOOLEAN NOT NULL DEFAULT false, maintenance_message TEXT, expected_back_at TIMESTAMP(3), updated_by_id TEXT, created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP(3) NOT NULL, CONSTRAINT platform_settings_pkey PRIMARY KEY (id));

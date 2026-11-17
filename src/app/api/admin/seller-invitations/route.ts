@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { randomBytes, createHash } from "crypto";
 import { z } from "zod";
 

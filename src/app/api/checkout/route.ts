@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -43,7 +43,10 @@ function toCents(value: unknown): number {
   const amount = Number(value);
 
   if (!Number.isFinite(amount) || amount < 0) {
-    throw new CheckoutError("An invalid price was found. Please refresh your cart.", 400);
+    throw new CheckoutError(
+      "An invalid price was found. Please refresh your cart.",
+      400
+    );
   }
 
   return Math.round(amount * 100);
@@ -128,7 +131,10 @@ export async function POST(req: Request) {
 
     if (!session.user.email) {
       return NextResponse.json(
-        { error: "Your account needs a valid email address to make a payment." },
+        {
+          error:
+            "Your account needs a valid email address to make a payment.",
+        },
         { status: 400 }
       );
     }
@@ -140,7 +146,10 @@ export async function POST(req: Request) {
       console.error("Checkout configuration is incomplete.");
 
       return NextResponse.json(
-        { error: "Checkout is temporarily unavailable. Please try again later." },
+        {
+          error:
+            "Checkout is temporarily unavailable. Please try again later.",
+        },
         { status: 503 }
       );
     }
@@ -160,13 +169,18 @@ export async function POST(req: Request) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid checkout details." },
+        {
+          error:
+            parsed.error.issues[0]?.message ??
+            "Invalid checkout details.",
+        },
         { status: 400 }
       );
     }
 
     const input = parsed.data;
     const userId = session.user.id;
+    const now = new Date();
 
     // 1. Load only the signed-in user's submitted cart items.
     const cartItems = await db.cartItem.findMany({
@@ -177,6 +191,15 @@ export async function POST(req: Request) {
       include: {
         offer: {
           include: {
+            flashDeals: {
+              where: {
+                isActive: true,
+                startsAt: { lte: now },
+                endsAt: { gt: now },
+              },
+              orderBy: { endsAt: "asc" },
+              take: 1,
+            },
             variant: {
               include: {
                 product: {
@@ -196,8 +219,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // Reject the entire checkout if any submitted ID is missing or not owned
-    // by this user. Do not silently remove items from the order.
     if (cartItems.length !== input.cartItemIds.length) {
       throw new CheckoutError(
         "Your cart has changed. Refresh your cart and try again.",
@@ -205,6 +226,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 2. Validate products, offers and quantities.
     for (const item of cartItems) {
       const offer = item.offer;
 
@@ -241,7 +263,51 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. Validate the selected delivery locality and its active zone.
+    // 3. Validate flash deals and calculate authoritative prices.
+    const itemPricing = new Map<
+      string,
+      { priceCents: number; flashDealId: string | null }
+    >();
+
+    for (const item of cartItems) {
+      const offer = item.offer!;
+      const deal = offer.flashDeals[0];
+
+      if (!deal) {
+        itemPricing.set(item.id, {
+          priceCents: toCents(offer.price),
+          flashDealId: null,
+        });
+
+        continue;
+      }
+
+      const remainingQuantity =
+        deal.dealQuantity -
+        deal.soldQuantity -
+        deal.reservedQuantity;
+
+      const promotionalPriceCents = toCents(deal.promotionalPrice);
+      const regularPriceCents = toCents(offer.price);
+
+      if (
+        remainingQuantity < item.quantity ||
+        promotionalPriceCents <= 0 ||
+        promotionalPriceCents >= regularPriceCents
+      ) {
+        throw new CheckoutError(
+          `"${offer.variant.product.title}" no longer has enough flash-deal stock. Refresh your cart.`,
+          409
+        );
+      }
+
+      itemPricing.set(item.id, {
+        priceCents: promotionalPriceCents,
+        flashDealId: deal.id,
+      });
+    }
+
+    // 4. Validate the selected delivery locality and active zone.
     const zoneLocality = await db.deliveryZoneLocality.findFirst({
       where: {
         localityId: input.localityId,
@@ -266,13 +332,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const deliveryFeeCents = toCents(zoneLocality.deliveryZone.baseDeliveryFee);
+    const deliveryFeeCents = toCents(
+      zoneLocality.deliveryZone.baseDeliveryFee
+    );
 
-    // 3. Calculate all merchandise totals using database prices.
+    // 5. Calculate merchandise totals using authoritative prices.
     let subtotalCents = 0;
 
     for (const item of cartItems) {
-      const itemTotal = toCents(item.offer!.price) * item.quantity;
+      const pricing = itemPricing.get(item.id);
+
+      if (!pricing) {
+        throw new CheckoutError("Could not calculate item pricing.");
+      }
+
+      const itemTotal = pricing.priceCents * item.quantity;
 
       if (!Number.isSafeInteger(itemTotal)) {
         throw new CheckoutError("The order total is too large.", 400);
@@ -285,9 +359,7 @@ export async function POST(req: Request) {
       throw new CheckoutError("The order total is too large.", 400);
     }
 
-    // 4. Revalidate a discount on the server.
-    // Discount codes belong to a seller, so only that seller's merchandise
-    // contributes to the discount and its minimum-order requirement.
+    // 6. Revalidate the discount on the server.
     let discount: {
       id: string;
       sellerId: string;
@@ -300,9 +372,18 @@ export async function POST(req: Request) {
     } | null = null;
 
     let discountCents = 0;
-    const now = new Date();
 
     if (input.discountCode) {
+      if (
+        cartItems.some(
+          (item) => itemPricing.get(item.id)?.flashDealId
+        )
+      ) {
+        throw new CheckoutError(
+          "Discount codes cannot currently be combined with flash deals."
+        );
+      }
+
       const discountRecord = await db.discountCode.findUnique({
         where: {
           code: input.discountCode.toUpperCase(),
@@ -310,11 +391,15 @@ export async function POST(req: Request) {
       });
 
       if (!discountRecord || !discountRecord.isActive) {
-        throw new CheckoutError("This discount code is invalid or inactive.");
+        throw new CheckoutError(
+          "This discount code is invalid or inactive."
+        );
       }
 
       if (discountRecord.startsAt > now) {
-        throw new CheckoutError("This discount code is not active yet.");
+        throw new CheckoutError(
+          "This discount code is not active yet."
+        );
       }
 
       if (discountRecord.expiresAt && discountRecord.expiresAt <= now) {
@@ -325,7 +410,9 @@ export async function POST(req: Request) {
         discountRecord.usageLimit !== null &&
         discountRecord.usedCount >= discountRecord.usageLimit
       ) {
-        throw new CheckoutError("This discount code has reached its usage limit.");
+        throw new CheckoutError(
+          "This discount code has reached its usage limit."
+        );
       }
 
       const eligibleItems = cartItems.filter(
@@ -409,28 +496,28 @@ export async function POST(req: Request) {
         usedCount: discountRecord.usedCount,
       };
     }
-    
+
+    // 7. Allocate discounts proportionally to eligible items.
     const itemDiscountCents = new Map<string, number>();
 
-if (discount && discountCents > 0) {
-  const eligibleItems = cartItems
-    .filter((item) => item.offer!.sellerId === discount!.sellerId)
-    .map((item) => ({
-      id: item.id,
-      amountCents: toCents(item.offer!.price) * item.quantity,
-    }));
+    if (discount && discountCents > 0) {
+      const eligibleItems = cartItems
+        .filter((item) => item.offer!.sellerId === discount!.sellerId)
+        .map((item) => ({
+          id: item.id,
+          amountCents: toCents(item.offer!.price) * item.quantity,
+        }));
 
-  const allocations = allocateDiscountCents(
-    eligibleItems,
-    discountCents
-  );
+      const allocations = allocateDiscountCents(
+        eligibleItems,
+        discountCents
+      );
 
-  for (const [itemId, amount] of allocations) {
-    itemDiscountCents.set(itemId, amount);
-  }
-}
+      for (const [itemId, amount] of allocations) {
+        itemDiscountCents.set(itemId, amount);
+      }
+    }
 
-    // Delivery is not discounted by a seller merchandise discount.
     const finalTotalCents =
       subtotalCents + deliveryFeeCents - discountCents;
 
@@ -447,114 +534,141 @@ if (discount && discountCents > 0) {
     const discountAmount = centsToAmount(discountCents);
     const deliveryFee = centsToAmount(deliveryFeeCents);
 
-    // 5. Reserve stock and discount usage, then create the pending order
-    // in a single database transaction.
-    const order = await db.$transaction(async (tx) => {
-      // Conditional stock updates prevent two concurrent checkouts from
-      // both deducting the same available units.
-      for (const item of cartItems) {
-        const offer = item.offer!;
+    // 8. Reserve seller stock and flash-deal stock, then create the order.
+    const order = await db.$transaction(
+      async (tx) => {
+        for (const item of cartItems) {
+          const offer = item.offer!;
 
-        const stockUpdate = await tx.sellerOffer.updateMany({
-          where: {
-            id: offer.id,
-            status: "ACTIVE",
-            stockQuantity: { gte: item.quantity },
-          },
-          data: {
-            stockQuantity: { decrement: item.quantity },
-          },
-        });
+          // Reserve normal seller inventory.
+          const stockUpdate = await tx.sellerOffer.updateMany({
+            where: {
+              id: offer.id,
+              status: "ACTIVE",
+              stockQuantity: { gte: item.quantity },
+            },
+            data: {
+              stockQuantity: { decrement: item.quantity },
+            },
+          });
 
-        if (stockUpdate.count !== 1) {
-          throw new CheckoutError(
-            `There is insufficient stock for "${offer.variant.product.title}". Refresh your cart.`,
-            409
-          );
+          if (stockUpdate.count !== 1) {
+            throw new CheckoutError(
+              `There is insufficient stock for "${offer.variant.product.title}". Refresh your cart.`,
+              409
+            );
+          }
+
+          // Reserve flash-deal inventory atomically.
+          const pricing = itemPricing.get(item.id)!;
+
+          if (pricing.flashDealId) {
+            const dealReservation = await tx.$executeRaw`
+              UPDATE flash_deals
+              SET reserved_quantity = reserved_quantity + ${item.quantity}
+              WHERE id = ${pricing.flashDealId}
+                AND is_active = true
+                AND starts_at <= ${now}
+                AND ends_at > ${now}
+                AND deal_quantity - sold_quantity - reserved_quantity >= ${item.quantity}
+            `;
+
+            if (dealReservation !== 1) {
+              throw new CheckoutError(
+                `The flash deal for "${offer.variant.product.title}" is no longer available. Refresh your cart.`,
+                409
+              );
+            }
+          }
         }
-      }
 
-      // Atomically claim one use of the discount code.
-      if (discount) {
-        const usageWhere = {
-          id: discount.id,
-          isActive: true,
-          startsAt: { lte: now },
-          OR: [
-            { expiresAt: null },
-            { expiresAt: { gt: now } },
-          ],
-          ...(discount.usageLimit !== null
-            ? { usedCount: { lt: discount.usageLimit } }
-            : {}),
-        };
+        // Atomically claim one use of the discount code.
+        if (discount) {
+          const usageWhere = {
+            id: discount.id,
+            isActive: true,
+            startsAt: { lte: now },
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: now } },
+            ],
+            ...(discount.usageLimit !== null
+              ? { usedCount: { lt: discount.usageLimit } }
+              : {}),
+          };
 
-        const usageUpdate = await tx.discountCode.updateMany({
-          where: usageWhere,
-          data: {
-            usedCount: { increment: 1 },
-          },
-        });
+          const usageUpdate = await tx.discountCode.updateMany({
+            where: usageWhere,
+            data: {
+              usedCount: { increment: 1 },
+            },
+          });
 
-        if (usageUpdate.count !== 1) {
-          throw new CheckoutError(
-            "This discount code is no longer available. Please try again.",
-            409
-          );
+          if (usageUpdate.count !== 1) {
+            throw new CheckoutError(
+              "This discount code is no longer available. Please try again.",
+              409
+            );
+          }
         }
-      }
 
-      return tx.order.create({
-        data: {
-          userId,
-          totalAmount: finalTotal,
-          status: "PENDING",
-          discountCodeId: discount?.id ?? null,
-          discountAmount,
-          deliveryRecipient: input.address.recipientName,
-          deliveryPhone: input.address.phone,
-          deliveryFee,
-          deliveryRegion: zoneLocality.locality.district.region.name,
-          deliveryDistrict: zoneLocality.locality.district.name,
-          deliveryLocality: zoneLocality.locality.name,
-          deliveryLandmark: input.address.landmark || null,
-          deliveryStreet: input.address.street,
-          payment: {
-            create: {
-              provider: "PAYSTACK",
-              status: "PENDING",
-              amount: finalTotal,
-              currency: "GHS",
-              
+        return tx.order.create({
+          data: {
+            userId,
+            totalAmount: finalTotal,
+            status: "PENDING",
+            discountCodeId: discount?.id ?? null,
+            discountAmount,
+            deliveryRecipient: input.address.recipientName,
+            deliveryPhone: input.address.phone,
+            deliveryFee,
+            deliveryRegion: zoneLocality.locality.district.region.name,
+            deliveryDistrict: zoneLocality.locality.district.name,
+            deliveryLocality: zoneLocality.locality.name,
+            deliveryLandmark: input.address.landmark || null,
+            deliveryStreet: input.address.street,
+
+            payment: {
+              create: {
+                provider: "PAYSTACK",
+                status: "PENDING",
+                amount: finalTotal,
+                currency: "GHS",
+              },
+            },
+
+            items: {
+              create: cartItems.map((item) => {
+                const offer = item.offer!;
+                const pricing = itemPricing.get(item.id)!;
+
+                return {
+                  variant: { connect: { id: offer.variantId } },
+                  title: offer.variant.product.title,
+                  price: centsToAmount(pricing.priceCents),
+                  quantity: item.quantity,
+                  discountAmount: centsToAmount(
+                    itemDiscountCents.get(item.id) ?? 0
+                  ),
+                  sellerId: offer.sellerId,
+                  offer: { connect: { id: offer.id } },
+                  flashDealId: pricing.flashDealId,
+                  status: "PENDING",
+                };
+              }),
             },
           },
-          items: {
-            create: cartItems.map((item) => {
-              const offer = item.offer!;
-
-              return {
-                variant: { connect: { id: offer.variantId } },
-                title: offer.variant.product.title,
-                price: Number(offer.price),
-                quantity: item.quantity,
-                discountAmount: centsToAmount(itemDiscountCents.get(item.id) ?? 0),
-                sellerId: offer.sellerId,
-                offer: { connect: { id: offer.id } },
-                status: "PENDING",
-              };
-            }),
-          },
-        },
-           });
-    }, {
-      maxWait: 10000,
-      timeout: 20000,
-    });
+        });
+      },
+      {
+        maxWait: 10000,
+        timeout: 20000,
+      }
+    );
 
     const localReference = `ORD-${order.id}`;
 
-    // Persist the expected reference before contacting Paystack so that
-    // an early webhook can locate this order.
+    // 9. Persist the expected Paystack reference before initialization.
     try {
       await db.order.update({
         where: { id: order.id },
@@ -566,8 +680,6 @@ if (discount && discountCents > 0) {
         getErrorMessage(referenceError)
       );
 
-      // Do not initialize a payment without a persisted reconciliation key.
-      // Keep the pending order and its reservations for reconciliation.
       return NextResponse.json(
         {
           error:
@@ -580,10 +692,7 @@ if (discount && discountCents > 0) {
 
     let paystackResponse: Response;
 
-    // 6. Initialize payment.
-    // If the network fails or Paystack returns a server error, its outcome
-    // may be uncertain. Keep the order and stock reservation pending instead
-    // of risking a duplicate payment or releasing stock incorrectly.
+    // 10. Initialize payment.
     try {
       paystackResponse = await fetch(
         "https://api.paystack.co/transaction/initialize",
@@ -613,7 +722,10 @@ if (discount && discountCents > 0) {
         }
       );
     } catch (error) {
-      console.error("Paystack initialization outcome is uncertain:", getErrorMessage(error));
+      console.error(
+        "Paystack initialization outcome is uncertain:",
+        getErrorMessage(error)
+      );
 
       return NextResponse.json(
         {
@@ -637,7 +749,9 @@ if (discount && discountCents > 0) {
     try {
       paystackData = await paystackResponse.json();
     } catch {
-      console.error("Paystack returned an unreadable initialization response.");
+      console.error(
+        "Paystack returned an unreadable initialization response."
+      );
 
       return NextResponse.json(
         {
@@ -649,8 +763,7 @@ if (discount && discountCents > 0) {
       );
     }
 
-    // A server-side Paystack failure may be transient, so do not release
-    // stock or discount usage for HTTP 5xx responses.
+    // Do not release reservations for uncertain server-side failures.
     if (paystackResponse.status >= 500) {
       console.error("Paystack initialization returned a server error.");
 
@@ -664,7 +777,7 @@ if (discount && discountCents > 0) {
       );
     }
 
-    // For a definitive rejection, cancel the pending order and compensate
+    // 11. Handle definitive Paystack rejection.
     if (
       !paystackResponse.ok ||
       paystackData.status !== true ||
@@ -672,7 +785,6 @@ if (discount && discountCents > 0) {
       paystackData.data.reference !== localReference ||
       !paystackData.data?.authorization_url
     ) {
-
       try {
         await db.$transaction(async (tx) => {
           const cancelled = await tx.order.updateMany({
@@ -685,8 +797,8 @@ if (discount && discountCents > 0) {
             },
           });
 
-          // Only compensate if this request successfully cancelled the
-          // still-pending order. This prevents double stock restoration.
+          // Compensate only if this request successfully cancelled
+          // the pending order.
           if (cancelled.count === 1) {
             await tx.payment.updateMany({
               where: {
@@ -696,7 +808,8 @@ if (discount && discountCents > 0) {
               data: {
                 status: "FAILED",
                 metadata: {
-                  reason: "Paystack rejected transaction initialization.",
+                  reason:
+                    "Paystack rejected transaction initialization.",
                 },
               },
             });
@@ -708,6 +821,29 @@ if (discount && discountCents > 0) {
                   stockQuantity: { increment: item.quantity },
                 },
               });
+
+              // Release the flash-deal reservation.
+              const dealId = itemPricing.get(item.id)?.flashDealId;
+
+              if (dealId) {
+                const released = await tx.flashDeal.updateMany({
+                  where: {
+                    id: dealId,
+                    reservedQuantity: { gte: item.quantity },
+                  },
+                  data: {
+                    reservedQuantity: {
+                      decrement: item.quantity,
+                    },
+                  },
+                });
+
+                if (released.count !== 1) {
+                  throw new Error(
+                    `Could not release flash-deal reservation ${dealId}.`
+                  );
+                }
+              }
             }
 
             if (discount) {
@@ -746,9 +882,7 @@ if (discount && discountCents > 0) {
 
     const paystackReference = paystackData.data.reference;
 
-    // Save the payment reference and remove only this user's submitted
-    // cart items in one transaction. If either operation fails, both roll
-    // back and the order remains available for reconciliation.
+    // 12. Save payment reference and remove submitted cart items.
     try {
       await db.$transaction(async (tx) => {
         await tx.order.update({
@@ -792,7 +926,10 @@ if (discount && discountCents > 0) {
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: error.issues[0]?.message ?? "Invalid checkout details." },
+        {
+          error:
+            error.issues[0]?.message ?? "Invalid checkout details.",
+        },
         { status: 400 }
       );
     }

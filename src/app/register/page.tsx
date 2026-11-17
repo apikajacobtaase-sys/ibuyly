@@ -14,7 +14,7 @@ const callbackUrl = (() => {
 
   return requested?.startsWith("/") && !requested.startsWith("//")
     ? requested
-    : "/account";
+     : "/";;
 })();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -46,11 +46,10 @@ const callbackUrl = (() => {
       });
 
       const data = await res.json();
-      if (res.ok) {
-        setSuccess(
-          data.message || "Account created successfully! You can now sign in."
-        );
-      } else {
+     if (res.ok) {
+  router.replace("/login");
+  return;
+} else {
         setError(data.error || "Registration failed");
       }
     } catch (err) {
@@ -65,7 +64,7 @@ const callbackUrl = (() => {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="text-3xl font-black text-ibuy-orange">
+          <Link href="/" className="text-3xl font-black text-ibuy-primary">
             iBUY
           </Link>
           <p className="text-ibuy-text-secondary mt-2">Create your account</p>
@@ -96,7 +95,7 @@ const callbackUrl = (() => {
                   required
                   value={formData.firstName}
                   onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                  className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
                   placeholder="Kwame"
                 />
               </div>
@@ -109,7 +108,7 @@ const callbackUrl = (() => {
                   required
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                  className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
                   placeholder="Asante"
                 />
               </div>
@@ -125,7 +124,7 @@ const callbackUrl = (() => {
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
                 placeholder="you@example.com"
               />
             </div>
@@ -139,7 +138,7 @@ const callbackUrl = (() => {
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                className="w-full px-3 py-2.5 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
                 placeholder="024 123 4567"
               />
             </div>
@@ -156,7 +155,7 @@ const callbackUrl = (() => {
                   minLength={8}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3 py-2.5 pr-10 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                  className="w-full px-3 py-2.5 pr-10 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
                   placeholder="At least 8 characters"
                 />
                 <button
@@ -180,7 +179,7 @@ const callbackUrl = (() => {
                   required
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full px-3 py-2.5 pr-10 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                  className="w-full px-3 py-2.5 pr-10 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
                   placeholder="Repeat your password"
                 />
                 <button
@@ -200,15 +199,15 @@ const callbackUrl = (() => {
                 required
                 checked={formData.acceptTerms}
                 onChange={(e) => setFormData({ ...formData, acceptTerms: e.target.checked })}
-                className="mt-1 w-4 h-4 text-ibuy-orange border-gray-300 rounded focus:ring-ibuy-orange"
+                className="mt-1 w-4 h-4 text-ibuy-primary border-gray-300 rounded focus:ring-ibuy-primary"
               />
               <label className="text-sm text-ibuy-text-secondary">
                 I agree to the{" "}
-                <Link href="/terms" className="text-ibuy-orange hover:underline font-medium">
+                <Link href="/terms" className="text-ibuy-primary hover:underline font-medium">
                   Terms and Conditions
                 </Link>{" "}
                 and{" "}
-                <Link href="/privacy" className="text-ibuy-orange hover:underline font-medium">
+                <Link href="/privacy" className="text-ibuy-primary hover:underline font-medium">
                   Privacy Policy
                 </Link>
               </label>
@@ -218,7 +217,7 @@ const callbackUrl = (() => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-ibuy-orange text-white py-3 rounded-lg font-semibold hover:bg-ibuy-orange-hover transition disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 bg-ibuy-primary text-white py-3 rounded-lg font-semibold hover:bg-ibuy-primary-hover transition disabled:opacity-50"
             >
               <UserPlus className="w-5 h-5" />
               {isLoading ? "Creating Account..." : "Create Account"}
@@ -230,7 +229,7 @@ const callbackUrl = (() => {
             Already have an account?{" "}
             <Link
               href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-              className="text-ibuy-orange font-semibold hover:underline"
+              className="text-ibuy-primary font-semibold hover:underline"
             >
               Sign in
             </Link>

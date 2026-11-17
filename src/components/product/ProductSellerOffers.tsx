@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Image from "next/image";
@@ -13,7 +13,10 @@ interface SellerOffer {
   sellerName: string;
   sellerLogoUrl: string | null;
   price: number;
+  originalPrice: number | null;
   stockQuantity: number;
+  dealEndsAt: string | null;
+  flashDealId: string | null;
 }
 
 interface ProductVariant {
@@ -168,10 +171,23 @@ export default function ProductSellerOffers({
                   </div>
 
                   <div className="text-right">
-                    <p className="text-lg font-bold text-gray-900">
-                      GH {offer.price.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-gray-500">
+                    <div className="text-right">
+                          <p className="text-lg font-bold text-red-600">
+                            GH₵{offer.price.toFixed(2)}
+                          </p>
+
+                          {offer.originalPrice !== null && (
+                            <>
+                              <p className="text-xs text-gray-400 line-through">
+                                GH₵{offer.originalPrice.toFixed(2)}
+                              </p>
+                              <span className="text-[10px] font-bold text-red-600">
+                                FLASH DEAL
+                              </span>
+                            </>
+                          )}
+                        </div>
+                                            <p className="text-xs text-gray-500">
                       {offer.stockQuantity} available
                     </p>
                   </div>

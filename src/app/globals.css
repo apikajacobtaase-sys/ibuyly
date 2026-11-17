@@ -12,8 +12,8 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  --color-ibuy-orange: #F7931E;
-  --color-ibuy-orange-hover: #E78012;
+  --color-ibuy-primary:#014900;
+  --color-ibuy-primary-hover:#003600;
   --color-ibuy-bg: #F5F6F8;
   --color-ibuy-card: #FFFFFF;
   --color-ibuy-text: #202124;

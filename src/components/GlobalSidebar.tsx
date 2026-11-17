@@ -2,13 +2,14 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useCartStore } from "@/store/cartStore";
 import { useState, useEffect } from "react";
 import {
   Home, ShoppingBag, Tag, LayoutDashboard, Package,MessageSquare,
-  Bell, MapPin, Settings, Store, LogOut, ShoppingCart,
+  Bell, MapPin, Settings, Store, LogOut, ShoppingCart,GitCompare,
   User, Shield, Heart, ChevronLeft, ChevronRight, Users, PackagePlus, X
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ const browseLinks = [
   { href: "/", label: "Home", icon: Home },
   { href: "/products", label: "All Products", icon: ShoppingBag },
   { href: "/categories", label: "Categories", icon: Tag },
+  { href: "/compare", label: "Compare Products", icon: GitCompare },
 ];
 
 const accountLinks = [
@@ -160,24 +162,32 @@ useEffect(() => {
 
         {/* ✅ Flex Column Wrapper for Desktop Structure */}
         <div className="hidden md:flex flex-col h-full">
+            {/* 1. Brand & Toggle */}
+<div className={`flex-shrink-0 p-4 border-b border-gray-100 items-center ${isCollapsed ? "justify-center flex" : "flex justify-between"}`}>
+  <Link href="/" aria-label="iBUY Africa Home" className="flex items-center overflow-hidden">
+    {isCollapsed ? (
+      <div className="w-8 h-8 bg-green-700 rounded-lg flex items-center justify-center text-white font-bold">
+        i
+      </div>
+    ) : (
+      <Image
+        src="/brand/ibuy-africa-logo.png"
+        alt="iBUY Africa"
+        width={1280}
+        height={511}
+        priority
+        className="h-10 w-auto object-contain"
+      />
+    )}
+  </Link>
 
-          {/* 1. Brand & Toggle (Fixed at top) */}
-          <div className={`flex-shrink-0 p-4 border-b border-gray-100 items-center ${isCollapsed ? "justify-center flex" : "flex justify-between"}`}>
-            <Link href="/" className="flex items-center gap-3 overflow-hidden">
-              <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
-                <ShoppingBag className="w-5 h-5 text-white" />
-              </div>
-              {!isCollapsed && <span className="text-xl font-bold text-gray-900 tracking-tight">iBUY</span>}
-            </Link>
-
-            <button
-              onClick={toggleSidebar}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-            >
-              {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-            </button>
-          </div>
-
+  <button
+    onClick={toggleSidebar}
+    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+  >
+    {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+  </button>
+</div>
           {/* 2. Scrollable Navigation (Takes remaining space) */}
           <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-6">
             <div>

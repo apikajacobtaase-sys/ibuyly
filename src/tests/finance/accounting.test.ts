@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { calculateSellerBalance } from "@/lib/finance/accounting";
 
 describe("calculateSellerBalance", () => {

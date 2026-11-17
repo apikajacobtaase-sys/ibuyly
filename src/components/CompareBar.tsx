@@ -11,12 +11,12 @@ export default function CompareBar() {
   if (items.length === 0) return null;
   if (pathname === "/compare") return null;
   return (
-    <div className="fixed bottom-20 md:bottom-0 left-0 right-0 z-[60] border-t-2 border-ibuy-orange bg-white shadow-2xl">
+    <div className="fixed bottom-20 md:bottom-0 left-0 right-0 z-[60] border-t-2 border-ibuy-primary bg-white shadow-2xl">
       <div className="mx-auto max-w-7xl px-3 py-3 sm:px-5">
 
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <GitCompare className="h-5 w-5 text-ibuy-orange" />
+            <GitCompare className="h-5 w-5 text-ibuy-primary" />
 
             <span className="text-sm font-bold text-gray-900">
               Compare Products ({items.length}/4)
@@ -84,7 +84,7 @@ export default function CompareBar() {
           {items.length >= 2 ? (
             <Link
               href="/compare"
-              className="flex flex-shrink-0 items-center gap-2 rounded-lg bg-ibuy-orange px-5 py-2.5 text-sm font-bold text-white transition hover:bg-ibuy-orange-hover"
+              className="flex flex-shrink-0 items-center gap-2 rounded-lg bg-ibuy-primary px-5 py-2.5 text-sm font-bold text-white transition hover:bg-ibuy-primary-hover"
             >
               <GitCompare className="h-4 w-4" />
               Compare Now

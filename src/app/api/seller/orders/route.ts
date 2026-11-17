@@ -59,6 +59,7 @@ export async function GET(req: Request) {
     const page = Number(searchParams.get("page") ?? "1");
     const limit = Number(searchParams.get("limit") ?? "10");
     const itemStatus = searchParams.get("itemStatus") ?? "ALL";
+    const orderId = searchParams.get("orderId");
 
     if (
       !Number.isSafeInteger(page) ||
@@ -90,11 +91,12 @@ export async function GET(req: Request) {
       ...(itemStatus !== "ALL" ? { status: itemStatus } : {}),
     };
 
-    const whereClause = {
-      items: {
-        some: itemWhere,
-      },
-    };
+   const whereClause = {
+  ...(orderId ? { id: orderId } : {}),
+  items: {
+    some: itemWhere,
+  },
+};
 
     const [orders, total] = await Promise.all([
       db.order.findMany({

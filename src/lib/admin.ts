@@ -1,4 +1,4 @@
-﻿// src/lib/admin.ts
+// src/lib/admin.ts
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";

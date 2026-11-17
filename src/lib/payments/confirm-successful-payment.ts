@@ -248,18 +248,34 @@ export async function confirmSuccessfulPayment({
       });
     }
 
+    // Validate order discount allocation.
     if (totalDiscountCents !== toCents(order.discountAmount)) {
       throw new Error(
         `Order ${order.id} discount allocation does not reconcile.`
       );
     }
 
-    if (
-      totalDiscountCents > 0 &&
-      !order.discountCode
-    ) {
+    if (totalDiscountCents > 0 && !order.discountCode) {
       throw new Error(
         `Order ${order.id} has a discount without a discount code.`
+      );
+    }
+
+    // Validate the total payment amount.
+    const merchandiseNetCents = [...sellerTotals.values()].reduce(
+      (sum, seller) => sum + seller.netCents,
+      0
+    );
+
+    const expectedTotalCents =
+      merchandiseNetCents + toCents(order.deliveryFee);
+
+    if (
+      expectedTotalCents !== toCents(order.totalAmount) ||
+      expectedTotalCents !== toCents(order.payment.amount)
+    ) {
+      throw new Error(
+        `Order ${order.id} payment amount reconciliation failed.`
       );
     }
 
@@ -327,6 +343,7 @@ export async function confirmSuccessfulPayment({
       };
     }
 
+    // Confirm the order.
     const orderUpdate = await tx.order.updateMany({
       where: {
         id: order.id,
@@ -341,6 +358,35 @@ export async function confirmSuccessfulPayment({
       throw new Error(
         `Could not confirm order ${order.id}.`
       );
+    }
+
+    // Convert flash-deal reservations into completed sales.
+    // This runs in the same transaction as payment confirmation.
+    for (const item of order.items) {
+      if (!item.flashDealId) continue;
+
+      const dealUpdate = await tx.flashDeal.updateMany({
+        where: {
+          id: item.flashDealId,
+          reservedQuantity: {
+            gte: item.quantity,
+          },
+        },
+        data: {
+          reservedQuantity: {
+            decrement: item.quantity,
+          },
+          soldQuantity: {
+            increment: item.quantity,
+          },
+        },
+      });
+
+      if (dealUpdate.count !== 1) {
+        throw new Error(
+          `Flash-deal reservation conversion failed for order item ${item.id}.`
+        );
+      }
     }
 
     // Persist item-level commission snapshots.

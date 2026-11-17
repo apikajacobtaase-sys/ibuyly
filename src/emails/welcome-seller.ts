@@ -1,29 +1,31 @@
-// src/emails/welcome-seller.ts
-
-import { getAppUrl } from "../lib/app-url";
+ import { getAppUrl } from "../lib/app-url";
 
 export function getSellerWelcomeEmail(businessName: string, ownerName: string): string {
   const appUrl = getAppUrl();
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to iBUY</title>
+  <title>Welcome to iBUY Africa</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
   <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f4f4f5;">
     <tr>
       <td align="center" style="padding: 40px 0;">
         <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-          
+
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px; text-align: center;">
+            <td style="background: linear-gradient(135deg, #014900 0%, #003600 100%); padding: 32px; text-align: center;">
               <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">
-                🎉 Welcome to iBUY!
+                Welcome to iBUY Africa!
               </h1>
+              <p style="margin: 10px 0 0; color: #e5f5e5; font-size: 15px;">
+                Your business journey starts here.
+              </p>
             </td>
           </tr>
 
@@ -37,16 +39,16 @@ export function getSellerWelcomeEmail(businessName: string, ownerName: string): 
                 Congratulations! Your seller application for <strong style="color: #111827;">${businessName}</strong> has been officially approved.
               </p>
               <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-                You can now log in to your seller dashboard, list your products, and start reaching thousands of customers across Ghana.
+                You can now log in to your seller dashboard, list your products, and start reaching customers across Ghana.
               </p>
 
               <!-- Action Button -->
               <table role="presentation" style="border-collapse: collapse; margin: 0 auto 32px auto;">
                 <tr>
-                  <td style="border-radius: 8px; background-color: #f97316;">
+                  <td style="border-radius: 8px; background-color: #014900;">
                     <a href="${appUrl}/seller"
                        style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
-                      Go to Seller Dashboard →
+                      Go to Seller Dashboard
                     </a>
                   </td>
                 </tr>
@@ -55,7 +57,7 @@ export function getSellerWelcomeEmail(businessName: string, ownerName: string): 
               <!-- Quick Tips -->
               <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; border: 1px solid #e5e7eb;">
                 <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 16px; font-weight: 700;">
-                  💡 Quick Tips for Success:
+                  Quick Tips for Success
                 </h3>
                 <ul style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.8;">
                   <li>Upload high-quality images for your products.</li>
@@ -73,7 +75,7 @@ export function getSellerWelcomeEmail(businessName: string, ownerName: string): 
                 If you have any questions, reply to this email or contact our support team.
               </p>
               <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                © ${new Date().getFullYear()} iBUY Marketplace. All rights reserved.
+                &copy; ${new Date().getFullYear()} iBUY Africa. All rights reserved.
               </p>
             </td>
           </tr>

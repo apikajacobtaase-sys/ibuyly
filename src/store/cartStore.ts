@@ -16,6 +16,9 @@ export interface CartItem {
   sellerId: string;
   sellerName: string;
   isSelected: boolean;
+  originalPrice?: number | null;
+flashDealId?: string | null;
+dealEndsAt?: string | null;
 }
 
 interface CartState {

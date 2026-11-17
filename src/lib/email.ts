@@ -1,4 +1,5 @@
- import nodemailer from "nodemailer";
+
+import { Resend } from "resend";
 
 interface SendEmailOptions {
   to: string | string[];
@@ -6,44 +7,39 @@ interface SendEmailOptions {
   html: string;
 }
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 export async function sendEmail({
   to,
   subject,
   html,
 }: SendEmailOptions) {
   try {
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
+    const apiKey = process.env.RESEND_API_KEY;
+    const from =
+      process.env.RESEND_FROM_EMAIL ||
+      "iBUY Africa <notifications@ibuydeals.africa>";
 
-    if (!gmailUser || !gmailPassword) {
-      throw new Error("Gmail SMTP credentials are not configured.");
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY is not configured.");
     }
 
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: gmailUser,
-        pass: gmailPassword.replace(/\s/g, ""),
-      },
-    });
-
-    const fromEmail =
-      process.env.FROM_EMAIL || `iBUY <${gmailUser}>`;
-
-    const info = await transporter.sendMail({
-      from: fromEmail,
+    const { data, error } = await resend.emails.send({
+      from,
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
     });
 
-    console.log("Email accepted by Gmail:", info.messageId);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    console.log("Email accepted by Resend:", data?.id);
 
     return {
       success: true,
-      id: info.messageId,
+      id: data?.id,
     };
   } catch (error: unknown) {
     const message =
@@ -91,7 +87,7 @@ export async function sendOrderConfirmationEmail({
         <p><strong>Order ID:</strong> ${orderId}</p>
         <table>${itemsHtml}</table>
         <h3>Total: GH₵ ${totalAmount.toFixed(2)}</h3>
-        <p>You can track your order in your iBUY account.</p>
+        <p>You can track your order in your iBUY Africa account.</p>
       </div>
     `,
   });
@@ -184,7 +180,7 @@ export async function sendDeliveryConfirmationEmail({
       <div style="font-family:Arial,sans-serif;">
         <h2>Hi ${customerName},</h2>
         <p>Your order #${orderId.slice(-8).toUpperCase()} has been delivered!</p>
-        <p>Thank you for shopping with iBUY.</p>
+        <p>Thank you for shopping with iBUY Africa.</p>
       </div>
     `,
   });
@@ -203,17 +199,17 @@ export async function sendSellerApplicationEmail({
 }) {
   const messages = {
     APPROVED: {
-      subject: "Your iBUY Seller Application Has Been Approved",
+      subject: "Your iBUY Africa Seller Application Has Been Approved",
       heading: "Congratulations! Your application is approved.",
       message: "Your seller application has been approved.",
     },
     REJECTED: {
-      subject: "Update on Your iBUY Seller Application",
+      subject: "Update on Your iBUY Africa Seller Application",
       heading: "Your application was not approved.",
       message: "Unfortunately, we cannot approve your application at this time.",
     },
     MORE_INFORMATION_REQUIRED: {
-      subject: "Additional Information Required for Your iBUY Application",
+      subject: "Additional Information Required for Your iBUY Africa Application",
       heading: "We need additional information.",
       message: "Please provide the additional information requested by our team.",
     },
@@ -230,7 +226,7 @@ export async function sendSellerApplicationEmail({
         <p>Hello ${businessName},</p>
         <p>${notification.message}</p>
         ${reason ? `<p><strong>Additional details:</strong> ${reason}</p>` : ""}
-        <p>Thank you for choosing iBUY.</p>
+        <p>Thank you for choosing iBUY Africa.</p>
       </div>
     `,
   });
@@ -276,11 +272,11 @@ export async function sendEmailVerificationEmail({
 
   return sendEmail({
     to,
-    subject: "Verify Your iBUY Email Address",
+    subject: "Verify Your iBUY Africa Email Address",
     html: `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;">
-        <h2>Verify your iBUY account</h2>
-        <p>Welcome to iBUY!</p>
+        <h2>Verify your iBUY Africa account</h2>
+        <p>Welcome to iBUY Africa!</p>
         <p>Please verify your email address using the link below.</p>
         <a href="${verificationUrl.toString()}">Verify Email Address</a>
         <p>This link expires in 24 hours.</p>

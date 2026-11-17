@@ -26,7 +26,7 @@ export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState({ stock: "", threshold: "" });
+ const [editValues, setEditValues] = useState({ stock: "" });
 
   useEffect(() => {
     fetchInventory();
@@ -44,38 +44,43 @@ export default function InventoryPage() {
     }
   };
 
-  const handleEdit = (item: InventoryItem) => {
-    setEditingId(item.offerId); // ðŸ‘ˆ FIX: Use offerId for tracking edit state
-    setEditValues({
-      stock: item.stockQuantity.toString(),
-      threshold: item.lowStockThreshold.toString()
+const handleEdit = (item: InventoryItem) => {
+  setEditingId(item.offerId);
+  setEditValues({ stock: item.stockQuantity.toString() });
+};
+
+  const handleSave = async (offerId: string) => {
+  const stockQuantity = Number(editValues.stock);
+
+  if (!Number.isSafeInteger(stockQuantity) || stockQuantity < 0) {
+    alert("Please enter a valid stock quantity.");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/seller/inventory", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        offerId,
+        stockQuantity,
+      }),
     });
-  };
 
-    const handleSave = async (offerId: string) => {
-    try {
-      const res = await fetch("/api/seller/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          offerId,
-          stockQuantity: editValues.stock,
-          lowStockThreshold: editValues.threshold, // ðŸ‘ˆ Ensure this is sent
-        }),
-      });
+    const data = await res.json();
 
-      const data = await res.json();
-      if (res.ok) {
-        setEditingId(null);
-        fetchInventory(); // Refresh to show updated values
-      } else {
-        alert(data.error || "Failed to update inventory");
-      }
-    } catch (error) {
-      console.error("Failed to update inventory", error);
-      alert("Network error occurred");
+    if (res.ok) {
+      setEditingId(null);
+      fetchInventory();
+    } else {
+      alert(data.error || "Failed to update inventory");
     }
-  };
+  } catch (error) {
+    console.error("Inventory update failed:", error);
+    alert("Network error occurred");
+  }
+};
+
   const getStockBadge = (status: string) => {
     if (status === "OUT_OF_STOCK") return <StatusBadge status="OUT_OF_STOCK" />;
     if (status === "LOW_STOCK") return <StatusBadge status="PENDING" />;
@@ -118,22 +123,15 @@ export default function InventoryPage() {
         )
       ),
     },
-    {
-      key: "threshold",
-      header: "Low Stock Alert",
-      render: (item) => (
-        editingId === item.offerId ? ( // ðŸ‘ˆ FIX: Check against offerId
-          <input
-            type="number"
-            value={editValues.threshold}
-            onChange={(e) => setEditValues({ ...editValues, threshold: e.target.value })}
-            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
-          />
-        ) : (
-          <span className="text-sm text-gray-600">{item.lowStockThreshold} units</span>
-        )
-      ),
-    },
+   {
+  key: "threshold",
+  header: "Low Stock Alert",
+  render: (item) => (
+    <span className="text-sm text-gray-600">
+      {item.lowStockThreshold} units
+    </span>
+  ),
+},
     {
       key: "status",
       header: "Status",
@@ -271,25 +269,9 @@ export default function InventoryPage() {
                           Low Stock Alert
                         </p>
 
-                        {isEditing ? (
-                          <input
-                            type="number"
-                            min="0"
-                            value={editValues.threshold}
-                            onChange={(e) =>
-                              setEditValues({
-                                ...editValues,
-                                threshold: e.target.value,
-                              })
-                            }
-                            aria-label={`Low stock threshold for ${item.productTitle}`}
-                            className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-base font-semibold outline-none focus:ring-2 focus:ring-teal-500"
-                          />
-                        ) : (
-                          <p className="mt-2 text-base font-semibold text-gray-800">
-                            {item.lowStockThreshold} units
-                          </p>
-                        )}
+                       <p className="mt-2 text-base font-semibold text-gray-800">
+  {item.lowStockThreshold} units
+</p>
                       </div>
                     </div>
 

@@ -49,7 +49,7 @@ export default function SellerApplyPage() {
   return (
     <div className="min-h-screen bg-ibuy-bg flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
-        <Link href="/account" className="inline-flex items-center gap-2 text-sm text-ibuy-text-secondary hover:text-ibuy-orange mb-6">
+        <Link href="/account" className="inline-flex items-center gap-2 text-sm text-ibuy-text-secondary hover:text-ibuy-primary mb-6">
           <ArrowLeft className="w-4 h-4" /> Back to Account
         </Link>
 

@@ -318,26 +318,29 @@ model Order {
 }
 
 model OrderItem {
-  id                   String                @id @default(cuid())
-  orderId              String                @map("order_id")
-  variantId            String                @map("variant_id")
-  title                String
-  price                Decimal               @db.Decimal(10, 2)
-  quantity             Int
-  offerId              String?               @map("offer_id")
-  sellerId             String?               @map("seller_id")
-  status               String                @default("PENDING") @map("status")
-  trackingNumber       String?               @map("tracking_number")
-  trackingCarrier      String?               @map("tracking_carrier")
-  shippedAt            DateTime?             @map("shipped_at")
-  deliveredAt          DateTime?             @map("delivered_at")
-  offer                SellerOffer?          @relation(fields: [offerId], references: [id])
-  order                Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant              ProductVariant        @relation(fields: [variantId], references: [id])
-  returns              Return[]
-  discountAmount       Decimal               @default(0) @map("discount_amount") @db.Decimal(10, 2)
-  commissionAmount     Decimal               @default(0) @map("commission_amount") @db.Decimal(10, 2)
-  refundOperationItems RefundOperationItem[]
+  id                     String                @id @default(cuid())
+  orderId                String                @map("order_id")
+  variantId              String                @map("variant_id")
+  title                  String
+  price                  Decimal               @db.Decimal(10, 2)
+  quantity               Int
+  offerId                String?               @map("offer_id")
+  sellerId               String?               @map("seller_id")
+  status                 String                @default("PENDING") @map("status")
+  trackingNumber         String?               @map("tracking_number")
+  trackingCarrier        String?               @map("tracking_carrier")
+  shippedAt              DateTime?             @map("shipped_at")
+  deliveredAt            DateTime?             @map("delivered_at")
+  commissionRateSnapshot Decimal?              @map("commission_rate_snapshot") @db.Decimal(5, 2)
+  offer                  SellerOffer?          @relation(fields: [offerId], references: [id])
+  order                  Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant                ProductVariant        @relation(fields: [variantId], references: [id])
+  returns                Return[]
+  discountAmount         Decimal               @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  commissionAmount       Decimal               @default(0) @map("commission_amount") @db.Decimal(10, 2)
+  refundOperationItems   RefundOperationItem[]
+  flashDealId            String?               @map("flash_deal_id")
+  flashDeal              FlashDeal?            @relation(fields: [flashDealId], references: [id])
 
   @@index([orderId])
   @@index([variantId])
@@ -767,6 +770,18 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model PlatformSettings {
+  id                 String    @id @default("platform")
+  maintenanceMode    Boolean   @default(false) @map("maintenance_mode")
+  maintenanceMessage String?   @map("maintenance_message")
+  expectedBackAt     DateTime? @map("expected_back_at")
+  updatedById        String?   @map("updated_by_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
 model Dispute {
   id              String         @id @default(cuid())
   orderId         String         @map("order_id")
@@ -955,6 +970,7 @@ model SellerOffer {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   cartItems     CartItem[]
+  flashDeals    FlashDeal[]
   orderItems    OrderItem[]
   seller        SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
@@ -1126,4 +1142,46 @@ model ConciergeInteraction {
   @@index([userId, createdAt])
   @@index([eventType, createdAt])
   @@map("concierge_interactions")
+}
+
+model PromotionBanner {
+  id             String    @id @default(cuid())
+  title          String
+  subtitle       String?
+  imageUrl       String    @map("image_url")
+  mobileImageUrl String?   @map("mobile_image_url")
+  altText        String?   @map("alt_text")
+  buttonText     String?   @map("button_text")
+  buttonUrl      String?   @map("button_url")
+  placement      String    @default("HOME_HERO")
+  isActive       Boolean   @default(true) @map("is_active")
+  startsAt       DateTime? @map("starts_at")
+  endsAt         DateTime? @map("ends_at")
+  sortOrder      Int       @default(0) @map("sort_order")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive, placement, startsAt, endsAt])
+  @@map("promotion_banners")
+}
+
+model FlashDeal {
+  id               String   @id @default(cuid())
+  offerId          String   @map("offer_id")
+  promotionalPrice Decimal  @map("promotional_price") @db.Decimal(10, 2)
+  dealQuantity     Int      @map("deal_quantity")
+  soldQuantity     Int      @default(0) @map("sold_quantity")
+  reservedQuantity Int      @default(0) @map("reserved_quantity")
+  startsAt         DateTime @map("starts_at")
+  endsAt           DateTime @map("ends_at")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  offer      SellerOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([isActive, startsAt, endsAt])
+  @@index([offerId])
+  @@map("flash_deals")
 }

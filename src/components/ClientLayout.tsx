@@ -15,8 +15,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // Seller and admin dashboards have their own independent navigation.
   const isSellerRoute = pathname === "/seller" || pathname.startsWith("/seller/");
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+  const isMaintenanceRoute = pathname === "/maintenance";
 
-  if (isSellerRoute || isAdminRoute) {
+  if (isSellerRoute || isAdminRoute || isMaintenanceRoute) {
     return <>{children}</>;
   }
 

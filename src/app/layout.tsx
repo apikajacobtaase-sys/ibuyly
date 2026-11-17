@@ -9,56 +9,57 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.ibuydeals.africa"),
 
-  title: {
-    default: "iBUY | Online Shopping Marketplace in Ghana",
-    template: "%s | iBUY",
-  },
+title: {
+  default: "iBUY Africa | Online Shopping Marketplace in Ghana",
+  template: "%s | iBUY Africa",
+},
 
   description:
     "Discover products, compare prices and shop from sellers across Ghana on iBUY.",
 
-  applicationName: "iBUY",
+ applicationName: "iBUY Africa",
 
   openGraph: {
     type: "website",
-    siteName: "iBUY",
+    siteName: "iBUY Africa",
     locale: "en_GH",
-    title: "iBUY | Online Shopping Marketplace in Ghana",
+    title: "iBUY Africa | Online Shopping Marketplace in Ghana",
     description:
-      "Discover products, compare prices and shop from sellers across Ghana on iBUY.",
+      "Discover products, compare prices and shop from sellers across Ghana on iBUY Africa.",
     url: "https://www.ibuydeals.africa",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "iBUY | Online Shopping Marketplace in Ghana",
+    title: "iBUY Africa | Online Shopping Marketplace in Ghana",
     description:
-      "Discover products, compare prices and shop from sellers across Ghana on iBUY.",
+      "Discover products, compare prices and shop from sellers across Ghana on iBUY Africa.",
   },
 
   manifest: "/manifest.webmanifest",
 
   appleWebApp: {
     capable: true,
-    title: "iBUY",
+    title: "iBUY Africa",
     statusBarStyle: "default",
   },
-
-  icons: {
-    icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
-    apple: [
-      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-    ],
-  },
+icons: {
+  icon: [
+    { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
+    { url: "/brand/favicon-48.png", sizes: "48x48", type: "image/png" },
+    { url: "/brand/ibuy-africa-icon-192.png", sizes: "192x192", type: "image/png" },
+    { url: "/brand/ibuy-africa-icon-512.png", sizes: "512x512", type: "image/png" },
+  ],
+  apple: [
+    { url: "/brand/ibuy-africa-icon-192.png", sizes: "192x192", type: "image/png" },
+  ],
+},
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#F7931E",
+  themeColor: "#014900",
 };
 
 export default function RootLayout({

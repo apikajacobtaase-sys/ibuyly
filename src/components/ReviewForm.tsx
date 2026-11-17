@@ -24,7 +24,7 @@ export default function ReviewForm({ productId, onReviewSubmitted }: ReviewFormP
     return (
       <div className="bg-ibuy-card rounded-lg border border-ibuy-border p-6 text-center">
         <p className="text-ibuy-text mb-3">Please log in to write a review</p>
-        <Link href="/login" className="inline-block bg-ibuy-orange text-white px-6 py-2 rounded-lg font-semibold hover:bg-ibuy-orange-hover transition">
+        <Link href="/login" className="inline-block bg-ibuy-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-ibuy-primary-hover transition">
           Log In
         </Link>
       </div>
@@ -110,7 +110,7 @@ export default function ReviewForm({ productId, onReviewSubmitted }: ReviewFormP
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Summarize your experience"
           maxLength={100}
-          className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+          className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
         />
       </div>
 
@@ -123,7 +123,7 @@ export default function ReviewForm({ productId, onReviewSubmitted }: ReviewFormP
           placeholder="What did you like or dislike?"
           rows={4}
           maxLength={1000}
-          className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+          className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
         />
       </div>
 
@@ -134,7 +134,7 @@ export default function ReviewForm({ productId, onReviewSubmitted }: ReviewFormP
       <button
         type="submit"
         disabled={isSubmitting || rating === 0}
-        className="w-full bg-ibuy-orange text-white py-2.5 rounded-lg font-semibold hover:bg-ibuy-orange-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-ibuy-primary text-white py-2.5 rounded-lg font-semibold hover:bg-ibuy-primary-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isSubmitting ? "Submitting..." : "Submit Review"}
       </button>

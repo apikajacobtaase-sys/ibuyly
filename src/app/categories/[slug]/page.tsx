@@ -85,9 +85,9 @@ if (data.products?.length > 0) {
         <div className="max-w-7xl mx-auto px-4 py-3">
           {/* Breadcrumbs */}
           <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-ibuy-text-secondary sm:text-sm">
-            <Link href="/" className="hover:text-ibuy-orange">Home</Link>
+            <Link href="/" className="hover:text-ibuy-primary">Home</Link>
             <ChevronRight className="w-4 h-4" />
-            <Link href="/categories" className="hover:text-ibuy-orange">Categories</Link>
+            <Link href="/categories" className="hover:text-ibuy-primary">Categories</Link>
             <ChevronRight className="w-4 h-4" />
             <span className="text-ibuy-text font-medium">{categoryName || "Loading..."}</span>
           </div>
@@ -117,7 +117,7 @@ if (data.products?.length > 0) {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
               >
                 <option value="newest">Newest First</option>
                 <option value="price_asc">Price: Low to High</option>
@@ -131,7 +131,7 @@ if (data.products?.length > 0) {
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
                 placeholder="0"
-                className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
               />
             </div>
             <div>
@@ -141,7 +141,7 @@ if (data.products?.length > 0) {
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
                 placeholder="10000"
-                className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-orange"
+                className="w-full px-3 py-2 border border-ibuy-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ibuy-primary"
               />
             </div>
           </div>
@@ -160,7 +160,7 @@ if (data.products?.length > 0) {
       setAppliedMaxPrice(maxPrice);
       setShowFilters(false);
     }}
-    className="rounded-lg bg-ibuy-orange px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+    className="rounded-lg bg-ibuy-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
   >
     Apply Filters
   </button>
@@ -201,7 +201,7 @@ if (data.products?.length > 0) {
     <p className="mb-5 text-sm text-gray-500">{error}</p>
     <button
       onClick={() => window.location.reload()}
-      className="rounded-lg bg-ibuy-orange px-5 py-2.5 text-sm font-semibold text-white"
+      className="rounded-lg bg-ibuy-primary px-5 py-2.5 text-sm font-semibold text-white"
     >
       Try Again
     </button>
@@ -216,7 +216,7 @@ if (data.products?.length > 0) {
   </p>
   <Link
     href="/categories"
-    className="mt-4 inline-block rounded-lg bg-ibuy-orange px-5 py-2 text-sm font-semibold text-white"
+    className="mt-4 inline-block rounded-lg bg-ibuy-primary px-5 py-2 text-sm font-semibold text-white"
   >
     Browse Categories
   </Link>

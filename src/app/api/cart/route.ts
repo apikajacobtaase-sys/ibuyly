@@ -104,6 +104,15 @@ async function getFormattedItems(cartId: string) {
       },
       offer: {
         include: {
+          flashDeals: {
+            where: {
+              isActive: true,
+              startsAt: { lte: new Date() },
+              endsAt: { gt: new Date() },
+            },
+            orderBy: { endsAt: "asc" },
+            take: 1,
+          },
           seller: {
             select: { id: true, businessName: true },
           },
@@ -116,32 +125,54 @@ async function getFormattedItems(cartId: string) {
   const validItems = items.filter(item => item.variant && item.variant.product);
 
   return validItems.map((item) => {
-    // ✅ Safe access to price
-    const price = item.offer 
-      ? Number(item.offer.price) 
-      : (item.variant ? Number(item.variant.price) : 0);
+  const offer = item.offer;
+  const deal = offer?.flashDeals?.[0];
 
-    // ✅ Safe access to stock
-    const stock = item.offer 
-      ? item.offer.stockQuantity 
-      : (item.variant ? item.variant.stockQuantity : 0);
+  const remaining = deal
+    ? deal.dealQuantity - deal.soldQuantity - deal.reservedQuantity
+    : 0;
 
-    return {
-      id: item.id,
-      productId: item.variant.productId,
-      variantId: item.variantId,
-      offerId: item.offerId,
-      title: item.variant.product.title,
-      slug: item.variant.product.slug,
-      imageUrl: item.variant.product.images[0]?.url ?? null,
-      price: price,
-      stockQuantity: stock,
-      sellerId: item.offer?.sellerId ?? "unknown",
-      sellerName: item.offer?.seller?.businessName ?? "Seller",
-      quantity: item.quantity,
-      isSelected: true, 
-    };
-  });
+  const hasValidDeal =
+    !!deal &&
+    remaining > 0 &&
+    Number(deal.promotionalPrice) > 0 &&
+    Number(deal.promotionalPrice) < Number(offer.price);
+
+  const regularPrice = offer
+    ? Number(offer.price)
+    : Number(item.variant.price);
+
+  const price = hasValidDeal
+    ? Number(deal.promotionalPrice)
+    : regularPrice;
+
+  const regularStock = offer
+    ? offer.stockQuantity
+    : item.variant.stockQuantity;
+
+  const stock = hasValidDeal
+    ? Math.min(regularStock, remaining)
+    : regularStock;
+
+  return {
+    id: item.id,
+    productId: item.variant.productId,
+    variantId: item.variantId,
+    offerId: item.offerId,
+    title: item.variant.product.title,
+    slug: item.variant.product.slug,
+    imageUrl: item.variant.product.images[0]?.url ?? null,
+    price,
+    originalPrice: hasValidDeal ? regularPrice : null,
+    flashDealId: hasValidDeal ? deal.id : null,
+    dealEndsAt: hasValidDeal ? deal.endsAt.toISOString() : null,
+    stockQuantity: stock,
+    sellerId: offer?.sellerId ?? "unknown",
+    sellerName: offer?.seller?.businessName ?? "Seller",
+    quantity: Math.min(item.quantity, stock),
+    isSelected: true,
+  };
+});
 }
 
 // ✅ SINGLE GET EXPORT

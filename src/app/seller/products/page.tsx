@@ -150,7 +150,7 @@ export default function SellerProductsPage() {
             className="w-20 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-teal-500 outline-none"
           />
         ) : (
-          <span className="font-semibold">GHÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âµ {item.price.toFixed(2)}</span>
+          <span className="font-semibold">GHS {item.price.toFixed(2)}</span>
         )
       ),
     },

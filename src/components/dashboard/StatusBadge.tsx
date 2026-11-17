@@ -1,4 +1,4 @@
-﻿interface StatusBadgeProps {
+interface StatusBadgeProps {
   status: string;
   customStyles?: Record<string, string>;
   size?: "sm" | "md";

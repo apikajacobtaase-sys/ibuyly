@@ -1,4 +1,4 @@
-﻿ "use client";
+ "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -246,7 +246,7 @@ export default function AdminProductsPage() {
       header: "Price",
       render: (item) => (
         <span className="font-semibold text-sm">
-          GH₵ {item.price.toFixed(2)}
+          GH? {item.price.toFixed(2)}
         </span>
       ),
     },
@@ -504,7 +504,7 @@ export default function AdminProductsPage() {
                         <div className="bg-gray-50 rounded-lg p-3">
                           <p className="text-xs text-gray-500">Seller Price</p>
                           <p className="font-bold text-gray-900 mt-1">
-                            GH₵ {price.toFixed(2)}
+                            GH? {price.toFixed(2)}
                           </p>
                         </div>
 

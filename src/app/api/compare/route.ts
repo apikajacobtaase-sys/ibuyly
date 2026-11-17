@@ -24,61 +24,93 @@ export async function POST(req: Request) {
         );
       }
 
+
       const stopWords = new Set([
         "compare", "between", "with", "and", "the", "for",
         "find", "best", "show", "me", "please", "want",
         "would", "like", "products", "product", "based",
         "on", "under", "below", "above", "around", "gh",
-        "ghc",
+        "ghc", "need", "looking", "search", "get", "buy",
+        "purchase", "some", "any", "good", "suitable",
+        "recommend", "recommendation", "that", "this",
+        "my", "a", "an", "to", "in", "of", "is",
+        "can", "could", "help", "i", "for",
       ]);
 
-const normalizedMessage = message.toLowerCase();
+      const normalizedMessage = message.toLowerCase();
 
-const criteriaWords = new Set([
-  "performance",
-  "battery",
-  "life",
-  "camera",
-  "price",
-  "quality",
-  "durability",
-  "speed",
-  "display",
-  "screen",
-  "storage",
-  "memory",
-  "ram",
-  "processor",
-  "portability",
-  "design",
-]);
+      const criteriaWords = new Set([
+        "performance", "battery", "life", "camera",
+        "price", "quality", "durability", "speed",
+        "display", "screen", "storage", "memory",
+        "ram", "processor", "portability", "design",
+      ]);
 
-const words: string[] =
-  normalizedMessage.match(/[a-z0-9]+/g) ?? [];
+      const words: string[] =
+        normalizedMessage.match(/[a-z0-9]+/g) ?? [];
 
-const terms: string[] = [...new Set<string>(words)].filter(
-  (word) =>
-    word.length > 1 &&
-    !stopWords.has(word) &&
-    !criteriaWords.has(word) &&
-    !/^\d+$/.test(word)
-);
+      const terms = [...new Set(words)].filter(
+        (word) =>
+          word.length > 1 &&
+          !stopWords.has(word) &&
+          !criteriaWords.has(word) &&
+          !/^\d+$/.test(word)
+      );
 
-      if (terms.length === 0) {
-        return NextResponse.json({
-          products: [],
-          clarification:
-            "Please specify the products or category you want to compare.",
-        });
-      }
 
-           const candidates = await db.product.findMany({
+      const termAliases: Record<string, string> = {
+  smartphones: "smartphone",
+  phones: "phone",
+  laptops: "laptop",
+  tablets: "tablet",
+  cameras: "camera",
+  headphones: "headphone",
+};
+
+
+      // Map common use cases to relevant product categories.
+      const useCaseMappings: Record<string, string[]> = {
+        programming: ["laptop", "computer", "desktop"],
+        coding: ["laptop", "computer", "desktop"],
+        development: ["laptop", "computer", "desktop"],
+        gaming: ["gaming", "laptop", "computer", "console"],
+        photography: ["camera", "phone", "smartphone"],
+        video: ["camera", "laptop", "computer"],
+        editing: ["laptop", "computer", "monitor"],
+        studying: ["laptop", "tablet", "computer"],
+        school: ["laptop", "tablet", "computer"],
+        business: ["laptop", "computer", "printer"],
+        office: ["laptop", "computer", "printer"],
+        music: ["headphone", "speaker", "audio"],
+        travel: ["phone", "smartphone", "laptop"],
+        fitness: ["watch", "fitness", "smartwatch"],
+        exercise: ["fitness", "watch", "smartwatch"],
+        communication: ["phone", "smartphone"],
+      };
+
+      const intentTerms = [
+        ...new Set(
+          Object.entries(useCaseMappings)
+            .filter(([keyword]) =>
+              normalizedMessage.includes(keyword)
+            )
+            .flatMap(([, categories]) => categories)
+        ),
+      ];
+
+      const candidates = await db.product.findMany({
         where: { status: "ACTIVE" },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          attributes: true,
+      select: {
+  id: true,
+  title: true,
+  description: true,
+  images: {
+    select: {
+      url: true,
+    },
+    take: 1,
+  },
+  attributes: true,
           semanticTags: true,
           category: {
             select: {
@@ -104,15 +136,17 @@ const terms: string[] = [...new Set<string>(words)].filter(
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 200,
+        take: 300,
       });
 
       const searchableText = (value: unknown): string => {
         if (value === null || value === undefined) return "";
 
-        if (typeof value === "string") return value.toLowerCase();
-
-        if (typeof value === "number" || typeof value === "boolean") {
+        if (
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean"
+        ) {
           return String(value).toLowerCase();
         }
 
@@ -132,91 +166,199 @@ const terms: string[] = [...new Set<string>(words)].filter(
       const rankedCandidates = candidates
         .map((product) => {
           const title = product.title.toLowerCase();
-          const description = product.description.toLowerCase();
+         const description = (product.description ?? "").toLowerCase();
           const category = product.category.name.toLowerCase();
           const tags = searchableText(product.semanticTags);
           const attributes = searchableText(product.attributes);
 
+          const fullText =
+            `${title} ${description} ${category} ${tags} ${attributes}`;
+
           let score = 0;
 
           for (const term of terms) {
-            if (title.includes(term)) score += 12;
-            if (category.includes(term)) score += 9;
-            if (tags.includes(term)) score += 7;
-            if (attributes.includes(term)) score += 6;
-            if (description.includes(term)) score += 3;
+            if (title.includes(term)) score += 15;
+            if (category.includes(term)) score += 12;
+            if (tags.includes(term)) score += 9;
+            if (attributes.includes(term)) score += 7;
+            if (description.includes(term)) score += 4;
           }
 
-          return { product, score };
+          for (const term of intentTerms) {
+            if (title.includes(term)) score += 10;
+            if (category.includes(term)) score += 12;
+            if (tags.includes(term)) score += 7;
+            if (fullText.includes(term)) score += 2;
+          }
+
+          return { product, score, fullText };
         })
         .filter((item) => item.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 80)
-        .map((item) => item.product);
+        .sort((a, b) => b.score - a.score);
 
-      const eligibleCandidates = rankedCandidates.filter((product) => {
-        const offers = product.variants.flatMap((variant) =>
-          variant.sellerOffers.map((offer) => ({
-            price: Number(offer.price),
-          }))
-        );
+      const eligibleCandidates = rankedCandidates.filter(
+        ({ product }) => {
+          const offers = product.variants.flatMap((variant) =>
+            variant.sellerOffers.map((offer) => ({
+              price: Number(offer.price),
+            }))
+          );
 
-        if (budget.minPrice === null && budget.maxPrice === null) {
-          return true;
+          if (offers.length === 0) return false;
+
+          if (
+            budget.minPrice === null &&
+            budget.maxPrice === null
+          ) {
+            return true;
+          }
+
+          return offers.some((offer) =>
+            isWithinBudget(offer.price, budget)
+          );
+        }
+      );
+
+      // Build suggestions from real catalogue data.
+      const suggestionPool =
+        eligibleCandidates.length > 0
+          ? eligibleCandidates
+          : rankedCandidates;
+
+      const categoryMap = new Map<
+        string,
+        {
+          name: string;
+          slug: string;
+          productCount: number;
+          products: { id: string; title: string; price: number | null }[];
+        }
+      >();
+
+      for (const { product } of suggestionPool) {
+        const key = product.category.slug;
+
+        if (!categoryMap.has(key)) {
+          categoryMap.set(key, {
+            name: product.category.name,
+            slug: product.category.slug,
+            productCount: 0,
+            products: [],
+          });
         }
 
-        return offers.some((offer) => isWithinBudget(offer.price, budget));
-      });
+        const category = categoryMap.get(key)!;
+        category.productCount++;
+
+        const cheapestOffer = product.variants
+          .flatMap((variant) =>
+            variant.sellerOffers.map((offer) => Number(offer.price))
+          )
+          .sort((a, b) => a - b)[0];
+
+        if (category.products.length < 3) {
+          category.products.push({
+            id: product.id,
+            title: product.title,
+            price: cheapestOffer ?? null,
+          });
+        }
+      }
+
+      const suggestedCategories = [...categoryMap.values()]
+        .sort((a, b) => b.productCount - a.productCount)
+        .slice(0, 5);
+
+      const suggestedProducts = suggestionPool
+        .slice(0, 8)
+        .map(({ product }) => ({
+          id: product.id,
+          title: product.title,
+          imageUrl: product.images?.[0]?.url ?? null,
+          categoryName: product.category.name,
+          categorySlug: product.category.slug,
+         price: product.variants
+  .flatMap((variant) =>
+    variant.sellerOffers.map((offer) => Number(offer.price))
+  )
+  .sort((a, b) => a - b)[0] ?? null,
+        }));
+
+      // Not enough products: return useful catalogue suggestions.
       if (eligibleCandidates.length < 2) {
         return NextResponse.json({
           products: [],
-          clarification:
-            "I couldn't find enough matching products. Try different product names or a broader category.",
+          criteria: [],
+          clarification: eligibleCandidates.length === 1
+            ? "I found one matching product. Here are some related products and categories you can explore."
+            : "I couldn't find enough exact matches, but here are some products and categories you might find useful.",
+          suggestedCategories,
+          suggestedProducts,
         });
       }
-      const resolved = await resolveComparisonProducts({
-        message,
-        candidates: eligibleCandidates.map((product) => ({
-          id: product.id,
-          title: product.title,
-          description: product.description,
-          attributes: product.attributes,
-          semanticTags: product.semanticTags,
-          category: product.category,
-          offers: product.variants.flatMap((variant) =>
-            variant.sellerOffers.map((offer) => ({
-              price: Number(offer.price),
-              stockQuantity: offer.stockQuantity,
-            }))
+
+      let resolved;
+
+      try {
+        resolved = await resolveComparisonProducts({
+          message,
+          candidates: eligibleCandidates.slice(0, 80).map(
+            ({ product }) => ({
+              id: product.id,
+              title: product.title,
+              description: product.description,
+              attributes: product.attributes,
+              semanticTags: product.semanticTags,
+              category: product.category,
+              offers: product.variants.flatMap((variant) =>
+                variant.sellerOffers.map((offer) => ({
+                  price: Number(offer.price),
+                  stockQuantity: offer.stockQuantity,
+                }))
+              ),
+            })
           ),
-        })),
-      });
-
-      if (resolved.productIds.length < 2) {
-        return NextResponse.json({
-          products: [],
-          criteria: resolved.criteria,
-          clarification:
-            resolved.clarification ??
-            "I couldn't confidently identify at least two matching products. Could you be more specific?",
         });
+      } catch (error) {
+        console.error("Product resolution error:", error);
+        resolved = { productIds: [], criteria: [], clarification: null };
       }
 
-      productIds = resolved.productIds;
-      comparisonCriteria = resolved.criteria;
+      // If AI cannot resolve the products, use actual ranked matches.
+      const resolvedIds = (resolved.productIds ?? []).filter(
+        (id: string) =>
+          eligibleCandidates.some(
+            ({ product }) => product.id === id
+          )
+      );
+
+      productIds = resolvedIds.length >= 2
+        ? resolvedIds.slice(0, 4)
+        : eligibleCandidates.slice(0, 4).map(
+            ({ product }) => product.id
+          );
+
+      comparisonCriteria = resolved.criteria ?? [];
+
+
+
+
+
     }
-  
-    // Validate selected product IDs
-    if (
-      !Array.isArray(productIds) ||
-      productIds.length < 2 ||
-      productIds.length > 4 ||
-      !productIds.every(
-        (id: unknown) => typeof id === "string" && id.trim().length > 0
-      )
-    ) {
+
+const hydrateOnly = body?.hydrateOnly === true;
+const minProducts = hydrateOnly ? 1 : 2;
+
+if (
+  !Array.isArray(productIds) ||
+  productIds.length < minProducts ||
+  productIds.length > 4 ||
+  !productIds.every(
+    (id: unknown) => typeof id === "string" && id.trim().length > 0
+  )
+) {
       return NextResponse.json(
-        { error: "Provide between 2 and 4 valid product IDs." },
+        { error: `Provide between ${minProducts} and 4 valid product IDs.` },
         { status: 400 }
       );
     }
@@ -227,7 +369,7 @@ const terms: string[] = [...new Set<string>(words)].filter(
       ),
     ];
 
-    if (uniqueIds.length < 2) {
+   if (uniqueIds.length < minProducts) {
       return NextResponse.json(
         { error: "Select at least 2 different products." },
         { status: 400 }
@@ -373,7 +515,7 @@ const terms: string[] = [...new Set<string>(words)].filter(
       .map((id) => productMap.get(id))
       .filter((product) => product !== undefined);
 
-       if (body?.includeAnalysis === true) {
+       if (body?.includeAnalysis === true && !hydrateOnly) {
       if (products.length < 2) {
         return NextResponse.json({
           products,

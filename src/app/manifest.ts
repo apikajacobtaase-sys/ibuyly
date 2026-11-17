@@ -1,35 +1,29 @@
-import type { MetadataRoute } from "next";
+ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "iBUY Marketplace",
+    name: "iBUY Africa",
     short_name: "iBUY",
-    description: "Shop from trusted sellers across Ghana.",
+    description: "Discover products, compare prices and shop from sellers across Ghana.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
     background_color: "#FFFFFF",
-    theme_color: "#F7931E",
+    theme_color: "#014900",
     orientation: "portrait",
     categories: ["shopping", "business"],
     icons: [
       {
-        src: "/icons/icon-192.png",
+        src: "/brand/ibuy-africa-icon-192.png",
         sizes: "192x192",
         type: "image/png",
       },
       {
-        src: "/icons/icon-512.png",
+        src: "/brand/ibuy-africa-icon-512.png",
         sizes: "512x512",
         type: "image/png",
-      },
-      {
-        src: "/icons/icon-maskable-512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
       },
     ],
   };

@@ -1,4 +1,4 @@
-﻿export interface SidebarItem {
+export interface SidebarItem {
   label: string;
   href?: string;
   iconName: string;
