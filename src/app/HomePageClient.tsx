@@ -85,26 +85,32 @@ const [currentTime, setCurrentTime] = useState(Date.now());
   const [loadMoreError, setLoadMoreError] = useState("");
  const observer = useRef<IntersectionObserver | null>(null);
  const loadingMoreRef = useRef(false);
-
 const lastProductRef = useCallback(
   (node: HTMLDivElement | null) => {
-    if (loading || loadingMore || !hasMore || loadMoreError) return;
-
     if (observer.current) {
       observer.current.disconnect();
     }
 
-    observer.current = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && hasMore && !loadingMore && !loadMoreError) {
-        loadMoreProducts();
-      }
-    });
-
-    if (node) {
-      observer.current.observe(node);
+    if (!node || loading || loadingMore || !hasMore || loadMoreError) {
+      return;
     }
+
+    observer.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMoreProducts();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "300px",
+        threshold: 0,
+      }
+    );
+
+    observer.current.observe(node);
   },
-  [loading, loadingMore, hasMore, page, loadMoreError]
+  [loading, loadingMore, hasMore, loadMoreError, page]
 );
 
   useEffect(() => {
@@ -202,16 +208,17 @@ const loadMoreProducts = async () => {
 
   loadingMoreRef.current = true;
   setLoadingMore(true);
+  setLoadMoreError("");
 
   try {
-    setLoadMoreError("");
     await loadProducts(page + 1, false);
+  } catch {
+    setLoadMoreError("Unable to load more products. Please try again.");
   } finally {
     loadingMoreRef.current = false;
     setLoadingMore(false);
   }
 };
-
   const loadProducts = async (pageNum: number, reset: boolean) => {
     try {
       const url = `/api/search?q=&page=${pageNum}&limit=12&t=${Date.now()}`;
