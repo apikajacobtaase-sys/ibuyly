@@ -79,7 +79,7 @@ export default function OrderDetailPage() {
 
   const fetchOrder = async () => {
     try {
-      const res = await fetch("/api/seller/orders?page=1&limit=100");
+      const res = await fetch(`/api/seller/orders?orderId=${encodeURIComponent(orderId)}&itemStatus=ALL`);
       const data = await res.json();
       if (res.ok) {
         const found = data.orders.find((o: Order) => o.id === orderId);

@@ -889,7 +889,7 @@ export default function ComparePage() {
 
             <div>
               <div className="flex items-center gap-2">
-                <BrainCircuit className="text-orange-500" size={20} />
+                <BrainCircuit className="text-green-500" size={20} />
                 <h1 className="text-base font-bold tracking-tight">
                   iBUY Compare
                 </h1>
@@ -913,7 +913,7 @@ export default function ComparePage() {
 
             <button
               onClick={startNewChat}
-              className="flex h-9 items-center gap-2 rounded-xl bg-orange-500 px-3 text-xs font-semibold text-white hover:bg-orange-600"
+              className="flex h-9 items-center gap-2 rounded-xl bg-green-500 px-3 text-xs font-semibold text-white hover:bg-green-600"
             >
               <Plus size={15} />
               New chat
@@ -945,7 +945,7 @@ export default function ComparePage() {
 
               <button
                 onClick={startNewChat}
-                className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-orange-300 bg-orange-50 px-3 py-3 text-sm font-semibold text-orange-600"
+                className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-green-300 bg-green-50 px-3 py-3 text-sm font-semibold text-green-600"
               >
                 <Plus size={16} />
                 Start a new comparison
@@ -964,14 +964,14 @@ export default function ComparePage() {
                     onClick={() => openConversation(conversation)}
                     className={`w-full rounded-xl p-3 text-left transition ${
                       activeSessionId === conversation.sessionId
-                        ? "bg-orange-50 ring-1 ring-orange-200"
+                        ? "bg-green-50 ring-1 ring-green-200"
                         : "hover:bg-slate-50"
                     }`}
                   >
                     <div className="flex items-start gap-2">
                       <MessageCircle
                         size={16}
-                        className="mt-0.5 shrink-0 text-orange-500"
+                        className="mt-0.5 shrink-0 text-green-500"
                       />
 
                       <div className="min-w-0">
@@ -999,11 +999,11 @@ export default function ComparePage() {
             {/* Welcome */}
             {!isComparing && messages.length === 0 && (
               <div className="mx-auto max-w-2xl pt-10 text-center sm:pt-20">
-                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-orange-100 text-orange-500">
+                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-green-100 text-green-500">
                   <BrainCircuit size={32} />
                 </div>
 
-                <span className="mb-3 inline-flex items-center gap-2 rounded-full bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-600">
+                <span className="mb-3 inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-600">
                   <Sparkles size={13} />
                   iBUY Shopping Intelligence
                 </span>
@@ -1041,11 +1041,11 @@ export default function ComparePage() {
                     <button
                       key={suggestion.title}
                       onClick={() => setInput(suggestion.prompt)}
-                      className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-orange-300 hover:shadow-sm"
+                      className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-green-300 hover:shadow-sm"
                     >
                       <Sparkles
                         size={17}
-                        className="mb-3 text-orange-500"
+                        className="mb-3 text-green-500"
                       />
                       <p className="text-sm font-bold">{suggestion.title}</p>
                       <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -1057,7 +1057,7 @@ export default function ComparePage() {
 
                 <button
                   onClick={openCatalogue}
-                  className="mt-6 inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-5 py-3 text-sm font-bold text-orange-600 transition hover:bg-orange-100"
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-5 py-3 text-sm font-bold text-green-600 transition hover:bg-green-100"
                 >
                   <Search size={17} />
                   Browse product catalogue
@@ -1070,7 +1070,7 @@ export default function ComparePage() {
               <>
                 <div className="mb-6 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-orange-500">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-green-500">
                       Your comparison
                     </p>
                     <h2 className="mt-1 text-xl font-bold">
@@ -1081,7 +1081,7 @@ export default function ComparePage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={openCatalogue}
-                      className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-bold text-white hover:bg-orange-600"
+                      className="flex items-center gap-1.5 rounded-xl bg-green-500 px-3 py-2 text-xs font-bold text-white hover:bg-green-600"
                     >
                       <Plus size={15} />
                       Add products
@@ -1109,7 +1109,7 @@ export default function ComparePage() {
                         className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
                       >
                         {isBest && (
-                          <span className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-full bg-orange-500 px-2 py-1 text-[9px] font-bold text-white">
+                          <span className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-full bg-green-500 px-2 py-1 text-[9px] font-bold text-white">
                             <Trophy size={10} />
                             BEST OVERALL
                           </span>
@@ -1145,7 +1145,7 @@ export default function ComparePage() {
                           </h3>
                         </Link>
 
-                        <p className="mt-2 text-sm font-extrabold text-orange-600">
+                        <p className="mt-2 text-sm font-extrabold text-green-600">
                           {money(product.price)}
                         </p>
 
@@ -1186,9 +1186,9 @@ export default function ComparePage() {
                 </div>
 
                 {/* AI analysis */}
-                <section className="mb-6 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-sm">
-                  <div className="flex items-center gap-3 border-b border-orange-100 bg-orange-50/70 p-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white">
+                <section className="mb-6 overflow-hidden rounded-2xl border border-green-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-3 border-b border-green-100 bg-green-50/70 p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-500 text-white">
                       <BrainCircuit size={21} />
                     </div>
 
@@ -1202,8 +1202,8 @@ export default function ComparePage() {
                     </div>
 
                     {isAnalyzing && (
-                      <div className="ml-auto flex items-center gap-2 text-xs text-orange-600">
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-orange-500" />
+                      <div className="ml-auto flex items-center gap-2 text-xs text-green-600">
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
                         Analysing
                       </div>
                     )}
@@ -1405,7 +1405,7 @@ export default function ComparePage() {
             {messages.length > 0 && (
               <section className="mt-8">
                 <div className="mb-5 flex items-center gap-2">
-                  <BrainCircuit size={18} className="text-orange-500" />
+                  <BrainCircuit size={18} className="text-green-500" />
                   <h3 className="text-sm font-bold">
                     Conversation with iBUY AI
                   </h3>
@@ -1422,7 +1422,7 @@ export default function ComparePage() {
                         }`}
                       >
                         {message.role === "assistant" && (
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-600">
                             <BrainCircuit size={17} />
                           </div>
                         )}
@@ -1430,7 +1430,7 @@ export default function ComparePage() {
                         <div
                           className={`max-w-[90%] min-w-0 overflow-hidden rounded-2xl px-3 py-3 text-sm leading-6 sm:max-w-[85%] sm:px-4 ${
                             message.role === "user"
-                              ? "rounded-br-md bg-orange-500 text-white"
+                              ? "rounded-br-md bg-green-500 text-white"
                               : "rounded-bl-md border border-slate-200 bg-white text-slate-700 shadow-sm"
                           }`}
                         >
@@ -1518,7 +1518,7 @@ export default function ComparePage() {
                                           </h5>
                                         </Link>
 
-                                        <p className="mt-2 text-sm font-extrabold text-orange-600">
+                                        <p className="mt-2 text-sm font-extrabold text-green-600">
                                           {money(product.price)}
                                         </p>
 
@@ -1549,7 +1549,7 @@ export default function ComparePage() {
                                           className={`mt-3 w-full rounded-xl px-3 py-2.5 text-xs font-bold ${
                                             selected
                                               ? "bg-green-50 text-green-700"
-                                              : "bg-slate-900 text-white hover:bg-orange-500"
+                                              : "bg-slate-900 text-white hover:bg-green-500"
                                           }`}
                                         >
                                           {selected
@@ -1576,9 +1576,9 @@ export default function ComparePage() {
                                       href={`/products?category=${encodeURIComponent(
                                         category.slug
                                       )}`}
-                                      className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-orange-300 hover:shadow-sm"
+                                      className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-green-300 hover:shadow-sm"
                                     >
-                                      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-500">
+                                      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 text-green-500">
                                         <ChevronRight size={20} />
                                       </div>
 
@@ -1591,7 +1591,7 @@ export default function ComparePage() {
                                         products
                                       </p>
 
-                                      <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-orange-600">
+                                      <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-green-600">
                                         Explore category
                                         <ChevronRight size={13} />
                                       </span>
@@ -1613,7 +1613,7 @@ export default function ComparePage() {
                                       key={product.id}
                                       className="rounded-2xl border border-slate-200 bg-white p-3"
                                     >
-                                      <p className="text-[10px] font-semibold uppercase text-orange-500">
+                                      <p className="text-[10px] font-semibold uppercase text-green-500">
                                         {product.categoryName}
                                       </p>
 
@@ -1621,7 +1621,7 @@ export default function ComparePage() {
                                         {product.title}
                                       </h5>
 
-                                      <p className="mt-2 text-sm font-extrabold text-orange-600">
+                                      <p className="mt-2 text-sm font-extrabold text-green-600">
                                         {money(product.price)}
                                       </p>
 
@@ -1634,7 +1634,7 @@ export default function ComparePage() {
                                             (item) => item.id === product.id
                                           ) || items.length >= 4
                                         }
-                                        className="mt-3 w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-orange-500 disabled:opacity-40"
+                                        className="mt-3 w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-green-500 disabled:opacity-40"
                                       >
                                         Add to compare
                                       </button>
@@ -1650,7 +1650,7 @@ export default function ComparePage() {
 
                   {isSending && (
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-100 text-green-600">
                         <BrainCircuit size={17} />
                       </div>
 
@@ -1667,7 +1667,7 @@ export default function ComparePage() {
 
             {isLoading && !isComparing && (
               <div className="mt-10 flex flex-col items-center justify-center text-center">
-                <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-orange-100 border-t-orange-500" />
+                <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-green-100 border-t-green-500" />
                 <p className="text-sm font-semibold">
                   Finding and comparing products
                 </p>
@@ -1682,7 +1682,7 @@ export default function ComparePage() {
 
       {/* Persistent comparison tray */}
       {items.length > 0 && (
-        <div className="fixed bottom-[85px] left-3 right-3 z-30 mx-auto max-w-4xl rounded-2xl border border-orange-200 bg-white p-3 shadow-xl sm:bottom-24">
+        <div className="fixed bottom-[85px] left-3 right-3 z-30 mx-auto max-w-4xl rounded-2xl border border-green-200 bg-white p-3 shadow-xl sm:bottom-24">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold">
@@ -1698,7 +1698,7 @@ export default function ComparePage() {
             <button
               onClick={openCatalogue}
               disabled={items.length >= 4}
-              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-600 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-600 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus size={14} />
               Add products
@@ -1757,7 +1757,7 @@ export default function ComparePage() {
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-6">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-100 text-green-600">
                     <Search size={18} />
                   </div>
 
@@ -1781,7 +1781,7 @@ export default function ComparePage() {
 
             {/* Search */}
             <div className="border-b border-slate-100 px-4 py-3 sm:px-6">
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-orange-400 focus-within:bg-white">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-green-400 focus-within:bg-white">
                 <Search size={17} className="shrink-0 text-slate-400" />
 
                 <input
@@ -1821,7 +1821,7 @@ export default function ComparePage() {
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
               {catalogueLoading && catalogueProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16">
-                  <div className="h-9 w-9 animate-spin rounded-full border-4 border-orange-100 border-t-orange-500" />
+                  <div className="h-9 w-9 animate-spin rounded-full border-4 border-green-100 border-t-green-500" />
                   <p className="mt-3 text-sm font-medium text-slate-500">
                     Loading products...
                   </p>
@@ -1867,7 +1867,7 @@ export default function ComparePage() {
                           className={`overflow-hidden rounded-2xl border bg-white p-2.5 transition ${
                             selected
                               ? "border-green-300 ring-1 ring-green-100"
-                              : "border-slate-200 hover:border-orange-300"
+                              : "border-slate-200 hover:border-green-300"
                           }`}
                         >
                           <Link href={`/products/${product.slug}`}>
@@ -1895,7 +1895,7 @@ export default function ComparePage() {
                             </h3>
                           </Link>
 
-                          <p className="mt-2 text-sm font-extrabold text-orange-600">
+                          <p className="mt-2 text-sm font-extrabold text-green-600">
                             {money(product.price)}
                           </p>
 
@@ -1917,8 +1917,8 @@ export default function ComparePage() {
                             disabled={disabled}
                             className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
                               selected
-                                ? "bg-green-50 text-green-700 hover:bg-red-50 hover:text-red-600"
-                                : "bg-slate-900 text-white hover:bg-orange-500"
+                                ? "bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                : "bg-slate-900 text-white hover:bg-green-500"
                             }`}
                           >
                             {selected ? (
@@ -1955,7 +1955,7 @@ export default function ComparePage() {
                           )
                         }
                         disabled={catalogueLoading}
-                        className="rounded-xl border border-slate-200 px-5 py-3 text-xs font-bold text-slate-700 hover:border-orange-300 hover:text-orange-600 disabled:opacity-50"
+                        className="rounded-xl border border-slate-200 px-5 py-3 text-xs font-bold text-slate-700 hover:border-green-300 hover:text-green-600 disabled:opacity-50"
                       >
                         {catalogueLoading
                           ? "Loading..."
@@ -1980,7 +1980,7 @@ export default function ComparePage() {
 
               <button
                 onClick={() => setShowCatalogue(false)}
-                className="rounded-xl bg-orange-500 px-5 py-3 text-xs font-bold text-white hover:bg-orange-600"
+                className="rounded-xl bg-green-500 px-5 py-3 text-xs font-bold text-white hover:bg-green-600"
               >
                 Done
               </button>
@@ -1994,13 +1994,13 @@ export default function ComparePage() {
         <div className="mx-auto max-w-4xl">
           <form
   onSubmit={sendMessage}
-  className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm transition focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100"
+  className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm transition focus-within:border-green-400 focus-within:ring-2 focus-within:ring-green-100"
 >
   <button
     type="button"
     onClick={openCatalogue}
     disabled={items.length >= 4}
-    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition hover:bg-orange-100 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
+    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition hover:bg-green-100 hover:text-green-600 disabled:cursor-not-allowed disabled:opacity-40"
     aria-label="Add products to compare"
     title="Add products"
   >
@@ -2041,7 +2041,7 @@ export default function ComparePage() {
       isSending ||
       isLoading
     }
-    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
+    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-500 text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-40"
     aria-label="Send message"
   >
     {isSending || isLoading ? (

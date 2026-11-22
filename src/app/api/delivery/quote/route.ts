@@ -59,7 +59,8 @@ export async function POST(req: Request) {
       minOrderValue,
       minOrderMet,
       estimatedDays: activeZone.estimatedDays ?? null,
-      codEnabled: activeZone.codEnabled || false,
+      codEnabled: activeZone.codEnabled ?? false,
+onlinePayEnabled: activeZone.onlinePayEnabled ?? true,
     });
 
   } catch (error: any) {

@@ -39,7 +39,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [orderId, setOrderId] = useState("");
-
+const [paymentMethod, setPaymentMethod] = useState<"PAYSTACK" | "COD">("PAYSTACK");
   const [appliedDiscount, setAppliedDiscount] = useState<{
     code: string;
     amount: number;
@@ -157,6 +157,7 @@ export default function CheckoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cartItemIds,
+          paymentMethod,
           discountCode: appliedDiscount?.code,
           localityId: addressData.localityId,
           address: {
@@ -207,18 +208,19 @@ export default function CheckoutPage() {
             <CheckCircle2 className="w-10 h-10" />
           </div>
 
-          <p className="text-xs font-bold uppercase tracking-widest text-green-600 mb-2">
-            Order confirmed
-          </p>
+         <p className="text-xs font-bold uppercase tracking-widest text-green-600 mb-2">
+  {paymentMethod === "COD" ? "Order placed successfully" : "Order confirmed"}
+</p>
 
-          <h1 className="text-3xl font-extrabold text-gray-900 mb-3">
-            Thank you!
-          </h1>
+<h1 className="text-3xl font-extrabold text-gray-900 mb-3">
+  Thank you!
+</h1>
 
-          <p className="text-sm text-gray-500 leading-relaxed">
-            Your order has been placed successfully. We're looking forward to
-            getting your items to you.
-          </p>
+<p className="text-sm text-gray-500 leading-relaxed">
+  {paymentMethod === "COD"
+    ? "Your order has been placed successfully. Please prepare to pay when your items are delivered."
+    : "Your payment was successful and your order has been confirmed. We're looking forward to getting your items to you."}
+</p>
 
           <div className="bg-gray-50 rounded-2xl p-4 mt-6 mb-6">
             <p className="text-xs text-gray-400 mb-1">ORDER REFERENCE</p>
@@ -608,7 +610,66 @@ export default function CheckoutPage() {
                     </p>
                   </div>
                 </div>
+                  {/* Payment method */}
+<div className="mt-6 border-t border-gray-100 pt-5">
+  <h3 className="text-sm font-bold text-gray-900 mb-3">
+    Choose payment method
+  </h3>
 
+  <div className="space-y-3">
+    {quote?.onlinePayEnabled !== false && (
+      <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer ${
+        paymentMethod === "PAYSTACK"
+          ? "border-orange-500 bg-orange-50"
+          : "border-gray-200"
+      }`}>
+        <input
+          type="radio"
+          name="paymentMethod"
+          value="PAYSTACK"
+          checked={paymentMethod === "PAYSTACK"}
+          onChange={() => setPaymentMethod("PAYSTACK")}
+          className="accent-orange-500"
+        />
+        <CreditCard className="w-5 h-5 text-orange-500" />
+        <div>
+          <p className="text-sm font-bold text-gray-900">
+            Pay Online
+          </p>
+          <p className="text-xs text-gray-500">
+            Pay securely through Paystack
+          </p>
+        </div>
+      </label>
+    )}
+
+    {quote?.codEnabled && (
+      <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer ${
+        paymentMethod === "COD"
+          ? "border-orange-500 bg-orange-50"
+          : "border-gray-200"
+      }`}>
+        <input
+          type="radio"
+          name="paymentMethod"
+          value="COD"
+          checked={paymentMethod === "COD"}
+          onChange={() => setPaymentMethod("COD")}
+          className="accent-orange-500"
+        />
+        <Truck className="w-5 h-5 text-green-600" />
+        <div>
+          <p className="text-sm font-bold text-gray-900">
+            Cash on Delivery
+          </p>
+          <p className="text-xs text-gray-500">
+            Pay when your order arrives
+          </p>
+        </div>
+      </label>
+    )}
+  </div>
+</div>
                 {error && (
                   <div className="mt-5 p-3.5 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -633,7 +694,11 @@ export default function CheckoutPage() {
                       <LockKeyhole className="w-4 h-4" />
                     )}
 
-                    {loading ? "Processing order..." : "Place Order & Pay"}
+                    {loading
+  ? "Processing order..."
+  : paymentMethod === "COD"
+    ? "Place Order"
+    : "Place Order & Pay"}
                   </button>
                 </form>
 
@@ -678,7 +743,7 @@ export default function CheckoutPage() {
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              "Place Order"
+              paymentMethod === "COD" ? "Place Order" : "Place Order & Pay"
             )}
             {!loading && <ChevronRight className="w-4 h-4" />}
           </button>

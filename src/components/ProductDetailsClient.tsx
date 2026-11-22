@@ -1,7 +1,7 @@
 // src/components/ProductDetailsClient.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ArrowLeft, Share2, Star, ShoppingCart, Store } from "lucide-react";
@@ -43,9 +43,42 @@ interface Product {
 export default function ProductDetailsClient({ product }: { product: Product }) {
   const router = useRouter();
   const { addItem, updateQuantity, removeItem, items } = useCartStore();
-  
+
   const [selectedImage, setSelectedImage] = useState(0);
-  
+  const [expanded, setExpanded] = useState(false);
+const [canExpand, setCanExpand] = useState(false);
+const descriptionRef = useRef<HTMLDivElement>(null);
+
+useEffect(() => {
+  const element = descriptionRef.current;
+  if (!element) return;
+
+  const checkHeight = () => {
+    setCanExpand(element.scrollHeight > element.clientHeight + 1);
+  };
+
+  checkHeight();
+  window.addEventListener("resize", checkHeight);
+
+  return () => window.removeEventListener("resize", checkHeight);
+}, [product.description]);
+
+useEffect(() => {
+  if (!expanded) return;
+
+  const handleOutsideClick = (event: MouseEvent) => {
+    if (
+      descriptionRef.current &&
+      !descriptionRef.current.contains(event.target as Node)
+    ) {
+      setExpanded(false);
+    }
+  };
+
+  document.addEventListener("mousedown", handleOutsideClick);
+  return () => document.removeEventListener("mousedown", handleOutsideClick);
+}, [expanded]);
+
   const defaultVariant: Variant = {
     id: product.id,
     name: "Default",
@@ -53,7 +86,7 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
     basePrice: 0,
     offers: [],
   };
-  
+
   const [selectedVariant, setSelectedVariant] = useState<Variant>(
     product.variants.length > 0 ? product.variants[0] : defaultVariant
   );
@@ -75,7 +108,7 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
 
       <main className="max-w-6xl mx-auto bg-white md:rounded-lg md:shadow-sm md:my-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 md:p-8">
-          
+
           {/* LEFT COLUMN: Images */}
           <div className="space-y-4">
             <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden relative main-product-image">
@@ -108,7 +141,7 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
             <div>
               <p className="text-xs text-green-600 font-semibold uppercase tracking-wide mb-1">{product.category?.name}</p>
               <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">{product.title}</h1>
-              
+
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
@@ -119,11 +152,30 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
             </div>
 
             {product.description && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Description</h3>
-                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{product.description}</p>
-              </div>
-            )}
+  <div ref={descriptionRef}>
+    <h3 className="text-sm font-semibold text-gray-900 mb-2">
+      Description
+    </h3>
+
+    <p
+      className={`text-sm text-gray-600 leading-relaxed whitespace-pre-line ${
+        expanded ? "" : "line-clamp-3"
+      }`}
+    >
+      {product.description}
+    </p>
+
+    {canExpand && (
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="mt-1 text-sm font-semibold text-green-600 hover:text-green-700"
+      >
+        {expanded ? "See less" : "See more"}
+      </button>
+    )}
+  </div>
+)}
 
             {/* Variant Selector */}
             {product.variants.length > 1 && (
@@ -159,7 +211,7 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
                 <Store className="w-4 h-4 text-green-600" />
                 Available Sellers
               </h3>
-              
+
               {selectedVariant.offers && selectedVariant.offers.length > 0 ? (
                 <div className="space-y-3">
                   {selectedVariant.offers.map((offer) => {
@@ -185,7 +237,7 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
                           </div>
                           <span className="text-lg font-bold text-gray-900">{formatCurrency(offer.price)}</span>
                         </div>
-                        
+
                         <div className="flex items-center justify-end">
                           {cartQty > 0 ? (
                             <QuantitySelector
@@ -232,8 +284,8 @@ export default function ProductDetailsClient({ product }: { product: Product }) 
                               }}
                               disabled={!isOfferInStock}
                               className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition flex items-center gap-2 ${
-                                isOfferInStock 
-                                  ? "bg-green-600 hover:bg-green-700 text-white" 
+                                isOfferInStock
+                                  ? "bg-green-600 hover:bg-green-700 text-white"
                                   : "bg-gray-200 text-gray-500 cursor-not-allowed"
                               }`}
                             >

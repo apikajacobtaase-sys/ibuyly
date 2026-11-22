@@ -25,7 +25,9 @@ interface Product {
   id: string;
   title: string;
   slug: string;
-  price: number;
+  price: number | null;
+stockQuantity?: number;
+bestOfferId?: string | null;
   imageUrl?: string | null;
 }
 
@@ -180,7 +182,7 @@ useEffect(() => {
         const data = await res.json();
 
         if (!cancelled) {
-          setRecommendedProducts(data.products || []);
+          setRecommendedProducts((data.products || []).filter((p: Product) => typeof p.price === "number" && Number.isFinite(p.price) && p.price > 0 && p.bestOfferId && (p.stockQuantity ?? 0) > 0));
         }
       } catch (error) {
         console.error("Failed to fetch recommendations:", error);
@@ -559,7 +561,7 @@ useEffect(() => {
                         </h3>
 
                         <p className="text-sm font-bold text-gray-900 mt-2">
-                          {formatCurrency(product.price)}
+                         {product.price !== null ? formatCurrency(product.price) : "Price unavailable"}
                         </p>
                       </div>
                     </Link>

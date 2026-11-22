@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Footer from "@/components/Footer";
 import { usePathname } from "next/navigation";
 import GlobalSidebar from "@/components/GlobalSidebar";
 import Header from "@/components/Header";
@@ -39,6 +40,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <main className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6 scroll-smooth">
           {children}
         </main>
+        <Footer />
       </div>
      <DraggableFAB />
 <CompareBar />

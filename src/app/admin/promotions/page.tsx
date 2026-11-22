@@ -156,7 +156,7 @@ export default function AdminPromotionsPage() {
       alert(error instanceof Error ? error.message : "Image upload failed");
     } finally {
       setUploading(false);
-      e.target.value = "";
+
     }
   }
 
@@ -277,9 +277,8 @@ export default function AdminPromotionsPage() {
       </div>
     );
   }
-
-  return (
-    <div className="space-y-6">
+return (
+  <div className="min-h-screen w-full space-y-6 overflow-y-auto px-4 pb-10 pt-6 sm:px-6 lg:px-8">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">
           Marketing & Promotions
@@ -587,10 +586,10 @@ export default function AdminPromotionsPage() {
       )}
 
       {showBannerModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-start justify-center p-4 sm:p-6 overflow-y-auto">
           <form
             onSubmit={saveBanner}
-            className="bg-white rounded-xl p-6 max-w-2xl w-full space-y-4 my-8"
+            className="bg-white rounded-xl p-6 max-w-2xl w-full space-y-4 my-4 max-h-[calc(100dvh-2rem)] overflow-y-auto"
           >
             <h3 className="text-xl font-bold">
               {editingId ? "Edit Promotional Banner" : "Create Promotional Banner"}

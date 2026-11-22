@@ -7,7 +7,10 @@ const BannerSchema = z.object({
   title: z.string().min(2).max(120),
   subtitle: z.string().max(250).optional().nullable(),
   imageUrl: z.string().url(),
-  mobileImageUrl: z.string().url().optional().nullable(),
+  mobileImageUrl: z.preprocess(
+  (value) => value === "" ? null : value,
+  z.string().url().nullable().optional()
+),
   altText: z.string().max(200).optional().nullable(),
   buttonText: z.string().max(40).optional().nullable(),
   buttonUrl: z.string().max(500).optional().nullable(),

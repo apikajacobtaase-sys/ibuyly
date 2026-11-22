@@ -1,11 +1,12 @@
- import type { MetadataRoute } from "next";
+import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "iBUY Africa",
-    short_name: "iBUY",
-    description: "Discover products, compare prices and shop from sellers across Ghana.",
+    name: "Inclusive Business Universe for You (iBUY Africa)",
+    short_name: "iBUY Africa",
+    description:
+      "iBUY Africa — Inclusive Business Universe for You. Discover products, find businesses, compare prices and shop across Ghana and Africa.",
     start_url: "/",
     scope: "/",
     display: "standalone",

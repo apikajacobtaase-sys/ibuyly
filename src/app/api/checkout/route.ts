@@ -26,6 +26,7 @@ const checkoutSchema = z
       ),
     localityId: z.string().min(1, "Delivery locality is required."),
     discountCode: z.string().trim().min(1).max(80).optional(),
+    paymentMethod: z.enum(["PAYSTACK", "COD"]).default("PAYSTACK"),
     address: z
       .object({
         recipientName: z.string().trim().min(1).max(150),
@@ -34,6 +35,7 @@ const checkoutSchema = z
         landmark: z.string().trim().max(300).optional(),
         street: z.string().trim().min(1).max(500),
         instructions: z.string().trim().max(1000).optional(),
+
       })
       .strict(),
   })
@@ -122,37 +124,14 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Please sign in before checking out." },
-        { status: 401 }
-      );
-    }
 
-    if (!session.user.email) {
-      return NextResponse.json(
-        {
-          error:
-            "Your account needs a valid email address to make a payment.",
-        },
-        { status: 400 }
-      );
-    }
 
-    const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
-    const appUrl = process.env.NEXTAUTH_URL;
-
-    if (!paystackSecret || !appUrl) {
-      console.error("Checkout configuration is incomplete.");
-
-      return NextResponse.json(
-        {
-          error:
-            "Checkout is temporarily unavailable. Please try again later.",
-        },
-        { status: 503 }
-      );
-    }
+if (!session?.user?.id) {
+  return NextResponse.json(
+    { error: "Please sign in before checking out." },
+    { status: 401 }
+  );
+}
 
     let rawBody: unknown;
 
@@ -179,6 +158,26 @@ export async function POST(req: Request) {
     }
 
     const input = parsed.data;
+    const paymentMethod = input.paymentMethod;
+
+const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
+const appUrl = process.env.NEXTAUTH_URL;
+
+if (paymentMethod === "PAYSTACK") {
+  if (!session.user.email) {
+    throw new CheckoutError(
+      "Your account needs a valid email address to make a payment.",
+      400
+    );
+  }
+
+  if (!paystackSecret || !appUrl) {
+    throw new CheckoutError(
+      "Online payment is temporarily unavailable.",
+      503
+    );
+  }
+}
     const userId = session.user.id;
     const now = new Date();
 
@@ -331,7 +330,21 @@ export async function POST(req: Request) {
         400
       );
     }
+  const zone = zoneLocality.deliveryZone;
 
+if (paymentMethod === "COD" && !zone.codEnabled) {
+  throw new CheckoutError(
+    "Cash on Delivery is unavailable at this location.",
+    400
+  );
+}
+
+if (paymentMethod === "PAYSTACK" && !zone.onlinePayEnabled) {
+  throw new CheckoutError(
+    "Online payment is unavailable at this location.",
+    400
+  );
+}
     const deliveryFeeCents = toCents(
       zoneLocality.deliveryZone.baseDeliveryFee
     );
@@ -357,6 +370,18 @@ export async function POST(req: Request) {
 
     if (!Number.isSafeInteger(subtotalCents)) {
       throw new CheckoutError("The order total is too large.", 400);
+    }
+        // Enforce the delivery zone's minimum merchandise order value.
+    const minOrderValue = zoneLocality.deliveryZone.minOrderValue;
+
+    if (
+      minOrderValue !== null &&
+      subtotalCents < toCents(minOrderValue)
+    ) {
+      throw new CheckoutError(
+        `Your order must be at least GH₵ ${Number(minOrderValue).toFixed(2)} to qualify for delivery to this location.`,
+        400
+      );
     }
 
     // 6. Revalidate the discount on the server.
@@ -630,10 +655,14 @@ export async function POST(req: Request) {
 
             payment: {
               create: {
-                provider: "PAYSTACK",
-                status: "PENDING",
-                amount: finalTotal,
-                currency: "GHS",
+              provider:
+  paymentMethod === "COD"
+    ? "CASH_ON_DELIVERY"
+    : "PAYSTACK",
+paymentMethod,
+status: "PENDING",
+amount: finalTotal,
+currency: "GHS",
               },
             },
 
@@ -652,7 +681,9 @@ export async function POST(req: Request) {
                   ),
                   sellerId: offer.sellerId,
                   offer: { connect: { id: offer.id } },
-                  flashDealId: pricing.flashDealId,
+                  ...(pricing.flashDealId
+  ? { flashDeal: { connect: { id: pricing.flashDealId } } }
+  : {}),
                   status: "PENDING",
                 };
               }),
@@ -665,7 +696,25 @@ export async function POST(req: Request) {
         timeout: 20000,
       }
     );
+    // Complete COD checkout without initializing Paystack.
+if (paymentMethod === "COD") {
+  await db.cartItem.deleteMany({
+    where: {
+      id: { in: input.cartItemIds },
+      cart: { userId },
+    },
+  });
 
+  return NextResponse.json({
+    success: true,
+    orderId: order.id,
+    paymentMethod: "COD",
+    subtotal: centsToAmount(subtotalCents),
+    deliveryFee,
+    discountAmount,
+    total: finalTotal,
+  });
+}
     const localReference = `ORD-${order.id}`;
 
     // 9. Persist the expected Paystack reference before initialization.
@@ -706,7 +755,7 @@ export async function POST(req: Request) {
             email: session.user.email,
             amount: finalTotalCents,
             reference: localReference,
-            callback_url: `${appUrl.replace(/\/+$/, "")}/payment/success`,
+            callback_url: `${appUrl!.replace(/\/+$/, "")}/payment/success`,
             channels: ["card", "mobile_money", "apple_pay"],
             metadata: {
               custom_fields: [

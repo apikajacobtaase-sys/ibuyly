@@ -126,16 +126,27 @@ export default function DeliveryAddressForm({ cartSubtotal, onAddressChange }: D
     return () => clearTimeout(debounce);
   }, [localityId, cartSubtotal]); // Triggers when the database ID changes
 
-  const handleManualChange = () => {
-    const selectedRegion = regions.find(r => r.id === regionId);
-    const selectedLocality = localities.find(l => l.id === localityId);
-    onAddressChange({ 
-      regionId, districtId, localityId,
-      regionName: selectedRegion?.name || "",
-      localityName: selectedLocality?.name || "",
-      landmark, street, instructions, recipientName, phone 
-    }, quote);
+
+const handleManualChange = (field: string, value: string) => {
+  const selectedRegion = regions.find(r => r.id === regionId);
+  const selectedLocality = localities.find(l => l.id === localityId);
+
+  const address = {
+    regionId,
+    districtId,
+    localityId,
+    regionName: selectedRegion?.name || "",
+    localityName: selectedLocality?.name || "",
+    landmark,
+    street,
+    instructions,
+    recipientName,
+    phone,
+    [field]: value,
   };
+
+  onAddressChange(address, quote);
+};
 
   return (
     <div className="space-y-6">
@@ -236,23 +247,23 @@ export default function DeliveryAddressForm({ cartSubtotal, onAddressChange }: D
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Name *</label>
-            <input required value={recipientName} onChange={(e) => { setRecipientName(e.target.value); handleManualChange(); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+            <input required value={recipientName} 	onChange={(e) => { setRecipientName(e.target.value); handleManualChange("recipientName", e.target.value); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-            <input required type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); handleManualChange(); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+            <input required type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); handleManualChange("phone", e.target.value); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Landmark *</label>
-            <input value={landmark} onChange={(e) => { setLandmark(e.target.value); handleManualChange(); }} placeholder="e.g., Near University of Energy" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+            <input value={landmark} onChange={(e) => { setLandmark(e.target.value); handleManualChange("landmark", e.target.value); }} placeholder="e.g., Near University of Energy" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">House / Street Details *</label>
-            <input required value={street} onChange={(e) => { setStreet(e.target.value); handleManualChange(); }} placeholder="e.g., House No. 4, Mango Street" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
+            <input required value={street} onChange={(e) => { setStreet(e.target.value); handleManualChange("street", e.target.value); }} placeholder="e.g., House No. 4, Mango Street" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none" />
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">Additional Directions (Optional)</label>
-            <textarea value={instructions} onChange={(e) => { setInstructions(e.target.value); handleManualChange(); }} rows={2} placeholder="Any extra info for the rider..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none resize-none" />
+            <textarea value={instructions} onChange={(e) => { setInstructions(e.target.value); handleManualChange("instructions", e.target.value); }} rows={2} placeholder="Any extra info for the rider..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none resize-none" />
           </div>
         </div>
       </div>

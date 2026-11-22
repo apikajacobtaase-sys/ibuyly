@@ -87,6 +87,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         ],
       },
       {
+  label: "Content Management",
+  iconName: "FileText",
+  children: [
+    { label: "Pages & Articles", href: "/admin/content", iconName: "FileText" },
+  ],
+},
+      {
         label: "Security & Configuration",
         iconName: "ShieldCheck",
         children: [

@@ -18,7 +18,7 @@ const CreateZoneSchema = z.object({
   localityIds: z.array(z.string().min(1)).min(1, "At least one locality is required"),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session || !["ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
@@ -55,9 +55,6 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    
-    // 👇 DEBUG: Log the raw body to see exactly what the frontend is sending
-    console.log("🔍 Raw Zone Creation Body:", body);
 
     const validation = CreateZoneSchema.safeParse(body);
 
@@ -91,7 +88,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, zone: newZone }, { status: 201 });
   } catch (error: any) {
-    console.error("Create zone error:", error);
     return NextResponse.json({ error: error.message || "Failed to create zone" }, { status: 500 });
   }
 }
@@ -118,7 +114,6 @@ export async function PATCH(req: Request) {
     const validation = UpdateZoneSchema.safeParse(body);
 
     if (!validation.success) {
-      console.error("🚨 Zone Update Validation Failed:", validation.error.flatten());
       return NextResponse.json(
         { error: "Invalid request", details: validation.error.flatten() }, 
         { status: 400 }
@@ -156,7 +151,6 @@ export async function PATCH(req: Request) {
     
     return NextResponse.json({ success: true, zone: updatedZone });
   } catch (error: any) {
-    console.error("🚨 Admin update zone error:", error);
     return NextResponse.json({ error: error.message || "Failed to update zone" }, { status: 500 });
   }
 }

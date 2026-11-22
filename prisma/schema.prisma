@@ -5,10 +5,11 @@ generator client {
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  directUrl  = env("DIRECT_URL")
-  extensions = [vector]
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  extensions        = [vector]
 }
 
 model User {
@@ -51,6 +52,7 @@ model User {
   supportTickets            SupportTicket[]
   preferences               UserPreference?
   profile                   UserProfile?
+  contentPages              ContentPage[]
   wishlists                 Wishlist[]
 
   @@map("users")
@@ -345,6 +347,7 @@ model OrderItem {
   @@index([orderId])
   @@index([variantId])
   @@index([sellerId])
+  @@index([flashDealId], map: "order_items_flash_deal_id_idx")
   @@map("order_items")
 }
 
@@ -1025,6 +1028,11 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+enum ContentPageStatus {
+  DRAFT
+  PUBLISHED
+}
+
 enum VerificationStatus {
   PENDING
   VERIFIED
@@ -1062,6 +1070,7 @@ enum PaymentProvider {
   PAYSTACK
   FLUTTERWAVE
   MOBILE_MONEY
+  CASH_ON_DELIVERY
 }
 
 enum ShipmentStatus {
@@ -1163,6 +1172,28 @@ model PromotionBanner {
 
   @@index([isActive, placement, startsAt, endsAt])
   @@map("promotion_banners")
+}
+
+model ContentPage {
+  id             String            @id @default(cuid())
+  title          String
+  slug           String            @unique
+  excerpt        String?
+  content        Json
+  coverImage     String?           @map("cover_image")
+  seoTitle       String?           @map("seo_title")
+  seoDescription String?           @map("seo_description")
+  status         ContentPageStatus @default(DRAFT)
+  createdById    String?           @map("created_by_id")
+  publishedAt    DateTime?         @map("published_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([status, publishedAt])
+  @@index([createdById])
+  @@map("content_pages")
 }
 
 model FlashDeal {
