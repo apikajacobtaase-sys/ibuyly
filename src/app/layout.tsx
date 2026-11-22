@@ -5,6 +5,44 @@ import { Providers } from "./providers";
 import ClientLayout from "@/components/ClientLayout";
 import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] });
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://www.ibuydeals.africa/#organization",
+      name: "iBUY Africa",
+      legalName: "Inclusive Business Universe for You",
+      alternateName: ["iBUY", "iBUY Africa"],
+      url: "https://www.ibuydeals.africa",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://www.ibuydeals.africa/brand/ibuy-africa-icon-512.png",
+      },
+      description:
+        "Inclusive Business Universe for You — discover products, connect with businesses, compare prices and shop across Africa.",
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://www.ibuydeals.africa/#website",
+      url: "https://www.ibuydeals.africa",
+      name: "iBUY Africa",
+      publisher: {
+        "@id": "https://www.ibuydeals.africa/#organization",
+      },
+      inLanguage: "en-GH",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate:
+            "https://www.ibuydeals.africa/products?search={search_term_string}",
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ],
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.ibuydeals.africa"),
@@ -71,6 +109,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} bg-white text-gray-900`}>
+        <script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+  }}
+/>
         <Providers>
   <Toaster
     position="top-center"
