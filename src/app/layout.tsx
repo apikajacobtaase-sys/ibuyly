@@ -9,7 +9,7 @@ const structuredData = {
   "@context": "https://schema.org",
   "@graph": [
     {
-      "@type": "Organization",
+      "@type": "OnlineStore",
       "@id": "https://www.ibuydeals.africa/#organization",
       name: "iBUY Africa",
       legalName: "Inclusive Business Universe for You",
@@ -21,6 +21,23 @@ const structuredData = {
       },
       description:
         "Inclusive Business Universe for You — discover products, connect with businesses, compare prices and shop across Africa.",
+      email: "ibuysupportghana@gmail.com",
+      telephone: "+233541726820",
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "Near Goo Junior High School",
+        addressLocality: "Zorkor",
+        addressRegion: "Upper East Region",
+        addressCountry: "GH",
+      },
+      contactPoint: {
+        "@type": "ContactPoint",
+        telephone: "+233541726820",
+        email: "ibuysupportghana@gmail.com",
+        contactType: "customer support",
+        areaServed: "GH",
+        availableLanguage: ["English"],
+      },
     },
     {
       "@type": "WebSite",
@@ -86,11 +103,23 @@ export const metadata: Metadata = {
     icon: [
       { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/brand/favicon-48.png", sizes: "48x48", type: "image/png" },
-      { url: "/brand/ibuy-africa-icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/brand/ibuy-africa-icon-512.png", sizes: "512x512", type: "image/png" },
+      {
+        url: "/brand/ibuy-africa-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/brand/ibuy-africa-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
     ],
     apple: [
-      { url: "/brand/ibuy-africa-icon-192.png", sizes: "192x192", type: "image/png" },
+      {
+        url: "/brand/ibuy-africa-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
     ],
   },
 };
@@ -110,20 +139,20 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} bg-white text-gray-900`}>
         <script
-  type="application/ld+json"
-  dangerouslySetInnerHTML={{
-    __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
-  }}
-/>
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+          }}
+        />
         <Providers>
-  <Toaster
-    position="top-center"
-    richColors
-    closeButton
-    duration={3000}
-  />
-  <ClientLayout>{children}</ClientLayout>
-</Providers>
+          <Toaster
+            position="top-center"
+            richColors
+            closeButton
+            duration={3000}
+          />
+          <ClientLayout>{children}</ClientLayout>
+        </Providers>
       </body>
     </html>
   );
