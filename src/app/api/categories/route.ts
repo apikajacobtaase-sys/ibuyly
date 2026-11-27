@@ -43,28 +43,24 @@ export async function GET(req: Request) {
       searchParams.get("include") === "subcategories";
 
     const categories = await db.category.findMany({
+  where: {
+    parentId: null,
+    isActive: true,
+  },
+  include: {
+    children: {
       where: {
         isActive: true,
-        ...availableCategoryWhere,
       },
-      include: {
-        children: includeSubcategories
-          ? {
-              where: {
-                isActive: true,
-                ...availableCategoryWhere,
-              },
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                iconUrl: true,
-              },
-            }
-          : false,
+      orderBy: {
+        name: "asc",
       },
-      orderBy: { name: "asc" },
-    });
+    },
+  },
+  orderBy: {
+    name: "asc",
+  },
+});
 
     const formattedCategories = categories.map((c) => ({
       id: c.id,

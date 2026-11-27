@@ -17,6 +17,7 @@ import {
 interface Category {
   id: string;
   name: string;
+  children?: Category[];
 }
 
 interface UploadedImage {
@@ -64,7 +65,17 @@ const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
           throw new Error(data.error || "Failed to load categories.");
         }
 
-        setCategories(data.categories || []);
+        const activeCategories: Category[] = data.categories || [];
+
+setCategories(
+  activeCategories.flatMap((category) => [
+    { id: category.id, name: category.name },
+    ...(category.children || []).map((child) => ({
+      id: child.id,
+      name: `— ${child.name}`,
+    })),
+  ])
+);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to load categories."
