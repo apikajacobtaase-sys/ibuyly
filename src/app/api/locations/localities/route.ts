@@ -20,11 +20,24 @@ export async function GET(req: Request) {
     }
 
     const localities = await db.locality.findMany({
-      where: { 
-        districtId: validation.data.districtId,
-        isActive: true,
-        ...(validation.data.search ? { name: { contains: validation.data.search, mode: "insensitive" } } : {}),
-      },
+      where: {
+  districtId: validation.data.districtId,
+  isActive: true,
+  district: {
+    isActive: true,
+    region: {
+      isActive: true,
+    },
+  },
+  ...(validation.data.search
+    ? {
+        name: {
+          contains: validation.data.search,
+          mode: "insensitive",
+        },
+      }
+    : {}),
+},
       select: {
         id: true,
         name: true,

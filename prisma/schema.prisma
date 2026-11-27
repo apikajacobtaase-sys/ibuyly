@@ -567,7 +567,7 @@ model DeliveryZone {
 model DeliveryZoneLocality {
   id             String       @id @default(cuid())
   deliveryZoneId String
-  localityId     String
+  localityId     String       @unique
   createdAt      DateTime     @default(now())
   deliveryZone   DeliveryZone @relation(fields: [deliveryZoneId], references: [id], onDelete: Cascade)
   locality       Locality     @relation(fields: [localityId], references: [id])

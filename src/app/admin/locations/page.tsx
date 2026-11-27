@@ -20,9 +20,16 @@ interface Region {
 }
 
 const STATUS_OPTIONS = [
-  { value: "ACTIVE", label: "Active", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
-  { value: "TEMPORARILY_UNAVAILABLE", label: "Temporarily Unavailable", color: "text-amber-700 bg-amber-50 border-amber-200" },
-  { value: "INACTIVE", label: "Inactive", color: "text-gray-700 bg-gray-50 border-gray-200" },
+  {
+    value: "ACTIVE",
+    label: "Active",
+    color: "text-emerald-700 bg-emerald-50 border-emerald-200",
+  },
+  {
+    value: "INACTIVE",
+    label: "Inactive",
+    color: "text-gray-700 bg-gray-50 border-gray-200",
+  },
 ];
 
 export default function AdminLocationsPage() {

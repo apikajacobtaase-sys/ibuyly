@@ -1,6 +1,6 @@
  import type { MetadataRoute } from "next";
 import { db } from "@/lib/db";
-
+export const dynamic = "force-dynamic";
 const BASE_URL = "https://www.ibuydeals.africa";
 
 export const revalidate = 3600;

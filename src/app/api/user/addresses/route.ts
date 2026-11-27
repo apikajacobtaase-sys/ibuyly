@@ -9,7 +9,7 @@ const AddressSchema = z.object({
   recipientName: z.string().min(2, "Recipient name is required"),
   phone: z.string().min(10, "Valid phone number is required"),
   alternativePhone: z.string().optional(),
-  countryId: z.string().default("ghana"), // Will be validated against DB
+  countryId: z.string().cuid().optional(),
   regionId: z.string().cuid("Invalid region"),
   districtId: z.string().cuid("Invalid district"),
   localityId: z.string().cuid("Invalid locality"),
@@ -42,15 +42,29 @@ export async function POST(req: Request) {
 
     // SERVER-SIDE HIERARCHY VALIDATION
     // Verify that the district belongs to the region, and locality belongs to the district
-    const localityCheck = await db.locality.findUnique({
-      where: { id: data.localityId },
-      include: { district: { include: { region: true } } },
-    });
-
+  const localityCheck = await db.locality.findUnique({
+  where: { id: data.localityId },
+  include: {
+    district: {
+      include: {
+        region: true,
+      },
+    },
+  },
+});
     if (!localityCheck) {
       return NextResponse.json({ error: "Invalid locality selected" }, { status: 400 });
     }
-
+if (
+  !localityCheck.isActive ||
+  !localityCheck.district.isActive ||
+  !localityCheck.district.region.isActive
+) {
+  return NextResponse.json(
+    { error: "The selected delivery location is currently unavailable." },
+    { status: 400 }
+  );
+}
     if (localityCheck.districtId !== data.districtId) {
       return NextResponse.json({ error: "District does not match the selected locality" }, { status: 400 });
     }
@@ -58,38 +72,49 @@ export async function POST(req: Request) {
     if (localityCheck.district.regionId !== data.regionId) {
       return NextResponse.json({ error: "Region does not match the selected district" }, { status: 400 });
     }
+if (
+  data.countryId &&
+  localityCheck.district.region.countryId !== data.countryId
+) {
+  return NextResponse.json(
+    { error: "Country does not match the selected region." },
+    { status: 400 }
+  );
+}
+   
 
-    // If setting as default, unset other defaults for this user
-    if (data.isDefault) {
-      await db.address.updateMany({
-        where: { userId: session.user.id, isDefault: true },
-        data: { isDefault: false },
-      });
-    }
-
-    const newAddress = await db.address.create({
-      data: {
-        userId: session.user.id,
-        recipientName: data.recipientName,
-        phone: data.phone,
-        alternativePhone: data.alternativePhone || null,
-        countryId: "ghana", // Hardcoded for now, matches seed
-        regionId: data.regionId,
-        districtId: data.districtId,
-        localityId: data.localityId,
-        neighbourhood: data.neighbourhood,
-        street: data.street || null,
-        houseNumber: data.houseNumber || null,
-        landmark: data.landmark || null,
-        deliveryInstructions: data.deliveryInstructions || null,
-        isDefault: data.isDefault,
-      },
-      include: {
-        region: { select: { name: true } },
-        district: { select: { name: true } },
-        locality: { select: { name: true } },
-      }
+   const newAddress = await db.$transaction(async (tx) => {
+  if (data.isDefault) {
+    await tx.address.updateMany({
+      where: { userId: session.user.id, isDefault: true },
+      data: { isDefault: false },
     });
+  }
+
+  return tx.address.create({
+    data: {
+      userId: session.user.id,
+      recipientName: data.recipientName,
+      phone: data.phone,
+      alternativePhone: data.alternativePhone || null,
+      countryId: localityCheck.district.region.countryId,
+      regionId: data.regionId,
+      districtId: data.districtId,
+      localityId: data.localityId,
+      neighbourhood: data.neighbourhood,
+      street: data.street || null,
+      houseNumber: data.houseNumber || null,
+      landmark: data.landmark || null,
+      deliveryInstructions: data.deliveryInstructions || null,
+      isDefault: data.isDefault,
+    },
+    include: {
+      region: { select: { name: true } },
+      district: { select: { name: true } },
+      locality: { select: { name: true } },
+    },
+  });
+});
 
     return NextResponse.json({ success: true, address: newAddress }, { status: 201 });
   } catch (error: any) {

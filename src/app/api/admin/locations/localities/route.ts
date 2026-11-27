@@ -18,10 +18,16 @@ export async function GET(request: Request) {
     }
 
     const localities = await db.locality.findMany({
-      where: { 
-        districtId: districtId,
-        isActive: true 
-      },
+     where: {
+  districtId,
+  isActive: true,
+  district: {
+    isActive: true,
+    region: {
+      isActive: true,
+    },
+  },
+},
       orderBy: { name: "asc" },
       select: {
         id: true,

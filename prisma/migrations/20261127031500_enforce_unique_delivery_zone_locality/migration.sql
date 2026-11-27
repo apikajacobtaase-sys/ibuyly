@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "DeliveryZoneLocality_localityId_key" ON "DeliveryZoneLocality"("localityId");

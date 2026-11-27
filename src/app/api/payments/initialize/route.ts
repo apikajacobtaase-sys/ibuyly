@@ -49,22 +49,30 @@ export async function POST(req: Request) {
     }
 
     // 4. Determine delivery eligibility and applicable delivery zone.
-    const localityCheck = await db.locality.findUnique({
-      where: { id: address.localityId },
-      include: {
-        deliveryZones: {
-          where: {
-            deliveryZone: {
-              status: { in: ["ACTIVE", "RESTRICTED"] },
-            },
-          },
-          include: {
-            deliveryZone: true,
-          },
+  const localityCheck = await db.locality.findFirst({
+  where: {
+    id: address.localityId,
+    isActive: true,
+    district: {
+      isActive: true,
+      region: {
+        isActive: true,
+      },
+    },
+  },
+  include: {
+    deliveryZones: {
+      where: {
+        deliveryZone: {
+          status: "ACTIVE",
         },
       },
-    });
-
+      include: {
+        deliveryZone: true,
+      },
+    },
+  },
+});
     if (!localityCheck || localityCheck.deliveryZones.length === 0) {
       return NextResponse.json(
         {

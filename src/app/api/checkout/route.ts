@@ -309,9 +309,18 @@ if (paymentMethod === "PAYSTACK") {
     // 4. Validate the selected delivery locality and active zone.
     const zoneLocality = await db.deliveryZoneLocality.findFirst({
       where: {
-        localityId: input.localityId,
-        deliveryZone: { status: "ACTIVE" },
+  localityId: input.localityId,
+  locality: {
+    isActive: true,
+    district: {
+      isActive: true,
+      region: {
+        isActive: true,
       },
+    },
+  },
+  deliveryZone: { status: "ACTIVE" },
+},
       include: {
         deliveryZone: true,
         locality: {

@@ -61,22 +61,25 @@ export async function POST(req: Request) {
     // Confirm that the selected locality belongs to the selected district.
     const locality = await db.locality.findUnique({
       where: { id: data.localityId },
-      select: {
-        id: true,
-        districtId: true,
-        district: {
-          select: {
-            id: true,
-            regionId: true,
-            region: {
-              select: {
-                id: true,
-                countryId: true,
-              },
-            },
-          },
+     select: {
+  id: true,
+  isActive: true,
+  districtId: true,
+  district: {
+    select: {
+      id: true,
+      isActive: true,
+      regionId: true,
+      region: {
+        select: {
+          id: true,
+          isActive: true,
+          countryId: true,
         },
       },
+    },
+  },
+},
     });
 
     if (!locality) {
@@ -85,7 +88,16 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-
+if (
+  !locality.isActive ||
+  !locality.district.isActive ||
+  !locality.district.region.isActive
+) {
+  return NextResponse.json(
+    { error: "The selected delivery location is currently unavailable." },
+    { status: 400 }
+  );
+}
     if (
       locality.districtId !== data.districtId ||
       locality.district.regionId !== data.regionId ||
