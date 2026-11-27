@@ -147,7 +147,7 @@ useEffect(() => {
       <aside className={`
         fixed top-0 left-0 z-50 h-dvh w-72 max-w-[85vw] bg-white border-r border-gray-200
         transform transition-all duration-300 ease-in-out
-         md:translate-x-0 md:sticky md:top-0 md:h-screen md:max-w-none md:border-r
+        md:translate-x-0 md:fixed md:top-0 md:left-0 md:h-screen md:max-w-none md:border-r
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
         ${isCollapsed ? "md:w-20" : "md:w-72"}
       `}>

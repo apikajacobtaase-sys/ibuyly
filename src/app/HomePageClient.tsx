@@ -365,6 +365,7 @@ const loadMoreProducts = async () => {
     </div>
   </section>
 )}
+ <RecentlyViewed />
                {flashDeals.filter(
   (deal) =>
     new Date(deal.endsAt).getTime() > currentTime &&
@@ -733,7 +734,7 @@ const loadMoreProducts = async () => {
           {!hasMore && products.length > 0 && (
             <div className="text-center py-6 text-gray-500 text-sm">You've reached the end</div>
           )}
-          <RecentlyViewed />
+
         </section>
       </main>
 

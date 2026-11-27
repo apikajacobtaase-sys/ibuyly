@@ -1,79 +1,152 @@
-// src/app/api/seller/ai/analyze-listing/route.ts
-import { getServerSession } from "next-auth";
-import { NextResponse } from "next/server";
-import { authOptions } from "@/lib/auth";
+ import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { z } from "zod";
+import { authorizeSeller } from "@/lib/seller-auth";
 
- const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key-for-build",
+const ai = new OpenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+});
+
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+
+const RequestSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  description: z.string().trim().min(10).max(10000),
+  imageCount: z.number().int().min(0).max(10),
+  attributes: z.record(z.string(), z.unknown()).optional(),
+  category: z.string().max(100).optional(),
+});
+
+const ResultSchema = z.object({
+  score: z.number().int().min(0).max(100),
+  optimizedTitle: z.string().min(2).max(200),
+  optimizedDescription: z.string().min(10).max(10000),
+  attributes: z.record(z.string(), z.unknown()),
+  semanticTags: z.array(z.string().min(1).max(60)).max(20),
+  suggestions: z.array(z.string().min(1).max(300)).max(5),
 });
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await authorizeSeller("manage_products");
+
+    if (!auth.authorized) return auth.response;
+
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: "AI is not configured." },
+        { status: 503 }
+      );
     }
 
-    const body = await req.json();
-    const { title, description, imageCount, attributes } = body;
+    const validation = RequestSchema.safeParse(await req.json());
 
-    if (!title || !description) {
-      return NextResponse.json({ error: "Title and description are required" }, { status: 400 });
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Invalid listing information." },
+        { status: 400 }
+      );
     }
 
-    // Construct the prompt for the AI
-    const prompt = `
-      You are an expert e-commerce listing optimizer. Analyze the following product listing and provide:
-      1. A quality score from 0 to 100.
-      2. Up to 3 specific, actionable suggestions to improve the listing and increase sales.
+    const { title, description, imageCount, attributes, category } =
+      validation.data;
 
-      Product Details:
-      - Title: "${title}"
-      - Description: "${description}"
-      - Number of Images: ${imageCount}
-      - Attributes: ${JSON.stringify(attributes || {})}
-
-      Scoring Guidelines:
-      - Title should be descriptive and include key features (e.g., brand, model, size).
-      - Description should be detailed, mention benefits, specifications, and use cases.
-      - At least 3 images are highly recommended.
-      - Attributes (like brand, color, material) add significant value.
-
-      Respond ONLY with a valid JSON object in this exact format:
-      {
-        "score": number,
-        "suggestions": ["string", "string", "string"]
-      }
-    `;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Fast, cheap, and highly capable
+    const response = await ai.chat.completions.create({
+      model: MODEL,
       messages: [
-        { role: "system", content: "You are a helpful e-commerce listing expert. Always respond with valid JSON." },
-        { role: "user", content: prompt }
+        {
+          role: "system",
+          content: `
+You are the iBUY Africa Product Intelligence Assistant.
+
+Analyze and improve e-commerce product listings.
+
+RULES:
+- Never assume a product specification based on common models or market standards.
+- If a supplied specification appears unusual or inconsistent, flag it for seller verification.
+- Do not replace seller-provided specifications with assumed alternatives.
+- Distinguish verified product facts from information that still needs confirmation.
+- Never invent brands, models, specifications, warranties or certifications.
+- Only extract facts supported by supplied information.
+- Improve titles for clarity and product search.
+- Write informative, natural product descriptions.
+- Consider Ghanaian and African buyer search behaviour.
+- Generate relevant semantic search tags.
+- Score listing quality from 0 to 100.
+- Provide practical improvement suggestions.
+- Return ONLY valid JSON.
+
+REQUIRED JSON:
+{
+  "score": 85,
+  "optimizedTitle": "Improved product title",
+  "optimizedDescription": "Improved product description",
+  "attributes": {},
+  "semanticTags": [],
+  "suggestions": []
+}
+          `,
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            title,
+            description,
+            category: category || "Unspecified",
+            imageCount,
+            attributes: attributes || {},
+          }),
+        },
       ],
-      temperature: 0.3, // Keep it focused and consistent
-      response_format: { type: "json_object" },
+      temperature: 0.3,
     });
 
-    const resultText = completion.choices[0].message.content;
-    
-    if (!resultText) {
-      throw new Error("Empty response from OpenAI");
+    const content = response.choices[0]?.message?.content;
+
+    if (!content || typeof content !== "string") {
+      throw new Error("AI returned an empty response.");
     }
 
-    const result = JSON.parse(resultText);
+    const cleaned = content
+      .replace(/^```json\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    let result: unknown;
+
+    try {
+      result = JSON.parse(cleaned);
+    } catch {
+      console.error("Invalid AI JSON response:", content);
+
+      return NextResponse.json(
+        { error: "AI returned an invalid response. Please try again." },
+        { status: 502 }
+      );
+    }
+
+    const parsed = ResultSchema.safeParse(result);
+
+    if (!parsed.success) {
+      console.error("Invalid AI analysis:", parsed.error.flatten());
+
+      return NextResponse.json(
+        { error: "AI returned an invalid listing analysis." },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json({
-      score: result.score,
-      suggestions: result.suggestions,
+      success: true,
+      ...parsed.data,
     });
-  } catch (error: any) {
-    console.error("🚨 AI Analysis error:", error);
+  } catch (error) {
+    console.error("AI listing analysis error:", error);
+
     return NextResponse.json(
-      { error: error.message || "Failed to analyze listing" },
-      { status: 500 }
+      { error: "Unable to analyse this listing. Please try again." },
+      { status: 502 }
     );
   }
 }

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Upload,
   X,
+  Sparkles,
   ImagePlus,
   Loader2,
   CheckCircle2,
@@ -22,13 +23,22 @@ interface UploadedImage {
   url: string;
   altText: string;
 }
+interface AIAnalysis {
+  score: number;
+  optimizedTitle: string;
+  optimizedDescription: string;
+  attributes: Record<string, unknown>;
+  semanticTags: string[];
+  suggestions: string[];
+}
 
 const inputClass =
   "min-h-12 w-full rounded-xl border border-gray-300 px-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
 export default function SubmitProductPage() {
   const router = useRouter();
-
+const [analyzing, setAnalyzing] = useState(false);
+const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -131,7 +141,48 @@ export default function SubmitProductPage() {
   const removeImage = (index: number) => {
     setImages((current) => current.filter((_, i) => i !== index));
   };
+const handleAnalyzeListing = async () => {
+  setError("");
+  setAiAnalysis(null);
 
+  if (title.trim().length < 2 || description.trim().length < 10) {
+    setError("Enter a product name and description before using AI analysis.");
+    return;
+  }
+
+  setAnalyzing(true);
+
+  try {
+    const selectedCategory = categories.find(
+      (category) => category.id === categoryId
+    );
+
+    const response = await fetch("/api/seller/ai/analyze-listing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim(),
+        description: description.trim(),
+        imageCount: images.length,
+        category: selectedCategory?.name || "",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "AI analysis failed.");
+    }
+
+    setAiAnalysis(data);
+  } catch (err) {
+    setError(
+      err instanceof Error ? err.message : "Unable to analyse listing."
+    );
+  } finally {
+    setAnalyzing(false);
+  }
+};
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -165,15 +216,28 @@ export default function SubmitProductPage() {
       const response = await fetch("/api/seller/product-submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          categoryId,
-          price: parsedPrice,
-          stockQuantity: parsedStock,
-          sellerSku: sellerSku.trim(),
-          images,
-        }),
+       body: JSON.stringify({
+  title: title.trim(),
+  description: description.trim(),
+  categoryId,
+  price: parsedPrice,
+  stockQuantity: parsedStock,
+  sellerSku: sellerSku.trim(),
+  images,
+  ...(aiAnalysis && {
+    aiQualityScore: aiAnalysis.score,
+    aiSuggestions: aiAnalysis.suggestions,
+    attributes: aiAnalysis.attributes,
+    semanticTags: [
+  ...new Set(
+    aiAnalysis.semanticTags
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .map((tag) => tag.toLowerCase())
+  ),
+],
+  }),
+}),
       });
 
       const data = await response.json();
@@ -245,7 +309,10 @@ export default function SubmitProductPage() {
               minLength={2}
               maxLength={200}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+  setTitle(e.target.value);
+  setAiAnalysis(null);
+}}
               placeholder="Enter product name"
               className={inputClass}
             />
@@ -261,11 +328,245 @@ export default function SubmitProductPage() {
               maxLength={10000}
               rows={5}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+  setDescription(e.target.value);
+  setAiAnalysis(null);
+}}
               placeholder="Describe the product, its features and specifications..."
               className="w-full rounded-xl border border-gray-300 p-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
             />
           </div>
+          <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-4">
+  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <div className="flex items-center gap-2 font-semibold text-gray-900">
+        <Sparkles className="h-5 w-5 text-teal-600" />
+        iBUY AI Listing Assistant
+      </div>
+      <p className="mt-1 text-xs text-gray-600">
+        Improve your product listing and make it easier for buyers to discover.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      onClick={handleAnalyzeListing}
+      disabled={analyzing || submitting}
+      className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+    >
+      {analyzing ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Sparkles className="h-4 w-4" />
+      )}
+      {analyzing ? "Analysing..." : "Analyse Listing"}
+    </button>
+  </div>
+
+  {aiAnalysis && (
+    <div className="mt-4 space-y-4 border-t border-teal-200 pt-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-gray-800">
+          Listing quality score
+        </span>
+        <span className={`text-xl font-bold ${
+  aiAnalysis.score >= 80
+    ? "text-green-700"
+    : aiAnalysis.score >= 50
+      ? "text-amber-600"
+      : "text-red-600"
+}`}>
+          {aiAnalysis.score}/100 — {
+  aiAnalysis.score >= 80
+    ? "Excellent"
+    : aiAnalysis.score >= 50
+      ? "Good"
+      : "Needs improvement"
+}
+        </span>
+      </div>
+
+      <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+        <div
+          className="h-full rounded-full bg-teal-600"
+          style={{ width: `${aiAnalysis.score}%` }}
+        />
+        <button
+  type="button"
+  onClick={() => {
+    setTitle(aiAnalysis.optimizedTitle);
+    setDescription(aiAnalysis.optimizedDescription);
+  }}
+  className="w-full rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-700"
+>
+  Apply All Improvements
+</button>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-gray-800">
+          AI improvements
+        </p>
+
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs font-semibold text-gray-500">TITLE</p>
+          <p className="mt-1 text-sm text-gray-800">
+            {aiAnalysis.optimizedTitle}
+          </p>
+          <button
+            type="button"
+            onClick={() => setTitle(aiAnalysis.optimizedTitle)}
+            className="mt-2 text-xs font-semibold text-teal-700 hover:underline"
+          >
+            Apply title
+          </button>
+        </div>
+
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs font-semibold text-gray-500">DESCRIPTION</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">
+            {aiAnalysis.optimizedDescription}
+          </p>
+          <button
+            type="button"
+            onClick={() => setDescription(aiAnalysis.optimizedDescription)}
+            className="mt-2 text-xs font-semibold text-teal-700 hover:underline"
+          >
+            Apply description
+          </button>
+        </div>
+
+        {Object.keys(aiAnalysis.attributes).length > 0 && (
+          <div className="rounded-lg bg-white p-3">
+            <p className="text-xs font-semibold text-gray-500">
+              EXTRACTED PRODUCT ATTRIBUTES
+            </p>
+            <div className="mt-2 space-y-1">
+            {Object.entries(aiAnalysis.attributes).map(([key, value]) => (
+  <div key={key} className="space-y-1">
+    <label className="text-xs font-medium capitalize text-gray-600">
+      {key}
+    </label>
+    <input
+      type="text"
+      value={typeof value === "string" ? value : JSON.stringify(value)}
+      onChange={(e) =>
+        setAiAnalysis((prev) =>
+          prev
+            ? {
+                ...prev,
+                attributes: {
+                  ...prev.attributes,
+                  [key]: e.target.value,
+                },
+              }
+            : null
+        )
+      }
+      className={inputClass}
+    />
+  </div>
+))}
+            </div>
+          </div>
+        )}
+
+        <div>
+  <p className="mb-2 text-xs font-semibold text-gray-500">
+    SEARCH TAGS
+  </p>
+
+  <div className="space-y-2">
+    {aiAnalysis.semanticTags.map((tag, index) => (
+      <div key={`${tag}-${index}`} className="flex items-center gap-2">
+        <input
+          type="text"
+          value={tag}
+          onChange={(e) =>
+            setAiAnalysis((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    semanticTags: prev.semanticTags.map((item, i) =>
+                      i === index ? e.target.value : item
+                    ),
+                  }
+                : null
+            )
+          }
+          className={inputClass}
+        />
+     <button
+  type="button"
+ onClick={() =>
+  setAiAnalysis((prev) =>
+    prev && prev.semanticTags.length < 20
+      ? {
+          ...prev,
+          semanticTags: [...prev.semanticTags, ""],
+        }
+      : prev
+  )
+
+}
+disabled={aiAnalysis.semanticTags.length >= 20}
+
+  className="text-sm font-semibold text-teal-700 hover:underline"
+>
+  + Add search tag
+</button>
+        <button
+          type="button"
+          onClick={() =>
+            setAiAnalysis((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    semanticTags: prev.semanticTags.filter(
+                      (_, i) => i !== index
+                    ),
+                  }
+                : null
+            )
+          }
+          className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+        >
+          Remove
+        </button>
+      </div>
+    ))}
+  </div>
+</div>
+
+        {aiAnalysis.suggestions.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold text-gray-500">
+              SUGGESTIONS
+            </p>
+           <div className="space-y-2">
+  {aiAnalysis.suggestions.map((suggestion, index) => (
+    <div
+      key={index}
+      className="flex items-start justify-between gap-3 rounded-lg bg-amber-50 p-3"
+    >
+      <p className="text-sm text-gray-700">{suggestion}</p>
+
+      <button
+        type="button"
+        onClick={() => navigator.clipboard.writeText(suggestion)}
+        className="shrink-0 text-xs font-semibold text-teal-700 hover:underline"
+      >
+        Copy
+      </button>
+    </div>
+  ))}
+</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+</div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">

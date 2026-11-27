@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 
 type ConfirmPaymentInput = {
   reference: string;
-  verifiedVia: "verify" | "webhook";
+  verifiedVia: "verify" | "webhook" | "cron";
   paystackResponse: Prisma.InputJsonValue;
 };
 

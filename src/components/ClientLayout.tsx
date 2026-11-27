@@ -12,6 +12,7 @@ import CompareBar from "@/components/CompareBar";
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Seller and admin dashboards have their own independent navigation.
   const isSellerRoute = pathname === "/seller" || pathname.startsWith("/seller/");
@@ -24,12 +25,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="flex min-h-screen w-full min-w-0 overflow-x-hidden bg-white">
-      <GlobalSidebar
-        isOpen={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-      />
+     <GlobalSidebar
+  isOpen={mobileMenuOpen}
+  onClose={() => setMobileMenuOpen(false)}
+  onCollapseChange={setSidebarCollapsed}
+/>
 
-      <div className="relative flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className={`relative flex min-h-screen min-w-0 flex-1 flex-col transition-all duration-300 ${sidebarCollapsed ? "md:ml-20" : "md:ml-72"}`}>
         <div className="sticky top-0 z-30 flex-shrink-0">
           <OnboardingBanner />
           <Header onMenuToggle={() => setMobileMenuOpen((open) => !open)} />
@@ -40,7 +42,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <main className="w-full min-w-0 flex-1 p-3 sm:p-4 md:p-6 scroll-smooth">
           {children}
         </main>
-        <Footer />
+      {pathname === "/pages/about-ibuy-africa" && <Footer />}
       </div>
      <DraggableFAB />
 <CompareBar />

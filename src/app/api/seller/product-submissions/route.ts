@@ -1,4 +1,5 @@
  import { db } from "@/lib/db";
+ import { Prisma } from "@prisma/client";
 import { authorizeSeller } from "@/lib/seller-auth";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -17,6 +18,10 @@ const SubmissionSchema = z.object({
       altText: z.string().max(300).optional().nullable(),
     })
   ).min(1).max(10),
+    aiQualityScore: z.number().int().min(0).max(100).optional(),
+  aiSuggestions: z.array(z.string().max(300)).max(5).optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
+  semanticTags: z.array(z.string().min(1).max(60)).max(20).optional(),
 });
 
 export async function GET() {
@@ -108,15 +113,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const {
-      title,
-      description,
-      categoryId,
-      price,
-      stockQuantity,
-      sellerSku,
-      images,
-    } = validation.data;
+   const {
+  title,
+  description,
+  categoryId,
+  price,
+  stockQuantity,
+  sellerSku,
+  images,
+  aiQualityScore,
+  aiSuggestions,
+  attributes,
+  semanticTags,
+} = validation.data;
 
     const category = await db.category.findUnique({
       where: { id: categoryId },
@@ -189,6 +198,16 @@ export async function POST(req: Request) {
           slug,
           categoryId,
           status: "PENDING_REVIEW",
+                    aiQualityScore: aiQualityScore ?? null,
+          aiSuggestions: aiSuggestions
+            ? JSON.stringify(aiSuggestions)
+            : null,
+          attributes: attributes
+            ? (attributes as Prisma.InputJsonValue)
+            : undefined,
+          semanticTags: semanticTags
+            ? (semanticTags as Prisma.InputJsonValue)
+            : undefined,
           variants: {
             create: {
               sku: variantSku,

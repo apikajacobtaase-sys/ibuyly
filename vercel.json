@@ -1,0 +1,11 @@
+ {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "schedules": {
+    "ibuy-order-cleanup": {
+      "schedule": "0 * * * *",
+      "timezone": "Africa/Accra",
+      "path": "/api/cron/cleanup-orders",
+      "requestMethod": "GET"
+    }
+  }
+}
